@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "./app.js";
+import { createUnlimitedStore } from "./http/rateLimit.js";
 
 import type { ServerContext } from "./context.js";
 
@@ -23,6 +24,7 @@ function contextWith(execute: () => Promise<unknown>): ServerContext {
       webRoot: undefined,
       allowPrivateOutboundFetches: false,
     },
+    rateLimits: createUnlimitedStore(),
     db: { execute } as unknown as ServerContext["db"],
     audit: { record: () => Promise.resolve() },
     clock: () => new Date(0),

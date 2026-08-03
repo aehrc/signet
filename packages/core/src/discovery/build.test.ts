@@ -352,9 +352,8 @@ describe("buildSmartConfiguration", () => {
 
   it("derives capabilities from the same configuration", () => {
     const document = buildSmartConfiguration(
-      config({ supportsAppState: true, supportsStyling: false }),
+      config({ supportsStyling: false }),
     );
-    expect(document.capabilities).toContain("smart-app-state");
     expect(document.capabilities).not.toContain("context-style");
   });
 });

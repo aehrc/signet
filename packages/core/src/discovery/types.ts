@@ -32,9 +32,7 @@ export type SmartCapability =
   | "permission-patient"
   | "permission-user"
   | "permission-v1"
-  | "permission-v2"
-  // App state
-  | "smart-app-state";
+  | "permission-v2";
 
 /**
  * OAuth client authentication methods advertised at the token endpoint.
@@ -81,8 +79,6 @@ export interface EndpointCapabilityConfig {
   readonly supportsUserScopes: boolean;
   readonly supportsV1Scopes: boolean;
   readonly supportsV2Scopes: boolean;
-
-  readonly supportsAppState: boolean;
 
   /** Enables the `client_credentials` grant for SMART Backend Services. */
   readonly supportsBackendServices: boolean;

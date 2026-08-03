@@ -163,7 +163,6 @@ export function toCapabilityConfig(
     supportsV1Scopes: endpoint.supportsV1Scopes,
     supportsV2Scopes: endpoint.supportsV2Scopes,
 
-    supportsAppState: endpoint.supportsAppState,
     supportsBackendServices: endpoint.supportsBackendServices,
     supportsDynamicRegistration: endpoint.supportsDynamicRegistration,
 

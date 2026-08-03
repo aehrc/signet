@@ -49,6 +49,7 @@ import { revokeHandler } from "./revoke.js";
 import { tokenHandler } from "./token.js";
 import { userinfoHandler } from "./userinfo.js";
 import { publicCors } from "../http/cors.js";
+import { rateLimit } from "../http/rateLimit.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 
@@ -86,13 +87,23 @@ export function createOAuthRouter(
   // The authorization endpoint. `POST` is refused by the handler on endpoints that
   // do not advertise `authorize-post`, rather than being unrouted, so the refusal
   // can explain itself.
+  // Limited by client address: every request writes a session row, and it is
+  // reachable with no credential at all. See `../http/rateLimit.js`.
+  router.use(
+    path("/authorize"),
+    rateLimit("authorize", context.clock, context.rateLimits),
+  );
   router.get(path("/authorize"), authorizeHandler(context));
   router.post(path("/authorize"), authorizeHandler(context));
 
   const tokenCors = publicCors(["POST"]);
   router.use(path("/token"), tokenCors);
   router.use(path("/introspect"), tokenCors);
-  router.post(path("/token"), tokenHandler(context));
+  router.post(
+    path("/token"),
+    rateLimit("token", context.clock, context.rateLimits),
+    tokenHandler(context),
+  );
   router.post(path("/introspect"), introspectHandler(context));
   router.post(path("/revoke"), revokeHandler(context));
   router.get(path("/userinfo"), userinfoHandler(context));
@@ -100,8 +111,11 @@ export function createOAuthRouter(
 
   // The interaction API, called by the end-user pages on the same origin.
   router.get(path("/interaction/:sessionId"), interactionStateHandler(context));
+  // The two surfaces that check a password. Ten a minute per address: see the
+  // limit's own documentation for why that is the number.
   router.post(
     path("/interaction/:sessionId/login"),
+    rateLimit("signIn", context.clock, context.rateLimits),
     interactionLoginHandler(context),
   );
   router.post(
@@ -121,7 +135,13 @@ export function createOAuthRouter(
   // The management endpoint, which SMART advertises as `management_endpoint`. Its own
   // session, because an end user reviewing their authorizations is not in the middle of
   // one — see `./manage.js`.
-  router.post(path("/manage/session"), manageSignInHandler(context));
+  // Signing in only: signing out must not be refused because somebody else on
+  // the same address was guessing passwords.
+  router.post(
+    path("/manage/session"),
+    rateLimit("signIn", context.clock, context.rateLimits),
+    manageSignInHandler(context),
+  );
   router.delete(path("/manage/session"), manageSignOutHandler(context));
   router.get(
     path("/manage/authorizations"),

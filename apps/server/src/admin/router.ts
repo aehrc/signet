@@ -42,6 +42,7 @@ import {
   adminSessionHandler,
 } from "./session.js";
 import { registerTenantRoutes } from "./tenantRoutes.js";
+import { rateLimit } from "../http/rateLimit.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { MiddlewareHandler } from "hono";
@@ -96,8 +97,14 @@ export function createAdminRouter(
   router.use(`${ENDPOINT_PATH}/*`, withAdminEndpoint(context));
   router.use(ENDPOINT_PATH, withAdminEndpoint(context));
 
-  // Session.
-  router.post("/session", adminLoginHandler(context));
+  // Session. Signing in is limited by client address for the same reason the
+  // end-user surfaces are: it is the one admin route that checks a password.
+  // Attached to the POST alone, so signing out is never refused for it.
+  router.post(
+    "/session",
+    rateLimit("signIn", context.clock, context.rateLimits),
+    adminLoginHandler(context),
+  );
   router.get("/session", adminSessionHandler(context));
   router.delete("/session", adminLogoutHandler(context));
 

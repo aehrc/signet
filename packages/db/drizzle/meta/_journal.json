@@ -29,6 +29,13 @@
       "when": 1785796794149,
       "tag": "0003_chilly_blue_shield",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785798636504,
+      "tag": "0004_freezing_gideon",
+      "breakpoints": true
     }
   ]
 }

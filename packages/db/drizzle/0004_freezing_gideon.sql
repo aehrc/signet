@@ -1,0 +1,1 @@
+ALTER TABLE "endpoints" DROP COLUMN "supports_app_state";

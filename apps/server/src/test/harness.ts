@@ -46,6 +46,10 @@ import {
 } from "@signet/db";
 
 import { createApp } from "../app.js";
+import {
+  createRateLimitStore,
+  createUnlimitedStore,
+} from "../http/rateLimit.js";
 import { generateEndpointKey } from "../keys/material.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
@@ -142,6 +146,8 @@ export interface TestStackOptions {
   readonly withoutSigningKey?: boolean;
   /** Permits outbound fetches to loopback, for a suite with a stub provider. */
   readonly allowPrivateOutboundFetches?: boolean;
+  /** Applies the real rate limits, for the suite that asserts on them. */
+  readonly rateLimits?: "enforced" | "unlimited";
 }
 
 /** Every scope the fixture clients are permitted to request. */
@@ -357,6 +363,13 @@ export async function createTestStack(
       );
     }),
     clock: () => now,
+    // Opted out by default: the suites drive far more sign-ins per frozen minute
+    // than a person could, which is the traffic the limiter exists to refuse. A
+    // suite that wants the real thing asks for it.
+    rateLimits:
+      options.rateLimits === "enforced"
+        ? createRateLimitStore()
+        : createUnlimitedStore(),
   };
 
   const app = createApp(context);

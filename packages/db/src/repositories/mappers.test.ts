@@ -43,7 +43,6 @@ const endpoint: Endpoint = {
   supportsUserScopes: true,
   supportsV1Scopes: false,
   supportsV2Scopes: true,
-  supportsAppState: false,
   supportsBackendServices: true,
   supportsDynamicRegistration: false,
   scopesSupported: ["openid", "patient/*.rs"],

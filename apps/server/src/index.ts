@@ -4,6 +4,7 @@ import { createAuditRecorder, createDatabase } from "@signet/db";
 import { createApp } from "./app.js";
 import { bootstrapOptionsFrom, runBootstrapCommand } from "./bootstrap.js";
 import { ConfigError, loadConfig, resolveDatabaseUrl } from "./config.js";
+import { createRateLimitStore } from "./http/rateLimit.js";
 import { runMigrateCommand } from "./migrate.js";
 
 import type { AuditRecordFailure } from "@signet/db";
@@ -92,6 +93,7 @@ const app = createApp({
   db,
   audit: createAuditRecorder(reportAuditFailure),
   clock: () => new Date(),
+  rateLimits: createRateLimitStore(),
 });
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {

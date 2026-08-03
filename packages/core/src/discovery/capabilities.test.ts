@@ -44,8 +44,6 @@ const NOTHING: EndpointCapabilityConfig = {
   supportsV1Scopes: false,
   supportsV2Scopes: false,
 
-  supportsAppState: false,
-
   supportsBackendServices: false,
 
   scopesSupported: [],
@@ -75,7 +73,6 @@ const EVERYTHING: EndpointCapabilityConfig = {
   supportsUserScopes: true,
   supportsV1Scopes: true,
   supportsV2Scopes: true,
-  supportsAppState: true,
   supportsBackendServices: true,
   supportsDynamicRegistration: true,
 };
@@ -104,7 +101,6 @@ const FLAG_TO_CAPABILITY: readonly (readonly [
   ["supportsUserScopes", "permission-user"],
   ["supportsV1Scopes", "permission-v1"],
   ["supportsV2Scopes", "permission-v2"],
-  ["supportsAppState", "smart-app-state"],
 ];
 
 describe("deriveCapabilities", () => {
@@ -205,10 +201,6 @@ describe("DEFAULT_ENDPOINT_CAPABILITIES", () => {
     );
   });
 
-  it("keeps app state off, since it needs storage a deployment may not have", () => {
-    expect(DEFAULT_ENDPOINT_CAPABILITIES.supportsAppState).toBe(false);
-  });
-
   it("supports both launch modes and single sign-on", () => {
     expect(DEFAULT_ENDPOINT_CAPABILITIES.supportsEhrLaunch).toBe(true);
     expect(DEFAULT_ENDPOINT_CAPABILITIES.supportsStandaloneLaunch).toBe(true);
@@ -245,7 +237,6 @@ describe("defaultEndpointCapabilities", () => {
     const capabilities = deriveCapabilities(config);
     expect(capabilities).toContain("launch-ehr");
     expect(capabilities).toContain("sso-openid-connect");
-    expect(capabilities).not.toContain("smart-app-state");
     expect(capabilities).not.toContain("context-style");
   });
 });

@@ -158,7 +158,6 @@ const ACRONYMS: Readonly<Record<string, string>> = {
 const CAPABILITY_LABELS: Readonly<Record<string, string>> = {
   supportsOpenIdConnect: "OpenID Connect single sign-on",
   supportsAuthorizePost: "POST to /authorize",
-  supportsAppState: "App state",
 };
 
 /**

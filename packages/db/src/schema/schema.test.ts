@@ -575,7 +575,6 @@ describe("endpoint capability configuration", () => {
       "supports_user_scopes",
       "supports_v1_scopes",
       "supports_v2_scopes",
-      "supports_app_state",
       "supports_backend_services",
       "supports_dynamic_registration",
     ];

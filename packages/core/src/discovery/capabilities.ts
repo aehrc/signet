@@ -35,7 +35,11 @@ const CAPABILITY_FLAGS: readonly (readonly [
   ["permission-user", "supportsUserScopes"],
   ["permission-v1", "supportsV1Scopes"],
   ["permission-v2", "supportsV2Scopes"],
-  ["smart-app-state", "supportsAppState"],
+  // `smart-app-state` is deliberately absent. The capability means the server
+  // persists app state at an endpoint it advertises, and Signet advertises no
+  // such endpoint - so a flag for it would let an operator publish a claim
+  // nothing here honours, which is the exact failure this table exists to make
+  // impossible.
 ];
 
 /**
@@ -130,8 +134,6 @@ export const DEFAULT_ENDPOINT_CAPABILITIES: Omit<
   supportsUserScopes: true,
   supportsV1Scopes: true,
   supportsV2Scopes: true,
-
-  supportsAppState: false,
 
   supportsBackendServices: true,
 

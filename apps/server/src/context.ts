@@ -10,6 +10,7 @@
 
 import type { AdminPrincipal } from "./admin/principal.js";
 import type { SignetConfig } from "./config.js";
+import type { RateLimitStore } from "./http/rateLimit.js";
 import type { EndpointUrls } from "@signet/core";
 import type {
   AuditRecorder,
@@ -40,6 +41,15 @@ export interface ServerContext {
   readonly db: Database;
   readonly audit: AuditRecorder;
   readonly clock: Clock;
+  /**
+   * The rate-limit counters this application uses.
+   *
+   * On the context rather than in a module-level variable, so an application is a
+   * value rather than something that shares mutable state with every other one in
+   * the process. That matters most in the tests, where two stacks in one process
+   * must not exhaust each other's allowance.
+   */
+  readonly rateLimits: RateLimitStore;
 }
 
 /**

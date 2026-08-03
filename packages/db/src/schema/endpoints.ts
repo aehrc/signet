@@ -132,9 +132,6 @@ export const endpoints = pgTable(
     supportsV1Scopes: boolean("supports_v1_scopes").notNull().default(true),
     supportsV2Scopes: boolean("supports_v2_scopes").notNull().default(true),
 
-    // App state.
-    supportsAppState: boolean("supports_app_state").notNull().default(false),
-
     /** Enables `client_credentials` for SMART Backend Services. */
     supportsBackendServices: boolean("supports_backend_services")
       .notNull()

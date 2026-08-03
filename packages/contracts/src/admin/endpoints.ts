@@ -34,7 +34,6 @@ export const endpointCapabilitiesSchema = z.object({
   supportsUserScopes: z.boolean().optional(),
   supportsV1Scopes: z.boolean().optional(),
   supportsV2Scopes: z.boolean().optional(),
-  supportsAppState: z.boolean().optional(),
   supportsBackendServices: z.boolean().optional(),
   supportsDynamicRegistration: z.boolean().optional(),
 });
