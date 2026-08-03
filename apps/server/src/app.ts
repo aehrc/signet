@@ -2,6 +2,7 @@ import { pingDatabase } from "@signet/db";
 import { Hono } from "hono";
 
 import { ADMIN_BASE_PATH, createAdminRouter } from "./admin/router.js";
+import { serveStaticUi } from "./http/staticFiles.js";
 import { createOAuthRouter } from "./oauth/router.js";
 
 import type { ServerContext, SignetEnvironment } from "./context.js";
@@ -41,6 +42,13 @@ export function createApp(context: ServerContext): Hono<SignetEnvironment> {
   // or personal access token here, by client credentials there.
   app.route(ADMIN_BASE_PATH, createAdminRouter(context));
   app.route("/", createOAuthRouter(context));
+
+  // Last, and only when a build is present: the UI answers whatever the API and
+  // the OAuth endpoints did not claim. Mounting it here rather than first is what
+  // keeps an unmatched API route a 404 instead of a page of HTML.
+  if (context.config.webRoot !== undefined) {
+    app.use("*", serveStaticUi(context.config.webRoot));
+  }
 
   return app;
 }

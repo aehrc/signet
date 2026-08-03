@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    projects: ["packages/*", "apps/server"],
+    projects: ["packages/*", "apps/server", "apps/web"],
     // Migrations run once, here, before any worker starts. Applying them from
     // whichever integration file ran first meant DDL taking exclusive table locks
     // while another worker held row locks on the same tables, which Postgres

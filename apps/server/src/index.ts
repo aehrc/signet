@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { createAuditRecorder, createDatabase } from "@signet/db";
 
 import { createApp } from "./app.js";
+import { bootstrapOptionsFrom, runBootstrapCommand } from "./bootstrap.js";
 import { ConfigError, loadConfig } from "./config.js";
 import { runMigrateCommand } from "./migrate.js";
 
@@ -27,6 +28,24 @@ if (process.argv[2] === "migrate") {
     await runMigrateCommand(config.databaseUrl);
   } catch (error) {
     console.error("Signet migration failed:", error);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+// `bootstrap` creates the first tenant and the first owner. Nothing in the console or
+// the admin API can do that — both require a membership of a tenant that does not yet
+// exist — and it is not a public route, because a deployment in front of clinical data
+// should not accept a tenant from anybody who can reach the port.
+if (process.argv[2] === "bootstrap") {
+  try {
+    await runBootstrapCommand(
+      bootstrapOptionsFrom(process.env, config.databaseUrl),
+    );
+  } catch (error) {
+    console.error(
+      `Signet bootstrap failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
     process.exit(1);
   }
   process.exit(0);
