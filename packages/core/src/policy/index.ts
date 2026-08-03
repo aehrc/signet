@@ -5,10 +5,14 @@ export {
   scopeMatchesWithin,
 } from "./pattern.js";
 export {
+  AIDBOX_PRESET,
+  FIRELY_PRESET,
   PATHLING_PRESET,
   POLICY_PRESETS,
   SMART_BASELINE_PRESET,
+  SMILE_CDR_PRESET,
   type PolicyPreset,
+  type PresetReference,
 } from "./presets.js";
 export {
   isTemplateFilterName,

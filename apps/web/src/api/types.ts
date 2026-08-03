@@ -188,6 +188,16 @@ export interface PresetView {
   readonly name: string;
   readonly description: string;
   readonly policy: unknown;
+  /**
+   * Where the claim contract this preset asserts is documented.
+   *
+   * Shown beside the preset, because a preset says what another system will do with a
+   * token and an operator cannot check that without the page it came from.
+   */
+  readonly references: readonly {
+    readonly label: string;
+    readonly url: string;
+  }[];
 }
 
 /** What a simulation reports. */

@@ -263,6 +263,27 @@ function PolicyEditor({
                       <p className="text-base-content/70 text-xs">
                         {preset.description}
                       </p>
+                      {preset.references.length > 0 ? (
+                        <p className="text-base-content/60 mt-1 text-xs">
+                          {/* The citation, because a preset asserts what another
+                              system does with a token and this is how an operator
+                              checks that claim. */}
+                          Contract:{" "}
+                          {preset.references.map((reference, index) => (
+                            <span key={reference.url}>
+                              {index === 0 ? null : ", "}
+                              <a
+                                className="link"
+                                href={reference.url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {reference.label}
+                              </a>
+                            </span>
+                          ))}
+                        </p>
+                      ) : null}
                     </div>
                     <button
                       type="button"

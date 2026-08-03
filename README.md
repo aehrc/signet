@@ -28,10 +28,17 @@ Signet makes that translation a declarative, versioned policy you edit in the UI
 and test against a live token simulator, rather than a code change in the
 authorization server.
 
+Presets ship for the servers whose claim contract is documented - SMART baseline,
+Pathling, Aidbox, Firely Server, Smile CDR - and each one carries the citation it
+was written from. See [docs/resource-servers.md](docs/resource-servers.md) for what
+each server wants, and for the two servers that get no preset and why.
+
 ## Status
 
-Early. Phase 0 (scaffold) and the start of phase 1 (scope grammar) are done.
-See `deploy/` for the container image and Helm chart, both of which build today.
+In progress. The OAuth server, the admin API, the console, the policy editor and
+its simulator, and the end-user surfaces all work end to end. Still to come:
+upstream OIDC federation, rate limiting, the Playwright conformance suite, and the
+Helm chart's finishing touches.
 
 ## Layout
 

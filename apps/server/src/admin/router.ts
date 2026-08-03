@@ -114,6 +114,7 @@ export function createAdminRouter(
         name: preset.name,
         description: preset.description,
         policy: preset.policy,
+        references: preset.references,
       })),
     }),
   );

@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { evaluatePolicy } from "./evaluate.js";
 import {
+  AIDBOX_PRESET,
+  FIRELY_PRESET,
   PATHLING_PRESET,
   POLICY_PRESETS,
   SMART_BASELINE_PRESET,
+  SMILE_CDR_PRESET,
 } from "./presets.js";
 import { formatScope, parseScopes, PERMISSION_ORDER } from "../scopes/index.js";
 
@@ -682,11 +685,87 @@ describe("SMART_BASELINE_PRESET", () => {
   });
 });
 
+describe("AIDBOX_PRESET", () => {
+  it("declares the access token version, with or without a patient", () => {
+    expect(
+      evaluatePolicy(AIDBOX_PRESET, context({ requested: "openid" })).claims[
+        "atv"
+      ],
+    ).toBe(2);
+    expect(
+      evaluatePolicy(
+        AIDBOX_PRESET,
+        context({ requested: "openid", context: { patient: "123" } }),
+      ).claims["atv"],
+    ).toBe(2);
+  });
+
+  it("nests the patient under a context claim, as Aidbox reads it", () => {
+    const result = evaluatePolicy(
+      AIDBOX_PRESET,
+      context({ requested: "openid", context: { patient: "123" } }),
+    );
+    expect(result.claims["context"]).toEqual({ patient: "123" });
+    // Not at the top level: an Aidbox that found `patient` there would ignore it,
+    // and emitting both would suggest a contract that does not exist.
+    expect("patient" in result.claims).toBe(false);
+  });
+
+  it("emits no context claim at all when no patient was resolved", () => {
+    const result = evaluatePolicy(
+      AIDBOX_PRESET,
+      context({ requested: "user/Observation.rs" }),
+    );
+    expect("context" in result.claims).toBe(false);
+  });
+
+  it("still passes the patient in the token response, per SMART", () => {
+    const result = evaluatePolicy(
+      AIDBOX_PRESET,
+      context({ requested: "openid", context: { patient: "123" } }),
+    );
+    expect(result.contextParams["patient"]).toBe("123");
+  });
+});
+
+describe.each([
+  ["FIRELY_PRESET", FIRELY_PRESET],
+  ["SMILE_CDR_PRESET", SMILE_CDR_PRESET],
+] as const)("%s", (_name, preset) => {
+  it("emits the patient as a claim inside the token", () => {
+    const result = evaluatePolicy(
+      preset,
+      context({ requested: "openid", context: { patient: "123" } }),
+    );
+    expect(result.claims["patient"]).toBe("123");
+    expect(result.claims["fhirUser"]).toBe("Practitioner/abc");
+  });
+
+  it("omits the patient claim when no patient was resolved", () => {
+    const result = evaluatePolicy(
+      preset,
+      context({ requested: "user/Observation.rs" }),
+    );
+    // An empty compartment claim is worse than none: a server matching against it
+    // may filter on nothing at all.
+    expect("patient" in result.claims).toBe(false);
+  });
+
+  it("keeps the baseline's grants and context parameters", () => {
+    expect(preset.scopeGrants).toBe(SMART_BASELINE_PRESET.scopeGrants);
+    expect(preset.contextRules).toBe(SMART_BASELINE_PRESET.contextRules);
+    expect(preset.scopeMappings).toBeUndefined();
+  });
+});
+
 describe("POLICY_PRESETS", () => {
-  it("lists both presets with unique ids and non-empty descriptions", () => {
+  it("lists every preset with unique ids and non-empty descriptions", () => {
     expect(POLICY_PRESETS.map((preset) => preset.id)).toEqual([
       "smart-baseline",
       "pathling",
+      "aidbox",
+      "firely",
+      "smile-cdr",
     ]);
     expect(new Set(POLICY_PRESETS.map((preset) => preset.id)).size).toBe(
       POLICY_PRESETS.length,
@@ -701,6 +780,24 @@ describe("POLICY_PRESETS", () => {
   it("points at the exported documents", () => {
     expect(POLICY_PRESETS[0]?.policy).toBe(SMART_BASELINE_PRESET);
     expect(POLICY_PRESETS[1]?.policy).toBe(PATHLING_PRESET);
+    expect(POLICY_PRESETS[2]?.policy).toBe(AIDBOX_PRESET);
+    expect(POLICY_PRESETS[3]?.policy).toBe(FIRELY_PRESET);
+    expect(POLICY_PRESETS[4]?.policy).toBe(SMILE_CDR_PRESET);
+  });
+
+  it("cites documentation for every preset", () => {
+    // The rule the preset list is written under: a preset asserts what another
+    // system will do with a token, and an assertion nobody can check does not
+    // belong in a security product. A vendor whose contract could not be found
+    // gets no preset - which is why Medplum is absent.
+    for (const preset of POLICY_PRESETS) {
+      expect(preset.references.length).toBeGreaterThan(0);
+      for (const reference of preset.references) {
+        expect(reference.label.length).toBeGreaterThan(0);
+        expect(reference.url.startsWith("https://")).toBe(true);
+      }
+    }
+    expect(POLICY_PRESETS.map((preset) => preset.id)).not.toContain("medplum");
   });
 
   it("gives every rule in every preset a unique id", () => {

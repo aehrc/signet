@@ -272,22 +272,166 @@ export const PATHLING_PRESET: PolicyDocument = {
   },
 };
 
+/**
+ * Emits the patient compartment as a claim *inside* the access token.
+ *
+ * SMART puts `patient` in the token response body, not in the token, and a server
+ * that authorises off the JWT alone never sees it there. Three of the resource
+ * servers below therefore need it as a claim as well — which is the whole content
+ * of their presets, and the reason those presets are worth shipping rather than
+ * telling an operator to start from the baseline.
+ *
+ * Gated on a resolved patient, so a user-context or backend authorization emits no
+ * `patient` claim at all rather than an empty one. A server matching a compartment
+ * against `""` is a server granting more than was asked for.
+ *
+ * @param description - What the vendor does with the claim, for the rule's label.
+ */
+function patientClaimRule(description: string): ClaimRule {
+  return {
+    id: "claim-patient",
+    description,
+    when: { context: ["patient"] },
+    emit: { patient: "{{ context.patient }}" },
+  };
+}
+
+/**
+ * The baseline plus the patient claim, for a server that reads the token itself.
+ *
+ * A factory rather than two near-identical documents, because Firely Server and
+ * Smile CDR want the same thing and the honest way to say so is to build both from
+ * one expression. What differs between them is the citation and the wording of the
+ * rule, not the policy.
+ *
+ * @param claimDescription - What the vendor does with the `patient` claim.
+ */
+function tokenPatientPreset(claimDescription: string): PolicyDocument {
+  return {
+    ...SMART_BASELINE_PRESET,
+    claimRules: [...FHIR_USER_CLAIM_RULES, patientClaimRule(claimDescription)],
+  };
+}
+
+/**
+ * Aidbox reads SMART v2 scopes, but wants the patient nested and the token
+ * versioned.
+ *
+ * Two things distinguish it from the baseline, and both are documented. `atv: 2`
+ * declares the access token to be SMART v2 rather than v1, and Aidbox refuses to
+ * apply v2 scope semantics without it. The patient compartment is read from
+ * `context.patient` — nested inside a `context` object rather than sitting at the
+ * top level as it does everywhere else.
+ *
+ * The nesting is why `emit` takes arbitrary JSON rather than a flat record: the
+ * templates inside a nested object are rendered, and a property whose template
+ * cannot resolve is dropped, so `context` carries only what was actually resolved.
+ */
+export const AIDBOX_PRESET: PolicyDocument = {
+  ...SMART_BASELINE_PRESET,
+  claimRules: [
+    ...FHIR_USER_CLAIM_RULES,
+    {
+      id: "claim-aidbox-token-version",
+      description:
+        "Declares a SMART v2 access token. Aidbox will not apply v2 scope semantics without it.",
+      when: {},
+      emit: { atv: 2 },
+    },
+    {
+      id: "claim-aidbox-context",
+      description:
+        "Aidbox reads the patient compartment from context.patient, not from a top-level claim.",
+      when: { context: ["patient"] },
+      emit: { context: { patient: "{{ context.patient }}" } },
+    },
+  ],
+};
+
+/**
+ * Firely Server: the baseline plus `patient`, and an audience that has to match.
+ *
+ * Firely enforces compartments from the `patient` claim, resolving it through the
+ * configured `PatientFilter` — `_id` by default, but an installation may match on
+ * `identifier` instead, in which case what belongs in the claim is the patient's
+ * business identifier rather than its resource id. Signet emits whatever the launch
+ * context resolved, so an operator whose Firely is configured that way sets the
+ * launch context accordingly; there is nothing this preset can decide for them.
+ *
+ * `aud` is mandatory and must equal Firely's configured audience. Signet always
+ * sets it to the endpoint's FHIR base URL, so this is a configuration match rather
+ * than a policy rule.
+ */
+export const FIRELY_PRESET: PolicyDocument = tokenPatientPreset(
+  "Firely enforces the patient compartment from this claim, via its configured PatientFilter.",
+);
+
+/**
+ * Smile CDR: the baseline plus `patient`, for the inbound-security login script.
+ *
+ * Smile CDR accepts an external authorization server's token, but what it does with
+ * the claims is decided by an operator-authored login script in the SMART Inbound
+ * Security module — so like HAPI, its contract is whatever that script reads. The
+ * documented convention for a third-party server is to communicate the patient's
+ * identity in a claim on the access token, which the script then decodes to assign
+ * permissions. That convention is what this preset mints.
+ */
+export const SMILE_CDR_PRESET: PolicyDocument = tokenPatientPreset(
+  "Smile CDR's inbound-security login script reads this claim to assign patient permissions.",
+);
+
+/** Where a preset's claim contract is documented. */
+export interface PresetReference {
+  readonly label: string;
+  readonly url: string;
+}
+
 /** A named, selectable policy starting point. */
 export interface PolicyPreset {
   readonly id: string;
   readonly name: string;
   readonly description: string;
   readonly policy: PolicyDocument;
+  /**
+   * The vendor documentation this preset was written from.
+   *
+   * Not decoration. A preset asserts what another system will do with a token, and
+   * an operator has no way to check that assertion without the page it came from —
+   * so every preset that speaks about a specific product carries its citation, and
+   * a product whose contract could not be found gets no preset at all. The console
+   * shows these beside the preset.
+   */
+  readonly references: readonly PresetReference[];
 }
 
-/** Every preset an operator can start an endpoint from. */
+/**
+ * Every preset an operator can start an endpoint from.
+ *
+ * Notably absent: **Medplum**, and it is absent for a reason rather than an
+ * oversight. Medplum documents which SMART scopes it supports, but its FHIR API
+ * authorises off tokens Medplum itself issued; its external-identity support
+ * federates *login*, not authorization. There is no published contract for a
+ * third-party access token, so there is nothing here to cite and no preset.
+ *
+ * **HAPI FHIR** is absent for a different reason: it has no claim contract at all,
+ * because `AuthorizationInterceptor` requires the operator to write Java. The
+ * baseline preset mints a clean standards JWT for it, and the useful half of that
+ * pairing is the generated interceptor that consumes it — see
+ * `integrations/hapiInterceptor.ts`.
+ */
 export const POLICY_PRESETS: readonly PolicyPreset[] = [
   {
     id: "smart-baseline",
     name: "SMART baseline",
     description:
-      "Read-only SMART App Launch: patient, encounter and banner context, plus a fhirUser claim. A safe starting point for a server that reads SMART scopes itself.",
+      "Read-only SMART App Launch: patient, encounter and banner context, plus a fhirUser claim. A safe starting point for a server that reads SMART scopes itself, including HAPI FHIR behind a generated interceptor.",
     policy: SMART_BASELINE_PRESET,
+    references: [
+      {
+        label: "SMART App Launch 2.2.0 — Scopes and Launch Context",
+        url: "https://hl7.org/fhir/smart-app-launch/STU2.2/scopes-and-launch-context.html",
+      },
+    ],
   },
   {
     id: "pathling",
@@ -295,5 +439,50 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
     description:
       "Translates SMART scopes into Pathling's authorities claim, pairing each operation authority with the data authority it needs.",
     policy: PATHLING_PRESET,
+    references: [
+      {
+        label: "Pathling — Authorization",
+        url: "https://pathling.csiro.au/docs/server/authorization",
+      },
+    ],
+  },
+  {
+    id: "aidbox",
+    name: "Aidbox",
+    description:
+      "SMART v2 scopes as Aidbox reads them: an atv claim declaring the token version, and the patient compartment nested under context.patient.",
+    policy: AIDBOX_PRESET,
+    references: [
+      {
+        label: "Aidbox — SMART: Scopes for Limiting Access",
+        url: "https://docs.aidbox.app/access-control/authorization/smart-on-fhir/smart-scopes-for-limiting-access",
+      },
+    ],
+  },
+  {
+    id: "firely",
+    name: "Firely Server",
+    description:
+      "The baseline plus a patient claim inside the access token, which is where Firely reads the compartment from. Check that Firely's configured audience matches this endpoint's FHIR base URL.",
+    policy: FIRELY_PRESET,
+    references: [
+      {
+        label: "Firely Server — Tokens and Compartments",
+        url: "https://docs.fire.ly/projects/Firely-Server/en/latest/security/tokens_and_compartments.html",
+      },
+    ],
+  },
+  {
+    id: "smile-cdr",
+    name: "Smile CDR",
+    description:
+      "The baseline plus a patient claim inside the access token, for the SMART Inbound Security login script to read. The script itself is the contract; this mints the documented convention it expects.",
+    policy: SMILE_CDR_PRESET,
+    references: [
+      {
+        label: "Smile CDR — SMART Inbound Security Module",
+        url: "https://smilecdr.com/docs/smart/smart_on_fhir_inbound_security_module.html",
+      },
+    ],
   },
 ];
