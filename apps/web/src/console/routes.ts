@@ -51,6 +51,7 @@ export const ENDPOINT_TABS: readonly {
 }[] = [
   { path: "", label: "Overview" },
   { path: "/clients", label: "Clients" },
+  { path: "/policy", label: "Policy" },
   { path: "/users", label: "Users" },
   { path: "/keys", label: "Keys" },
   { path: "/requests", label: "Requests" },

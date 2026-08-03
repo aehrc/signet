@@ -127,6 +127,7 @@ interface TextAreaFieldProps {
   readonly error?: string | undefined;
   readonly rows?: number;
   readonly monospace?: boolean;
+  readonly disabled?: boolean | undefined;
 }
 
 /** A multi-line text input. */
@@ -138,6 +139,7 @@ export function TextAreaField({
   error,
   rows = 4,
   monospace,
+  disabled,
 }: Readonly<TextAreaFieldProps>) {
   return (
     <FieldFrame label={label} hint={hint} error={error}>
@@ -149,6 +151,7 @@ export function TextAreaField({
             monospace === true ? "font-mono text-xs" : ""
           } ${invalid ? "textarea-error" : ""}`}
           value={value}
+          disabled={disabled}
           aria-invalid={invalid}
           aria-describedby={describedBy}
           onChange={(event) => {
@@ -170,6 +173,7 @@ interface SelectFieldProps {
   }[];
   readonly hint?: ReactNode;
   readonly error?: string | undefined;
+  readonly disabled?: boolean;
 }
 
 /** A choice from a closed set. */
@@ -180,6 +184,7 @@ export function SelectField({
   options,
   hint,
   error,
+  disabled,
 }: Readonly<SelectFieldProps>) {
   return (
     <FieldFrame label={label} hint={hint} error={error}>
@@ -188,6 +193,7 @@ export function SelectField({
           id={id}
           className={`select select-bordered w-full ${invalid ? "select-error" : ""}`}
           value={value}
+          disabled={disabled}
           aria-invalid={invalid}
           aria-describedby={describedBy}
           onChange={(event) => {
@@ -264,6 +270,7 @@ interface ListFieldProps {
   readonly hint?: ReactNode;
   readonly error?: string | undefined;
   readonly rows?: number;
+  readonly disabled?: boolean;
 }
 
 /**
@@ -281,6 +288,7 @@ export function ListField({
   hint,
   error,
   rows = 3,
+  disabled,
 }: Readonly<ListFieldProps>) {
   return (
     <TextAreaField
@@ -290,6 +298,7 @@ export function ListField({
       hint={hint}
       error={error}
       rows={rows}
+      disabled={disabled}
       monospace
     />
   );

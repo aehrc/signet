@@ -29,6 +29,7 @@ import { CONSOLE_BASE, SIGN_IN_ROUTE } from "./console/routes.js";
 import { SignInPage } from "./console/signInPage.js";
 import { TenantSettingsPage } from "./console/tenantSettingsPage.js";
 import { UsersPage } from "./console/usersPage.js";
+import { PolicyPage } from "./policy/policyPage.js";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,6 +63,7 @@ export function App() {
               <Route index element={<EndpointOverviewPage />} />
               <Route path="clients" element={<ClientsPage />} />
               <Route path="clients/:clientId" element={<ClientDetailPage />} />
+              <Route path="policy" element={<PolicyPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="keys" element={<KeysPage />} />
               <Route path="requests" element={<RequestsPage />} />
