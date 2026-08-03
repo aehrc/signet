@@ -15,6 +15,20 @@
       "when": 1785792847579,
       "tag": "0001_aromatic_wendell_vaughn",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785796378927,
+      "tag": "0002_lucky_gamora",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785796794149,
+      "tag": "0003_chilly_blue_shield",
+      "breakpoints": true
     }
   ]
 }

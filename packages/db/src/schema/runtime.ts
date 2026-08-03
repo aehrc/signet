@@ -315,6 +315,58 @@ export const endUserSessions = pgTable(
 );
 
 /**
+ * One round trip to an upstream identity provider.
+ *
+ * Written when the browser is sent to the provider and consumed when it comes back.
+ * The row is what makes the callback verifiable at all: `state` proves the response
+ * belongs to a request Signet made, `nonce` binds the ID token to this sign-in, and
+ * the PKCE verifier proves the code is being redeemed by whoever asked for it.
+ *
+ * `state` is hashed and the other two are not, and the asymmetry is the rule the
+ * whole schema follows. `state` arrives from the browser, so it is a credential
+ * presented *to* Signet and a digest is all that is needed to find the row. The
+ * nonce is compared against a value inside the ID token and the verifier is sent
+ * upstream, so both must be recoverable. They are short-lived, single-use, and
+ * useless without the state they are stored beside.
+ *
+ * Single-use is enforced the same way an authorization code's is, by the
+ * conditional update in the repository against `consumed_at`. A replayed callback
+ * therefore finds nothing rather than signing somebody in a second time.
+ */
+export const federationStates = pgTable(
+  "federation_states",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    endpointId: uuid("endpoint_id")
+      .notNull()
+      .references(() => endpoints.id, { onDelete: "cascade" }),
+    /**
+     * The authorization this sign-in is part of.
+     *
+     * Cascades: a session that expired and was swept takes its federation state
+     * with it, because a callback for an authorization that no longer exists has
+     * nothing to complete.
+     */
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => authorizationSessions.id, { onDelete: "cascade" }),
+    /** SHA-256 of the `state` sent upstream. The value itself is never stored. */
+    stateHash: text("state_hash").notNull(),
+    /** Compared against the ID token's `nonce`; must be recoverable. */
+    nonce: text("nonce").notNull(),
+    /** Sent to the provider's token endpoint; must be recoverable. */
+    codeVerifier: text("code_verifier").notNull(),
+    ...singleUseLifecycle(),
+  },
+  (table) => [
+    uniqueIndex("federation_states_state_hash_unique").on(table.stateHash),
+    index("federation_states_session_id_idx").on(table.sessionId),
+    index("federation_states_endpoint_id_idx").on(table.endpointId),
+    index("federation_states_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+/**
  * Seen `jti` values from `private_key_jwt` client assertions.
  *
  * The composite primary key IS the replay prevention: an insert that conflicts
@@ -380,3 +432,8 @@ export type NewJtiReplay = typeof jtiReplay.$inferInsert;
 export type EndUserSession = typeof endUserSessions.$inferSelect;
 /** Values required to insert an end user session. */
 export type NewEndUserSession = typeof endUserSessions.$inferInsert;
+
+/** A federation round-trip row as selected. */
+export type FederationState = typeof federationStates.$inferSelect;
+/** Values required to insert a federation round trip. */
+export type NewFederationState = typeof federationStates.$inferInsert;

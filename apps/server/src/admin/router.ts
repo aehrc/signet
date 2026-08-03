@@ -32,6 +32,7 @@ import { registerClientRoutes } from "./clientRoutes.js";
 import { registerEndpointRoutes } from "./endpointRoutes.js";
 import { registerEndUserRoutes } from "./endUserRoutes.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
+import { registerFederationRoutes } from "./federationRoutes.js";
 import { registerLaunchRoutes } from "./launchRoutes.js";
 import { ADMIN_BASE_PATH, ENDPOINT_PATH, TENANT_PATH } from "./paths.js";
 import { registerPolicyRoutes } from "./policyRoutes.js";
@@ -123,6 +124,7 @@ export function createAdminRouter(
   // against the patterns in `./paths.js`, so this reads as a table of contents
   // rather than as a route table nobody can hold in their head.
   registerEndpointRoutes(router, context);
+  registerFederationRoutes(router, context);
   registerClientRoutes(router, context);
   registerPolicyRoutes(router, context);
   registerEndUserRoutes(router, context);

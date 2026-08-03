@@ -27,6 +27,10 @@ import {
   smartConfigurationHandler,
 } from "./discovery.js";
 import {
+  federationCallbackHandler,
+  federationStartHandler,
+} from "./federation.js";
+import {
   interactionConsentHandler,
   interactionContextHandler,
   interactionLoginHandler,
@@ -108,6 +112,11 @@ export function createOAuthRouter(
     path("/interaction/:sessionId/consent"),
     interactionConsentHandler(context),
   );
+
+  // The upstream federation round trip, for an endpoint in `oidc` auth mode. Both are
+  // browser navigations rather than fetches, so neither gets CORS headers.
+  router.get(path("/federation/start"), federationStartHandler(context));
+  router.get(path("/federation/callback"), federationCallbackHandler(context));
 
   // The management endpoint, which SMART advertises as `management_endpoint`. Its own
   // session, because an end user reviewing their authorizations is not in the middle of

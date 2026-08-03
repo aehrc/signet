@@ -23,6 +23,7 @@ import { ConsoleLayout } from "./console/consoleLayout.js";
 import { EndpointLayout } from "./console/endpointLayout.js";
 import { EndpointOverviewPage } from "./console/endpointOverviewPage.js";
 import { EndpointsPage } from "./console/endpointsPage.js";
+import { FederationPage } from "./console/federationPage.js";
 import { KeysPage } from "./console/keysPage.js";
 import { LaunchPage } from "./console/launchPage.js";
 import { RequestsPage } from "./console/requestsPage.js";
@@ -74,6 +75,7 @@ export function App() {
               <Route path="policy" element={<PolicyPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="keys" element={<KeysPage />} />
+              <Route path="identity" element={<FederationPage />} />
               <Route path="requests" element={<RequestsPage />} />
               <Route path="launch" element={<LaunchPage />} />
             </Route>

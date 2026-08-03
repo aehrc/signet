@@ -38,7 +38,10 @@ import {
   revokeRefreshTokensForSubjectAndClient,
 } from "@signet/db";
 
-import { signInEndUser } from "./endUserAuthentication.js";
+import {
+  readEndUserCredentials,
+  signInEndUser,
+} from "./endUserAuthentication.js";
 import {
   cookiesAreSecure,
   readCookie,
@@ -150,11 +153,7 @@ export function manageSignInHandler(context: ServerContext) {
     const { endpoint } = issuerContext;
     const metadata = requestMetadata(c);
 
-    const body = (await c.req.json().catch(() => ({}))) as {
-      username?: unknown;
-      password?: unknown;
-      personaId?: unknown;
-    };
+    const body = await readEndUserCredentials(c);
 
     const authenticated = await signInEndUser({
       db: context.db,

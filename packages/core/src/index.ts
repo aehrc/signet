@@ -5,3 +5,4 @@ export * from "./tokens/index.js";
 export * from "./pkce/index.js";
 export * from "./discovery/index.js";
 export * from "./integrations/index.js";
+export * from "./federation/index.js";

@@ -92,6 +92,23 @@ export interface OutboundFetchOptions {
   readonly maxBytes?: number;
   readonly resolve?: AddressResolver;
   readonly fetchImpl?: typeof fetch;
+  /**
+   * Sends a form-encoded POST instead of a GET.
+   *
+   * For the one outbound request that is not a document fetch: redeeming a code
+   * at an upstream provider's token endpoint. It goes through this module rather
+   * than calling `fetch` directly because the guard is about the destination, and
+   * the token endpoint's URL came from the same untrusted discovery document as
+   * everything else.
+   */
+  readonly form?: Readonly<Record<string, string>>;
+  /**
+   * Extra request headers.
+   *
+   * Used for `Authorization: Basic` on an upstream token request, and nothing
+   * else. Never logged: the value is a client secret.
+   */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 /** Ten seconds: long enough for a slow JWKS host, short enough not to pile up. */
@@ -105,6 +122,15 @@ export const DEFAULT_OUTBOUND_TIMEOUT_MS = 10_000;
  * decompression-bomb-adjacent denial of service against a fetching server.
  */
 export const DEFAULT_OUTBOUND_MAX_BYTES = 262_144;
+
+/**
+ * How much of a failed response's body is quoted in the refusal.
+ *
+ * Enough for an OAuth error object, which is what this is for, and short enough
+ * that a provider answering with an HTML error page contributes a line to the
+ * audit trail rather than a screenful.
+ */
+const BAD_STATUS_BODY_CHARACTERS = 500;
 
 /** Builds a refusal. */
 function refuse(
@@ -276,8 +302,17 @@ export async function fetchGuardedJson<T = unknown>(
   let response: Response;
   try {
     response = await doFetch(check.url, {
-      method: "GET",
-      headers: { accept: "application/json" },
+      method: options.form === undefined ? "GET" : "POST",
+      headers: {
+        accept: "application/json",
+        ...(options.form === undefined
+          ? {}
+          : { "content-type": "application/x-www-form-urlencoded" }),
+        ...options.headers,
+      },
+      ...(options.form === undefined
+        ? {}
+        : { body: new URLSearchParams(options.form).toString() }),
       // A redirect is a URL the guard never inspected. See the module header.
       redirect: "error",
       signal: AbortSignal.timeout(
@@ -294,7 +329,19 @@ export async function fetchGuardedJson<T = unknown>(
   }
 
   if (!response.ok) {
-    return refuse("bad-status", `${raw} answered ${String(response.status)}`);
+    // The body is included, truncated, because an OAuth refusal puts the reason
+    // there and nowhere else - "the provider answered 400" sends an operator
+    // hunting for something `invalid_grant` would have told them outright. It
+    // reaches the audit trail, never the browser.
+    const body = await readBounded(response, maxBytes);
+    const detail =
+      body === undefined || body.length === 0
+        ? ""
+        : `: ${body.slice(0, BAD_STATUS_BODY_CHARACTERS)}`;
+    return refuse(
+      "bad-status",
+      `${raw} answered ${String(response.status)}${detail}`,
+    );
   }
 
   const text = await readBounded(response, maxBytes);

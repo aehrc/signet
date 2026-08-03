@@ -33,6 +33,8 @@ import {
 import { getField, patchField, postField } from "./unwrap.js";
 
 import type {
+  IdpCheckView,
+  IdpConfigView,
   ApiTokenView,
   AuditPage,
   ClientRequestView,
@@ -63,6 +65,11 @@ export const keys = {
   ],
   keys: (tenant: string, endpoint: string): QueryKey => [
     "keys",
+    tenant,
+    endpoint,
+  ],
+  idp: (tenant: string, endpoint: string): QueryKey => [
+    "idp",
     tenant,
     endpoint,
   ],
@@ -281,6 +288,59 @@ export function useKeyAction(tenant: string, endpoint: string) {
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: keys.keys(tenant, endpoint) });
     },
+  });
+}
+
+/**
+ * The endpoint's upstream identity provider, or null when it federates to none.
+ *
+ * Null rather than an error: an endpoint with local accounts is the normal case,
+ * and a 404 for it would have every caller unpicking a failure that is not one.
+ */
+export function useIdpConfig(tenant: string, endpoint: string) {
+  return useQuery({
+    queryKey: keys.idp(tenant, endpoint),
+    queryFn: async ({ signal }) =>
+      await getField<"idp", IdpConfigView | null>(
+        endpointPath(tenant, endpoint, "/idp"),
+        "idp",
+        signal,
+      ),
+  });
+}
+
+/** Saves or removes the upstream identity provider. */
+export function useIdpAction(tenant: string, endpoint: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      action:
+        | { readonly kind: "save"; readonly config: Record<string, unknown> }
+        | { readonly kind: "remove" },
+    ) => {
+      if (action.kind === "remove") {
+        await remove(endpointPath(tenant, endpoint, "/idp"));
+        return;
+      }
+      await put(endpointPath(tenant, endpoint, "/idp"), action.config);
+    },
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: keys.idp(tenant, endpoint) });
+    },
+  });
+}
+
+/**
+ * Asks the server to fetch the provider's discovery document and report on it.
+ *
+ * A mutation rather than a query, because it is an action an operator takes: it
+ * makes an outbound request, and it should happen when they ask rather than
+ * whenever a component mounts.
+ */
+export function useIdpCheck(tenant: string, endpoint: string) {
+  return useMutation({
+    mutationFn: async () =>
+      await post<IdpCheckView>(endpointPath(tenant, endpoint, "/idp/check")),
   });
 }
 

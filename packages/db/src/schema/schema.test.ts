@@ -49,6 +49,7 @@ const EXPECTED_TABLES = [
   "end_users",
   "endpoint_keys",
   "endpoints",
+  "federation_states",
   "idp_configs",
   "jti_replay",
   "launch_contexts",

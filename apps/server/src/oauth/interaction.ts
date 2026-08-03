@@ -35,6 +35,7 @@ import {
   generateOpaqueToken,
   getClient,
   getEndUser,
+  getIdpConfig,
   getLiveAuthorizationSession,
   hashToken,
   listLiveConsents,
@@ -52,8 +53,12 @@ import {
   soleCandidate,
 } from "./contextCandidates.js";
 import { contextRequirements } from "./contextRequirements.js";
-import { signInEndUser } from "./endUserAuthentication.js";
-import { decideStep } from "./interactionState.js";
+import { recordEndUserEvent } from "./endUserAudit.js";
+import {
+  readEndUserCredentials,
+  signInEndUser,
+} from "./endUserAuthentication.js";
+import { decideStep, interactionUrl } from "./interactionState.js";
 import { authorizeErrorRedirect } from "../http/oauthErrors.js";
 import { requestMetadata } from "../http/requestMeta.js";
 
@@ -65,8 +70,6 @@ import type {
 import type { InteractionView, LaunchContextValues } from "@signet/contracts";
 import type { LaunchContext, Scope } from "@signet/core";
 import type {
-  AuditAction,
-  AuditTarget,
   AuthorizationSession,
   Client,
   ClientScope,
@@ -220,6 +223,14 @@ async function buildView(
       ? await listSelectablePersonas(context.db, issuerContext.scope, endpoint)
       : [];
 
+  // Read only in `oidc` mode: an endpoint with local accounts has no provider to
+  // name, and a stray row left behind by an operator who switched auth mode back
+  // must not put a sign-in button on the page.
+  const idp =
+    endpoint.authMode === "oidc"
+      ? await getIdpConfig(context.db, issuerContext.scope)
+      : undefined;
+
   return {
     step,
     client: {
@@ -241,6 +252,7 @@ async function buildView(
     allowsFreeContextSelection: !endpoint.isProduction,
     // Widened to the contract's record shape; a launch context is one.
     resolvedContext: session.resolvedContext as LaunchContextValues | null,
+    ...(idp === undefined ? {} : { federation: { name: idp.displayName } }),
   };
 }
 
@@ -345,46 +357,6 @@ async function respondAfterAdvance(
     refreshed ?? loaded,
     metadata,
   );
-}
-
-/**
- * Records an event attributed to the end user driving the interaction.
- *
- * Every audit call in this module has the same tenant, endpoint and actor shape, and
- * differs only in the action, the target and the detail. Writing that out five times
- * invited one of them to name the wrong endpoint.
- */
-async function recordEndUserEvent(
-  context: ServerContext,
-  issuerContext: ResolvedIssuerContext,
-  metadata: ReturnType<typeof requestMetadata>,
-  event: {
-    readonly action: AuditAction;
-    readonly target: AuditTarget;
-    readonly detail: Record<string, unknown>;
-    /** Absent for a failed sign-in, where no account was established. */
-    readonly endUserId?: string | null;
-    readonly displayName?: string;
-  },
-): Promise<void> {
-  await context.audit.record(context.db, {
-    tenantId: issuerContext.tenant.id,
-    endpointId: issuerContext.endpoint.id,
-    endpointSlug: issuerContext.endpoint.slug,
-    actor: {
-      type: "end-user",
-      ...(event.endUserId === undefined || event.endUserId === null
-        ? {}
-        : { id: event.endUserId }),
-      ...(event.displayName === undefined
-        ? {}
-        : { displayName: event.displayName }),
-    },
-    action: event.action,
-    target: event.target,
-    detail: event.detail,
-    ...metadata,
-  });
 }
 
 /** The 404 an unknown, expired or foreign session gets. */
@@ -569,11 +541,7 @@ export function interactionLoginHandler(context: ServerContext) {
       return await respondWithStep(c, context, issuerContext, loaded, metadata);
     }
 
-    const body = (await c.req.json().catch(() => ({}))) as {
-      username?: unknown;
-      password?: unknown;
-      personaId?: unknown;
-    };
+    const body = await readEndUserCredentials(c);
 
     const authenticated = await signInEndUser({
       db: context.db,
@@ -790,6 +758,67 @@ export function interactionConsentHandler(context: ServerContext) {
       metadata,
     );
   };
+}
+
+/**
+ * Resumes an authorization after somebody authenticated somewhere else.
+ *
+ * The one entry point federation needs, and the reason it is here rather than in
+ * `federation.ts`: attaching a user, resolving whatever context their record
+ * supplies, deriving the next step and issuing the code when nothing is left are
+ * all decisions this module already makes, and a second implementation of them
+ * would be a second place for the ordering rule to be got wrong.
+ *
+ * What differs from the login handler is only the answer. A page posting to the
+ * interaction API gets JSON and navigates itself; a browser coming back from an
+ * identity provider is mid-redirect and has to be sent somewhere, so this returns
+ * a URL - the app's redirect URI when the authorization completed outright, and
+ * the page for the next step otherwise.
+ *
+ * @param context - The server's dependencies.
+ * @param issuerContext - The endpoint the authorization belongs to.
+ * @param sessionId - The authorization session to resume.
+ * @param user - The account the upstream sign-in resolved to.
+ * @param metadata - Request metadata for the audit trail.
+ * @returns Where to send the browser, or undefined when the session has gone -
+ *   which the caller must treat as a failed sign-in rather than a redirect.
+ */
+export async function resumeAuthenticatedSession(
+  context: ServerContext,
+  issuerContext: ResolvedIssuerContext,
+  sessionId: string,
+  user: EndUser,
+  metadata: ReturnType<typeof requestMetadata>,
+): Promise<string | undefined> {
+  const loaded = await loadSession(context, issuerContext, sessionId);
+  if (loaded === undefined) {
+    return undefined;
+  }
+
+  await attachUser(context, issuerContext, loaded, user);
+
+  // Re-read rather than reason about the row just written, for the same reason
+  // `respondAfterAdvance` does: the step must be derived from committed state.
+  const refreshed =
+    (await loadSession(context, issuerContext, sessionId)) ?? loaded;
+  const view = await buildView(context, issuerContext, refreshed);
+
+  if (view.step === "complete") {
+    return await completeAuthorization(
+      context,
+      issuerContext,
+      refreshed,
+      metadata,
+    );
+  }
+  if (view.step === "denied") {
+    // Not reachable from a successful sign-in - the step is only ever `denied`
+    // after somebody declines at the consent screen - but the union includes it,
+    // and sending the browser to a page that renders nothing would be worse than
+    // handling it here.
+    return view.redirectTo;
+  }
+  return interactionUrl(issuerContext.issuer, view.step, sessionId);
 }
 
 /** Re-exported so the router and the pages agree on where a step lives. */

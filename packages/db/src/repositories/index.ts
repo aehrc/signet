@@ -32,6 +32,7 @@ export * from "./endpointKeys.js";
 export * from "./endpoints.js";
 export * from "./endUsers.js";
 export * from "./endUserSessions.js";
+export * from "./federationStates.js";
 export * from "./errors.js";
 export * from "./executor.js";
 export * from "./jtiReplay.js";

@@ -38,6 +38,25 @@ export interface EndUserCredentials {
   readonly personaId?: unknown;
 }
 
+/**
+ * Reads a sign-in body.
+ *
+ * Both surfaces accept the same three fields and neither validates them here - the
+ * fields are `unknown` all the way into {@link authenticateEndUser}, which is what
+ * makes the type checker insist on a `typeof` test before any of them is used. A
+ * body that is not JSON at all becomes an empty object and is refused as "no
+ * credential", which is the right answer to a request that supplied none.
+ *
+ * @param c - The request.
+ * @param c.req - Hono's request accessor.
+ * @param c.req.json - Parses the body.
+ */
+export async function readEndUserCredentials(c: {
+  readonly req: { json: () => Promise<unknown> };
+}): Promise<EndUserCredentials> {
+  return (await c.req.json().catch(() => ({}))) as EndUserCredentials;
+}
+
 /** Why an end user sign-in was refused. */
 export type EndUserAuthenticationRefusal =
   /** No credential of either recognised shape was supplied. */

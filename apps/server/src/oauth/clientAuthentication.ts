@@ -44,6 +44,7 @@ import {
   extractClientCredential,
   methodMatchesClientType,
 } from "./clientCredentials.js";
+import { asKeySet } from "../keys/keySet.js";
 import { fetchGuardedJson } from "../security/outboundFetch.js";
 
 import type { ServerContext, ResolvedIssuerContext } from "../context.js";
@@ -112,22 +113,6 @@ function unverifiedAssertionSubject(assertion: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/**
- * Narrows an arbitrary JSON document to a JWK Set.
- *
- * Only the `keys` array is checked, because that is all `createLocalJWKSet`
- * requires: it validates each key itself and ignores anything it cannot use.
- * Checking here means a malformed registration produces a specific message rather
- * than an exception from inside `jose`.
- */
-function asKeySet(document: unknown): JSONWebKeySet | undefined {
-  return typeof document === "object" &&
-    document !== null &&
-    Array.isArray((document as { keys?: unknown }).keys)
-    ? (document as JSONWebKeySet)
-    : undefined;
 }
 
 /**

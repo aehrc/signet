@@ -230,6 +230,15 @@ export const idpConfigs = pgTable("idp_configs", {
     .primaryKey()
     .references(() => endpoints.id, { onDelete: "cascade" }),
   issuer: text("issuer").notNull(),
+  /**
+   * What to call the provider on the sign-in button.
+   *
+   * "Continue with St Elsewhere SSO" is a button somebody can act on; "Continue
+   * with https://sso.example.org" is a URL an end user has no reason to recognise.
+   * Nullable, and the login page falls back to neutral wording rather than
+   * exposing the issuer.
+   */
+  displayName: text("display_name"),
   clientId: text("client_id").notNull(),
   /**
    * AES-256-GCM envelope-encrypted under `SIGNET_MASTER_KEY`. Signet must be

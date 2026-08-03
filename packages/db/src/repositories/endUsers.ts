@@ -249,6 +249,68 @@ export async function deleteEndUser(
   return rows.length > 0;
 }
 
+/** What a federated sign-in knows about the person, after claim mapping. */
+export interface FederatedIdentity {
+  /** `{issuer}#{sub}`, from the core helper. Stable across sign-ins. */
+  readonly username: string;
+  readonly displayName: string;
+  readonly fhirUserReference: string | null;
+  readonly roles: readonly string[];
+  readonly attributes: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Provisions or refreshes the account behind a federated sign-in.
+ *
+ * Idempotent on `(endpoint_id, username)`, which is what makes the second sign-in
+ * find the row the first one created rather than colliding with it. The unique
+ * index does the work: an `ON CONFLICT DO UPDATE` cannot race the way a
+ * read-then-insert can, and two browser tabs completing a callback at once are
+ * exactly the case that would otherwise produce a duplicate-key error in front of
+ * a person who did nothing wrong.
+ *
+ * Every mapped field is refreshed on each sign-in, because the provider is the
+ * source of truth for them - a person whose role was revoked upstream must not
+ * keep it here because they were provisioned last year.
+ *
+ * What is never written is a password hash. A federated account authenticates
+ * upstream and nowhere else; leaving the column null means `authenticateEndUser`
+ * refuses it, so an account created this way cannot be used to sign in locally.
+ * `is_persona` stays false for the same reason - a persona is selectable without
+ * any credential at all.
+ *
+ * @param db - The connection to use.
+ * @param scope - The endpoint the account belongs to.
+ * @param identity - The mapped claims from the provider.
+ */
+export async function upsertFederatedEndUser(
+  db: Executor,
+  scope: EndpointScope,
+  identity: FederatedIdentity,
+): Promise<EndUser> {
+  const values = {
+    displayName: identity.displayName,
+    fhirUserReference: identity.fhirUserReference,
+    roles: [...identity.roles],
+    attributes: identity.attributes as Record<string, unknown>,
+  };
+
+  const rows = await db
+    .insert(endUsers)
+    .values({
+      endpointId: scope.endpointId,
+      username: identity.username,
+      ...values,
+    })
+    .onConflictDoUpdate({
+      target: [endUsers.endpointId, endUsers.username],
+      set: values,
+    })
+    .returning();
+
+  return requireRow(rows, "upsert into end_users");
+}
+
 /** Counts the scoped endpoint's users, for the console's endpoint list. */
 export async function countEndUsers(
   db: Executor,

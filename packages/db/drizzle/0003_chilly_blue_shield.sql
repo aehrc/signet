@@ -1,0 +1,1 @@
+ALTER TABLE "idp_configs" ADD COLUMN "display_name" text;

@@ -200,6 +200,50 @@ export interface PresetView {
   }[];
 }
 
+/** The upstream identity provider an endpoint federates to. */
+export interface IdpConfigView {
+  readonly issuer: string;
+  readonly displayName: string | null;
+  readonly clientId: string;
+  /**
+   * Whether a secret is stored, never the secret itself.
+   *
+   * The API has no field that returns it, deliberately - the console shows that one
+   * exists so an operator knows whether to re-enter it, and nothing more.
+   */
+  readonly hasClientSecret: boolean;
+  readonly scopes: readonly string[];
+  readonly claimMappings: {
+    readonly fhirUser?: string;
+    readonly roles?: string;
+    readonly displayName?: string;
+    readonly attributes?: readonly string[];
+  };
+  readonly discoveryCachedAt: string | null;
+  readonly updatedAt: string;
+  /** Where the provider must be told to redirect back to. */
+  readonly redirectUri: string;
+}
+
+/** What a discovery check found. */
+export type IdpCheckView =
+  | {
+      readonly ok: true;
+      readonly supportsPkce: boolean;
+      readonly metadata: {
+        readonly issuer: string;
+        readonly authorizationEndpoint: string;
+        readonly tokenEndpoint: string;
+        readonly jwksUri: string;
+        readonly userinfoEndpoint?: string;
+      };
+    }
+  | {
+      readonly ok: false;
+      readonly problem: string;
+      readonly description: string;
+    };
+
 /** What a simulation reports. */
 export interface SimulationView {
   readonly scope: string;

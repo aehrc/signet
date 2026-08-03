@@ -140,6 +140,8 @@ export interface TestStackOptions {
   readonly policy?: PolicyDocument;
   /** Omits the active signing key, to exercise the misconfigured-endpoint path. */
   readonly withoutSigningKey?: boolean;
+  /** Permits outbound fetches to loopback, for a suite with a stub provider. */
+  readonly allowPrivateOutboundFetches?: boolean;
 }
 
 /** Every scope the fixture clients are permitted to request. */
@@ -340,7 +342,10 @@ export async function createTestStack(
       masterKey: TEST_MASTER_KEY,
       logLevel: "error",
       webRoot: undefined,
-      allowPrivateOutboundFetches: false,
+      // Off by default, as in production. The federation suite turns it on, because
+      // its stub identity provider is a loopback server and the guard exists to
+      // refuse exactly that.
+      allowPrivateOutboundFetches: options.allowPrivateOutboundFetches ?? false,
     },
     db,
     // Audit failures are surfaced rather than swallowed: a suite that silently lost

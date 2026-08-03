@@ -24,6 +24,7 @@ import {
   useSearchParams,
 } from "react-router";
 
+import { issuerBase } from "./api.js";
 import { ChoiceList } from "./choiceList.js";
 import { useAdvanceInteraction, useInteractionState } from "./queries.js";
 import { describeScopes, includesWrites } from "./scopeDescriptions.js";
@@ -197,6 +198,38 @@ function InteractionShell({
   );
 }
 
+/**
+ * The way out of the login page when authentication happens somewhere else.
+ *
+ * A plain link rather than a fetch, because the round trip is a browser
+ * navigation: the provider needs to see the person, set its own cookies, and
+ * redirect them back. A `fetch` would follow the redirect in the background and
+ * hand back a page the person never got to interact with.
+ *
+ * @param route - The props.
+ * @param route.route - The endpoint and session, from the URL.
+ * @param route.name - What the operator called the provider, if anything.
+ */
+function FederationPrompt({
+  route,
+  name,
+}: Readonly<{ route: InteractionRoute; name: string | null }>) {
+  const target = `${issuerBase(route.tenant, route.endpoint)}/federation/start?session=${encodeURIComponent(route.session)}`;
+  return (
+    <div className="flex flex-col gap-3">
+      <InfoAlert>
+        This endpoint signs you in through
+        {name === null ? " another identity provider" : ` ${name}`}.
+      </InfoAlert>
+      <div>
+        <a className="btn btn-primary" href={target}>
+          {name === null ? "Continue to sign in" : `Continue with ${name}`}
+        </a>
+      </div>
+    </div>
+  );
+}
+
 /** The page `/authorize` sends the browser to. */
 export function LoginPage() {
   const route = useInteractionRoute();
@@ -224,10 +257,7 @@ export function LoginPage() {
       )}
 
       {state?.authMode === "oidc" ? (
-        <InfoAlert>
-          This endpoint signs you in through another identity provider. Follow
-          the link your organisation gave you.
-        </InfoAlert>
+        <FederationPrompt route={route} name={state.federation?.name ?? null} />
       ) : (
         <form
           className="flex flex-col gap-3"

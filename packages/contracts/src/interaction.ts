@@ -66,6 +66,15 @@ export interface InteractionView {
    * keeps the contract readable on its own.
    */
   readonly resolvedContext: LaunchContextValues | null;
+  /**
+   * The upstream provider this endpoint federates to, when it federates at all.
+   *
+   * Present only in `oidc` auth mode. The name is what the sign-in button says, and
+   * it is null when the operator did not give the provider one - the page then uses
+   * neutral wording rather than showing an issuer URL, which means nothing to the
+   * person reading it.
+   */
+  readonly federation?: { readonly name: string | null };
   /** Present when the step is `complete` or `denied`: where to send the browser. */
   readonly redirectTo?: string;
 }
