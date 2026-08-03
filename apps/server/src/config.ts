@@ -16,6 +16,26 @@ export interface SignetConfig {
   /** Envelope key protecting endpoint signing keys at rest. */
   readonly masterKey: string;
   readonly logLevel: "debug" | "info" | "warn" | "error";
+  /**
+   * Directory holding the built UI, served for any path the API does not claim.
+   *
+   * Absent in development, where Vite serves the UI on its own port and proxies
+   * `/api` here.
+   */
+  readonly webRoot: string | undefined;
+  /**
+   * Permits outbound fetches to private addresses and over plain HTTP.
+   *
+   * Signet fetches two user-supplied URLs — a client's `jwks_uri` and an upstream
+   * IdP's issuer — and normally refuses any address that is not publicly
+   * routable, because an authorization server is a valuable place to have an SSRF.
+   * A development or connectathon stack legitimately needs the opposite: its
+   * upstream IdP is `http://keycloak:8080` on a compose network.
+   *
+   * One flag rather than several, because it must be obvious in a manifest that
+   * the guard is off. Never set it in production.
+   */
+  readonly allowPrivateOutboundFetches: boolean;
 }
 
 /** Thrown when the environment cannot produce a usable configuration. */
@@ -39,6 +59,25 @@ function read(env: Environment, name: string): string | undefined {
     return undefined;
   }
   return value;
+}
+
+/**
+ * Reads a boolean flag, accepting only the two spellings a manifest should use.
+ *
+ * Anything else throws rather than defaulting. A typo in
+ * `SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES` that silently read as `false` would be
+ * harmless; one that silently read as `true` would turn off a security control,
+ * and the failure mode of a misspelling should not depend on which of those it is.
+ */
+function readBoolean(env: Environment, name: string): boolean {
+  const value = read(env, name);
+  if (value === undefined) {
+    return false;
+  }
+  if (value === "true" || value === "false") {
+    return value === "true";
+  }
+  throw new ConfigError(`${name} must be "true" or "false", got "${value}"`);
 }
 
 /**
@@ -151,5 +190,10 @@ export function loadConfig(env: Environment): SignetConfig {
     databaseUrl,
     masterKey,
     logLevel: logLevel as SignetConfig["logLevel"],
+    webRoot: read(env, "SIGNET_WEB_ROOT"),
+    allowPrivateOutboundFetches: readBoolean(
+      env,
+      "SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES",
+    ),
   };
 }

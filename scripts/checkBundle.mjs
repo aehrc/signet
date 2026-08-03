@@ -9,16 +9,26 @@
 // and `net` without the `node:` prefix, which is legitimate; an earlier version of
 // this check only accepted the prefixed form and would have rejected them.
 //
+// The patterns are lexical rather than a parse, so they also match `from "..."`
+// inside string and template literals of the bundled code. Drizzle's SQL builder is
+// full of `sql`...from ${table}`` fragments, which produced spectacular false
+// positives spanning hundreds of lines. Candidates are therefore filtered to things
+// that could actually be a module specifier: a bundler that leaves an import
+// external always emits a plain one, so nothing real is lost.
+//
 // Usage: node scripts/checkBundle.mjs <bundle.js> [...]
 
 import { readFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 
 const PATTERNS = [
-  /\bfrom\s*["']([^"']+)["']/g,
-  /\brequire\(\s*["']([^"']+)["']\s*\)/g,
-  /\bimport\(\s*["']([^"']+)["']\s*\)/g,
+  /\bfrom\s*["']([^"'\n]+)["']/g,
+  /\brequire\(\s*["']([^"'\n]+)["']\s*\)/g,
+  /\bimport\(\s*["']([^"'\n]+)["']\s*\)/g,
 ];
+
+/** What a module specifier can look like: a package name and an optional subpath. */
+const SPECIFIER = /^(?:node:)?(?:@[\w.~-]+\/)?[\w.~-]+(?:\/[\w.~+-]+)*$/;
 
 const builtins = new Set([
   ...builtinModules,
@@ -37,6 +47,7 @@ function externalsOf(source) {
     .filter(
       (specifier) => !specifier.startsWith(".") && !specifier.startsWith("/"),
     )
+    .filter((specifier) => SPECIFIER.test(specifier))
     .filter((specifier) => !builtins.has(specifier))
     .toSorted();
 }

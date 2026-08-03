@@ -116,6 +116,13 @@ export default tseslint.config(
       // `.map(formatScope)` is clearer than wrapping a single-argument pure
       // function in an arrow just to satisfy the extra-arguments concern.
       "unicorn/no-array-callback-reference": "off",
+      // Prettier lower-cases hex digits, and unicorn's default wants them upper.
+      // Formatting belongs to Prettier, so the rule is aligned to it rather than
+      // left to fight it on every `0xff` in the address classifier.
+      "unicorn/number-literal-case": [
+        "error",
+        { hexadecimalValue: "lowercase" },
+      ],
     },
   },
 
@@ -188,7 +195,7 @@ export default tseslint.config(
   },
 
   {
-    files: ["**/*.test.{ts,tsx}", "e2e/**/*.ts"],
+    files: ["**/*.test.{ts,tsx}", "**/test/**/*.ts", "e2e/**/*.ts"],
     plugins: { vitest },
     rules: {
       ...vitest.configs.recommended.rules,
@@ -202,6 +209,9 @@ export default tseslint.config(
       // A helper scoped to the `describe` block that uses it is clearer than one
       // hoisted to module scope away from its only caller.
       "unicorn/consistent-function-scoping": "off",
+      // `(await response.json()).field` is how a response is read in a test.
+      // Naming an intermediate for every one of them adds lines without clarity.
+      "unicorn/no-await-expression-member": "off",
     },
   },
 

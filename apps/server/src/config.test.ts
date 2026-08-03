@@ -22,7 +22,35 @@ describe("loadConfig — defaults", () => {
       databaseUrl: "postgres://u:p@db:5432/signet",
       masterKey: MASTER_KEY,
       logLevel: "info",
+      webRoot: undefined,
+      allowPrivateOutboundFetches: false,
     });
+  });
+
+  it("reads the web root", () => {
+    expect(loadConfig(env({ SIGNET_WEB_ROOT: "/app/web" })).webRoot).toBe(
+      "/app/web",
+    );
+  });
+
+  it("reads the outbound fetch escape hatch", () => {
+    expect(
+      loadConfig(env({ SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES: "true" }))
+        .allowPrivateOutboundFetches,
+    ).toBe(true);
+    expect(
+      loadConfig(env({ SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES: "false" }))
+        .allowPrivateOutboundFetches,
+    ).toBe(false);
+  });
+
+  it("refuses a boolean flag it cannot read, rather than defaulting", () => {
+    expect(() =>
+      loadConfig(env({ SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES: "yes" })),
+    ).toThrow(ConfigError);
+    expect(() =>
+      loadConfig(env({ SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES: "1" })),
+    ).toThrow(ConfigError);
   });
 
   it("reads the port", () => {

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
@@ -38,7 +39,7 @@ export interface DatabaseHandle {
  * @param options - Connection settings.
  */
 export function createDatabase(options: DatabaseOptions): DatabaseHandle {
-  const sql = postgres(options.url, {
+  const connection = postgres(options.url, {
     max: options.maxConnections ?? 10,
     // Connection and notice output must never surface the credentials embedded
     // in the connection URL.
@@ -46,9 +47,23 @@ export function createDatabase(options: DatabaseOptions): DatabaseHandle {
   });
 
   return {
-    db: drizzle(sql),
+    db: drizzle(connection),
     close: async () => {
-      await sql.end();
+      await connection.end();
     },
   };
+}
+
+/**
+ * The cheapest statement that proves a usable connection.
+ *
+ * Lives here rather than in the server so that the server's readiness probe does
+ * not need a direct dependency on Drizzle merely to write `select 1`. Throws on
+ * failure, which is what the caller wants to catch: a readiness probe's job is to
+ * turn an unreachable database into a 503, and it needs to know.
+ *
+ * @param db - The connection to test.
+ */
+export async function pingDatabase(db: Executor): Promise<void> {
+  await db.execute(sql`select 1`);
 }
