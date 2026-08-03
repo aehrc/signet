@@ -20,6 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { queryAuditEvents, recordAuditEvent } from "./record.js";
 import { auditEvents } from "../schema/audit.js";
 import { tenants } from "../schema/tenancy.js";
+import { isTestSchemaReady } from "../test/schemaReady.js";
 
 import type { AuditEventCursor } from "./record.js";
 import type { Executor } from "../repositories/executor.js";
@@ -52,11 +53,16 @@ describeWithDatabase("the audit log against Postgres", () => {
     sql = postgres(databaseUrl ?? "", { max: 2, onnotice: () => {} });
     connection = drizzle(sql);
 
-    await sql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
-    try {
-      await migrate(connection, { migrationsFolder });
-    } finally {
-      await sql`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`;
+    // Normally already migrated by the Vitest global setup, which runs before any
+    // worker starts so that no DDL takes table locks while another worker holds row
+    // locks on the same tables. The fallback covers running this file on its own.
+    if (!isTestSchemaReady()) {
+      await sql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
+      try {
+        await migrate(connection, { migrationsFolder });
+      } finally {
+        await sql`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`;
+      }
     }
 
     // `drizzle(sql)` infers `Record<string, unknown>` for its schema type

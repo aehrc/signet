@@ -23,12 +23,7 @@ import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import {
-  applyRowLevelSecurity,
-  TENANT_POLICY_NAME,
-  TENANT_SETTING,
-  RLS_TABLES,
-} from "../rls.js";
+import { TENANT_SETTING } from "../rls.js";
 import {
   introspectAccessToken,
   recordAccessToken,
@@ -87,6 +82,11 @@ import { clients } from "../schema/clients.js";
 import { endpoints } from "../schema/endpoints.js";
 import { launchContexts, refreshTokens } from "../schema/runtime.js";
 import { tenants } from "../schema/tenancy.js";
+import {
+  prepareRowLevelSecurityFixtures,
+  RLS_TEST_ROLE,
+} from "../test/rlsRole.js";
+import { isTestSchemaReady } from "../test/schemaReady.js";
 
 import type { Executor } from "./executor.js";
 import type { ClientScope, EndpointScope, TenantScope } from "./scope.js";
@@ -177,11 +177,15 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     sql_ = postgres(databaseUrl ?? "", { max: 5, onnotice: () => {} });
     connection = drizzle(sql_);
 
-    await sql_`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
-    try {
-      await migrate(connection, { migrationsFolder });
-    } finally {
-      await sql_`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`;
+    // See the audit suite: the schema is normally already there, migrated once by
+    // the Vitest global setup before any worker started.
+    if (!isTestSchemaReady()) {
+      await sql_`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
+      try {
+        await migrate(connection, { migrationsFolder });
+      } finally {
+        await sql_`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`;
+      }
     }
 
     // `drizzle(sql)` and `Executor` differ in a phantom schema type parameter
@@ -1105,44 +1109,17 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
   describe("row-level security", () => {
     /** A login-less role that the policies apply to, unlike the owner. */
-    const ROLE = "signet_rls_test";
+    const ROLE = RLS_TEST_ROLE;
 
     beforeAll(async () => {
-      await connection.execute(
-        sql.raw(`
-        do $$
-        begin
-          if not exists (select 1 from pg_roles where rolname = '${ROLE}') then
-            create role ${ROLE} nologin;
-          end if;
-        end
-        $$;
-      `),
-      );
-      await connection.execute(
-        sql.raw(
-          `grant select, insert, update, delete on all tables in schema public to ${ROLE}`,
-        ),
-      );
-      await connection.execute(
-        sql.raw(`grant usage on schema public to ${ROLE}`),
-      );
-      await connection.execute(sql.raw(`grant ${ROLE} to current_user`));
-      await applyRowLevelSecurity(db);
-    }, 60_000);
-
-    afterAll(async () => {
-      // Leave the database as it was found: the owner is unaffected by an enabled
-      // policy, but a later reader should not be surprised by one.
-      for (const table of RLS_TABLES) {
-        await connection.execute(
-          sql.raw(`drop policy if exists ${TENANT_POLICY_NAME} on ${table}`),
-        );
-        await connection.execute(
-          sql.raw(`alter table ${table} disable row level security`),
-        );
+      // The role and the policies are created by the Vitest global setup, before
+      // any worker starts: all of it is DDL, and DDL taking exclusive table locks
+      // while another worker holds row locks on the same tables is a deadlock. The
+      // fallback covers running this file on its own.
+      if (!isTestSchemaReady()) {
+        await prepareRowLevelSecurityFixtures(db);
       }
-    });
+    }, 60_000);
 
     /** Runs work as the restricted role, scoped to one tenant. */
     async function asTenant<T>(

@@ -38,6 +38,7 @@ import {
   hashPassword,
   hashToken,
   insertEndpointKey,
+  isTestSchemaReady,
   promoteNextEndpointKey,
   publishPolicy,
   setTenantMemberRole,
@@ -160,15 +161,15 @@ let migrated = false;
 let sequence = 0;
 
 /**
- * Opens a connection and applies migrations once per process.
+ * Opens a connection, migrating only if nothing else has.
  *
- * Migrations are idempotent and guarded by an advisory lock inside
- * `applyMigrationsWithLock`, so a second stack in the same file costs one lock
- * acquisition rather than a second migration.
+ * Normally the schema is already there: the Vitest global setup migrates once
+ * before any worker starts, precisely so that no DDL runs while other workers hold
+ * row locks. The fallback covers running a single file outside that setup.
  */
 async function connect(url: string) {
   const handle = createDatabase({ url, maxConnections: 5 });
-  if (!migrated) {
+  if (!migrated && !isTestSchemaReady()) {
     await applyMigrationsWithLock(handle.db);
     migrated = true;
   }
