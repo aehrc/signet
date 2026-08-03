@@ -17,23 +17,12 @@ COPY e2e/package.json ./e2e/
 RUN bun install --frozen-lockfile
 
 COPY tsconfig.base.json tsconfig.json ./
+COPY scripts ./scripts
 COPY packages ./packages
 COPY apps ./apps
 
 RUN bun run --filter @signet/web build \
     && bun run --filter @signet/server build
-
-# Fail the build if the server bundle is not self-contained. The runtime image
-# below ships no node_modules, so every dependency must be either bundled or a
-# Node built-in. Adding a native addon (e.g. @node-rs/argon2) breaks this and
-# needs a production-install stage restored alongside it — prefer WASM or pure
-# JS dependencies so the runtime image stays minimal and platform-independent.
-RUN grep -oE 'from[[:space:]]*"[^"./][^"]*"' apps/server/dist/index.js \
-    | grep -v '"node:' \
-    | sort -u > /tmp/externals.txt \
-    && if [ -s /tmp/externals.txt ]; then \
-    echo "Server bundle has non-builtin externals:" && cat /tmp/externals.txt && exit 1; \
-    fi
 
 # ---------------------------------------------------------------------------
 # Runtime stage.
@@ -52,6 +41,13 @@ RUN apt-get update \
 COPY --from=build /app/apps/server/dist ./dist
 COPY --from=build /app/apps/web/dist ./web
 COPY --from=build /app/packages/db/drizzle ./drizzle
+
+# This image ships no node_modules, so anything left external in the bundle would
+# resolve to nothing at startup. Checked here rather than in the build stage so
+# `builtinModules` comes from the exact Node that will run the server — bun's
+# `node` shim reports its own, slightly different, list.
+COPY --from=build /app/scripts/checkBundle.mjs /tmp/checkBundle.mjs
+RUN node /tmp/checkBundle.mjs dist/index.js && rm /tmp/checkBundle.mjs
 
 # Run unprivileged. The node image ships a `node` user at uid 1000.
 USER node

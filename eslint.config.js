@@ -34,7 +34,12 @@ export default tseslint.config(
         projectService: {
           // Build and test configs sit outside every package tsconfig; without
           // this the type-aware rules cannot resolve a program for them.
-          allowDefaultProject: ["*.js", "*.ts", "*/*/*.config.ts"],
+          allowDefaultProject: [
+            "*.js",
+            "*.ts",
+            "*/*/*.config.ts",
+            "scripts/*.mjs",
+          ],
           // The root tsconfig is a solution file of project references, which is
           // the arrangement this warning asks for.
           noWarnOnMultipleProjects: true,
@@ -85,7 +90,13 @@ export default tseslint.config(
       // This is an auth server: an unawaited promise is a security bug, not a style nit.
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-misused-promises": "error",
-      "@typescript-eslint/switch-exhaustiveness-check": "error",
+      // A `default` clause is a legitimate way to be exhaustive: several switches
+      // here handle the interesting `typeof` cases and deliberately fall through
+      // for the rest.
+      "@typescript-eslint/switch-exhaustiveness-check": [
+        "error",
+        { considerDefaultExhaustiveForUnions: true },
+      ],
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",
@@ -148,6 +159,34 @@ export default tseslint.config(
     rules: { "unicorn/no-process-exit": "off" },
   },
 
+  // Build-time CLI tooling. These are plain Node scripts run by the Dockerfile
+  // and by npm scripts, outside any package's tsconfig, so type-aware rules have
+  // no program to work from and `console`/`process` are the intended interface.
+  {
+    files: ["scripts/**/*.mjs", "scripts/**/*.js"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      globals: { console: "readonly", process: "readonly" },
+    },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+      "no-undef": "off",
+      "jsdoc/require-jsdoc": "off",
+      "unicorn/no-process-exit": "off",
+    },
+  },
+
+  // The data layer.
+  {
+    files: ["packages/db/**/*.ts"],
+    rules: {
+      // Drizzle's insert builder exposes `.values()`, which this rule mistakes
+      // for `Array#values()` and reports as a discarded return — the builder is
+      // awaited, so the finding is spurious throughout the package.
+      "unicorn/no-unused-array-method-return": "off",
+    },
+  },
+
   {
     files: ["**/*.test.{ts,tsx}", "e2e/**/*.ts"],
     plugins: { vitest },
@@ -160,6 +199,9 @@ export default tseslint.config(
       // Whitespace in test fixtures is deliberate and literal.
       "unicorn/prefer-string-repeat": "off",
       "unicorn/no-useless-undefined": "off",
+      // A helper scoped to the `describe` block that uses it is clearer than one
+      // hoisted to module scope away from its only caller.
+      "unicorn/consistent-function-scoping": "off",
     },
   },
 

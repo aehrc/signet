@@ -15,7 +15,9 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@signet/core": "workspace:*",
     "drizzle-orm": "^0.45.2",
+    "hash-wasm": "^4.12.0",
     "postgres": "^3.4.9"
   },
   "devDependencies": {

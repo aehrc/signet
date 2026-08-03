@@ -24,7 +24,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest --run --coverage",
     "test:e2e": "bun run --filter signet-e2e test",
-    "typecheck": "tsc --build --force"
+    "typecheck": "tsc --build --force",
+    "check:bundle": "bun run --filter @signet/server build && node scripts/checkBundle.mjs apps/server/dist/index.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

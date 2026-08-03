@@ -1,0 +1,234 @@
+/**
+ * Metadata for issued access tokens.
+ *
+ * The token itself is a signed JWT and needs nothing from the database to be
+ * verified. These rows exist so that introspection can answer for a token, and so
+ * that revocation is possible at all — a stateless token is otherwise valid until
+ * it expires, whatever anyone decides in the meantime.
+ *
+ * That makes the rows a revocation list, not a cache: deleting one before the
+ * token expires would silently un-revoke it, because a resource server that
+ * validates the signature and finds no row has no reason to refuse. The sweep here
+ * therefore removes only rows whose tokens have already expired.
+ */
+
+import { and, desc, eq, isNull, lte } from "drizzle-orm";
+
+import { toIntrospectableToken } from "./mappers.js";
+import { firstRow, requireRow } from "./rows.js";
+import { nowValue } from "./time.js";
+import { clients } from "../schema/clients.js";
+import { accessTokens } from "../schema/runtime.js";
+
+import type { Executor } from "./executor.js";
+import type { ClientScope, EndpointScope } from "./scope.js";
+import type { AccessToken, NewAccessToken } from "../schema/runtime.js";
+import type { IntrospectableToken } from "@signet/core";
+
+/**
+ * The caller-supplied half of an access token record.
+ *
+ * Named `...RecordInput` rather than `AccessTokenInput`, which `@signet/core`
+ * already uses for the claim-assembly input. A server module importing both would
+ * otherwise have to alias one of them, and the two are easy to confuse: one
+ * describes a row, the other describes a token payload.
+ *
+ * `issuer` and `audience` are required rather than derived from the endpoint, and
+ * that is deliberate: the endpoint's FHIR base URL can be edited, and a token must
+ * introspect as it was minted. Recomputing them at introspection time would
+ * quietly rewrite history.
+ */
+export type AccessTokenRecordInput = Omit<
+  NewAccessToken,
+  "endpointId" | "clientId" | "issuedAt" | "revokedAt"
+>;
+
+/** Records an issued access token against the scoped client. */
+export async function recordAccessToken(
+  db: Executor,
+  scope: ClientScope,
+  input: AccessTokenRecordInput,
+): Promise<AccessToken> {
+  const rows = await db
+    .insert(accessTokens)
+    .values({
+      ...input,
+      endpointId: scope.endpointId,
+      clientId: scope.clientRowId,
+    })
+    .returning();
+  return requireRow(rows, "insert into access_tokens");
+}
+
+/** Reads one of the scoped endpoint's token records by `jti`. */
+export async function findAccessToken(
+  db: Executor,
+  scope: EndpointScope,
+  jti: string,
+): Promise<AccessToken | undefined> {
+  const [row] = await db
+    .select()
+    .from(accessTokens)
+    .where(
+      and(
+        eq(accessTokens.jti, jti),
+        eq(accessTokens.endpointId, scope.endpointId),
+      ),
+    )
+    .limit(1);
+  return row;
+}
+
+/**
+ * Reads a token record in the shape introspection consumes.
+ *
+ * Revoked and expired tokens are returned, not filtered out. Introspection has to
+ * answer `active: false` for them, and `@signet/core` makes that judgement from
+ * the timestamps this carries — one place, one clock. Filtering here would make an
+ * expired token indistinguishable from a forged `jti`, which is a distinction the
+ * audit log wants.
+ *
+ * @returns Undefined only when no such token was ever issued on this endpoint.
+ */
+export async function introspectAccessToken(
+  db: Executor,
+  scope: EndpointScope,
+  jti: string,
+): Promise<IntrospectableToken | undefined> {
+  const rows = await db
+    .select({ token: accessTokens, clientId: clients.clientId })
+    .from(accessTokens)
+    .innerJoin(clients, eq(clients.id, accessTokens.clientId))
+    .where(
+      and(
+        eq(accessTokens.jti, jti),
+        eq(accessTokens.endpointId, scope.endpointId),
+      ),
+    )
+    .limit(1);
+
+  const row = firstRow(rows);
+  return row === undefined
+    ? undefined
+    : toIntrospectableToken(row.token, row.clientId);
+}
+
+/**
+ * Revokes one token.
+ *
+ * @returns Whether a live token was revoked, so that RFC 7009's "revoke is
+ *   idempotent" response can be given without pretending something happened.
+ */
+export async function revokeAccessToken(
+  db: Executor,
+  scope: EndpointScope,
+  jti: string,
+  now?: Date,
+): Promise<boolean> {
+  const rows = await db
+    .update(accessTokens)
+    .set({ revokedAt: nowValue(now) })
+    .where(
+      and(
+        eq(accessTokens.jti, jti),
+        eq(accessTokens.endpointId, scope.endpointId),
+        isNull(accessTokens.revokedAt),
+      ),
+    )
+    .returning({ jti: accessTokens.jti });
+  return rows.length > 0;
+}
+
+/**
+ * Revokes every live token issued to the scoped client.
+ *
+ * Used when a client is suspended or deleted, and by the end user's management
+ * page.
+ *
+ * @returns How many tokens were revoked.
+ */
+export async function revokeAccessTokensForClient(
+  db: Executor,
+  scope: ClientScope,
+  now?: Date,
+): Promise<number> {
+  const rows = await db
+    .update(accessTokens)
+    .set({ revokedAt: nowValue(now) })
+    .where(
+      and(
+        eq(accessTokens.clientId, scope.clientRowId),
+        eq(accessTokens.endpointId, scope.endpointId),
+        isNull(accessTokens.revokedAt),
+      ),
+    )
+    .returning({ jti: accessTokens.jti });
+  return rows.length;
+}
+
+/**
+ * Revokes every live token issued for one subject on the scoped endpoint.
+ *
+ * The subject is an end user identifier, or a client identifier for a backend
+ * service. This is "sign this person out of everything".
+ *
+ * @returns How many tokens were revoked.
+ */
+export async function revokeAccessTokensForSubject(
+  db: Executor,
+  scope: EndpointScope,
+  subject: string,
+  now?: Date,
+): Promise<number> {
+  const rows = await db
+    .update(accessTokens)
+    .set({ revokedAt: nowValue(now) })
+    .where(
+      and(
+        eq(accessTokens.subject, subject),
+        eq(accessTokens.endpointId, scope.endpointId),
+        isNull(accessTokens.revokedAt),
+      ),
+    )
+    .returning({ jti: accessTokens.jti });
+  return rows.length;
+}
+
+/** Lists a subject's token records on the scoped endpoint, newest first. */
+export async function listAccessTokensForSubject(
+  db: Executor,
+  scope: EndpointScope,
+  subject: string,
+): Promise<readonly AccessToken[]> {
+  return await db
+    .select()
+    .from(accessTokens)
+    .where(
+      and(
+        eq(accessTokens.subject, subject),
+        eq(accessTokens.endpointId, scope.endpointId),
+      ),
+    )
+    .orderBy(desc(accessTokens.issuedAt));
+}
+
+/**
+ * Deletes records for tokens that have already expired.
+ *
+ * @param db - The connection or transaction to use.
+ * @param before - Delete records whose token expired before this instant. A
+ *   caller may pass an earlier time than "now" to keep a grace period, so that
+ *   introspecting a just-expired token still reports `active: false` with its
+ *   metadata rather than as an unknown token.
+ * @returns How many rows were deleted.
+ */
+export async function deleteExpiredAccessTokens(
+  db: Executor,
+  before?: Date,
+): Promise<number> {
+  const rows = await db
+    .delete(accessTokens)
+    .where(lte(accessTokens.expiresAt, nowValue(before)))
+    .returning({ jti: accessTokens.jti });
+  return rows.length;
+}

@@ -1,6 +1,8 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+import type { Executor } from "./repositories/executor.js";
+
 /** Options for opening a Signet database connection. */
 export interface DatabaseOptions {
   /** Postgres connection string. */
@@ -9,8 +11,23 @@ export interface DatabaseOptions {
   readonly maxConnections?: number;
 }
 
-/** A Drizzle database handle bound to the Signet schema. */
-export type Database = ReturnType<typeof createDatabase>["db"];
+/**
+ * A Drizzle handle, of exactly the type every repository accepts.
+ *
+ * Drizzle is deliberately constructed WITHOUT its `schema` option. Passing the
+ * schema would produce a differently parameterised type that is not assignable
+ * to `Executor`, forcing a cast at every repository call site — the kind of
+ * friction that eventually gets solved with `as any`. The relational query
+ * builder it unlocks (`db.query.*`) is unused: the repositories write their
+ * joins explicitly. If that changes, widen `Executor` rather than casting here.
+ */
+export type Database = Executor;
+
+/** An open connection and the means to close it. */
+export interface DatabaseHandle {
+  readonly db: Database;
+  readonly close: () => Promise<void>;
+}
 
 /**
  * Opens a pooled Postgres connection and wraps it with Drizzle.
@@ -20,14 +37,11 @@ export type Database = ReturnType<typeof createDatabase>["db"];
  *
  * @param options - Connection settings.
  */
-export function createDatabase(options: DatabaseOptions): {
-  db: ReturnType<typeof drizzle>;
-  close: () => Promise<void>;
-} {
+export function createDatabase(options: DatabaseOptions): DatabaseHandle {
   const sql = postgres(options.url, {
     max: options.maxConnections ?? 10,
-    // Signet stores no cleartext secrets, but connection errors must never
-    // surface credentials into logs.
+    // Connection and notice output must never surface the credentials embedded
+    // in the connection URL.
     onnotice: () => {},
   });
 

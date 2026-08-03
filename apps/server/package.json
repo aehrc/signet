@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.12",
-    "@node-rs/argon2": "^2.0.2",
     "@signet/contracts": "workspace:*",
     "@signet/core": "workspace:*",
     "@signet/db": "workspace:*",
