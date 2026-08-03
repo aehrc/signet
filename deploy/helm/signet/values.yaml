@@ -1,0 +1,119 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/csiro/signet
+  tag: "" # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# The public origin Signet is reached on. Endpoint issuers are derived from it
+# (`{publicUrl}/t/{tenant}/e/{endpoint}`), so changing it invalidates every
+# issuer value already published to FHIR servers and registered clients.
+publicUrl: https://signet.example.org
+
+logLevel: info
+
+database:
+  # Ignored when postgresql.enabled is true.
+  existingSecret: ""
+  existingSecretKey: url
+  url: ""
+
+# Envelope key protecting endpoint signing keys at rest. Never set this in
+# values for a real deployment — supply it through existingSecret.
+masterKey:
+  existingSecret: ""
+  existingSecretKey: masterKey
+  value: ""
+
+migrations:
+  # Runs as a pre-install/pre-upgrade hook Job before new pods roll out.
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: signet.example.org
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Spread replicas across nodes so a single node loss cannot take the
+# authorization server offline.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+
+extraEnv: []
+
+postgresql:
+  enabled: true
+  auth:
+    username: signet
+    database: signet
+    # Leave unset to have the subchart generate a password.
+    password: ""
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi

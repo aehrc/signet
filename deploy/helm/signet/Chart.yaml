@@ -1,0 +1,20 @@
+apiVersion: v2
+name: signet
+description: Multi-tenant SMART on FHIR authorization server
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/csiro/signet
+keywords:
+  - fhir
+  - smart-on-fhir
+  - oauth2
+  - openid-connect
+  - authorization-server
+maintainers:
+  - name: Signet maintainers
+dependencies:
+  - name: postgresql
+    version: "16.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled

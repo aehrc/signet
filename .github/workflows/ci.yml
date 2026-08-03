@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Static analysis and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Check formatting
+        run: bun run format:check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Check duplication
+        run: bun run lint:duplication
+
+      - name: Test with coverage
+        run: bun run test:coverage
+
+      - name: Build
+        run: bun run build
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Also enforces the self-contained-bundle guard in the Dockerfile: a new
+      # native dependency fails here rather than at deploy time.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          push: false
+          load: true
+          tags: signet:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the image
+        run: |
+          docker run -d --name signet -p 3000:3000 \
+            -e SIGNET_PUBLIC_URL=http://localhost:3000 \
+            -e SIGNET_DATABASE_URL=postgres://signet:signet@localhost:5432/signet \
+            -e SIGNET_MASTER_KEY=0123456789abcdef0123456789abcdef \
+            signet:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/healthz; then echo "ok"; exit 0; fi
+            sleep 1
+          done
+          echo "Server did not become healthy"
+          docker logs signet
+          exit 1
+
+  helm:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/setup-helm@v4
+
+      - name: Lint chart
+        run: |
+          helm dependency update deploy/helm/signet
+          helm lint deploy/helm/signet
+
+      - name: Render chart in each database configuration
+        run: |
+          helm template signet deploy/helm/signet > /dev/null
+          helm template signet deploy/helm/signet \
+            --set postgresql.enabled=false \
+            --set database.existingSecret=external-db \
+            --set masterKey.existingSecret=external-key \
+            --set ingress.enabled=true \
+            --set autoscaling.enabled=true > /dev/null

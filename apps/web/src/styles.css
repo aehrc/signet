@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/*
+ * Signet is locked to a single daisyUI theme. Endpoint branding is applied as
+ * content (logo, display name), never as a theme override, so the console, the
+ * end-user auth pages and the developer portal cannot drift apart.
+ */
+@plugin "daisyui" {
+  themes: corporate --default;
+}

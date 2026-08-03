@@ -1,0 +1,16 @@
+{
+  "threshold": 0,
+  "reporters": ["console"],
+  "path": ["apps", "packages", "e2e"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/drizzle/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.stories.ts",
+    "**/*.stories.tsx"
+  ],
+  "absolute": true
+}

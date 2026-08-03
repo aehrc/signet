@@ -1,0 +1,2 @@
+# Generated Drizzle migrations land here (`bun run --filter @signet/db db:generate`).
+# Tracked in git so the migration Job in the Helm chart has something to apply.

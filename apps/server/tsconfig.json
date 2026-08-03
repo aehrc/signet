@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "types": ["node"],
+    // The server is bundled by `bun build`, not emitted by tsc. Nothing
+    // references it as a project, so it need not be composite; tsc's only job
+    // here is typechecking.
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/db" }
+  ]
+}

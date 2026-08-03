@@ -1,0 +1,20 @@
+{
+  "name": "@signet/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure SMART on FHIR domain logic: scopes, policy evaluation, tokens, discovery",
+  "exports": {
+    ".": "./src/index.ts",
+    "./scopes": "./src/scopes/index.ts",
+    "./policy": "./src/policy/index.ts",
+    "./tokens": "./src/tokens/index.ts",
+    "./pkce": "./src/pkce/index.ts",
+    "./discovery": "./src/discovery/index.ts",
+    "./launch": "./src/launch/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest --run"
+  }
+}

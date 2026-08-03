@@ -1,0 +1,17 @@
+{
+  "name": "@signet/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Zod schemas shared between the Signet server and web client",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}
