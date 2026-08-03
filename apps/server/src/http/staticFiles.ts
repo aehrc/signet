@@ -28,6 +28,8 @@ import { stat } from "node:fs/promises";
 import nodePath from "node:path";
 import { Readable } from "node:stream";
 
+import { isEndUserPagePath } from "../oauth/endUserPages.js";
+
 import type { MiddlewareHandler } from "hono";
 
 /** Content types for the extensions a Vite build actually emits. */
@@ -56,9 +58,16 @@ const RESERVED_PREFIXES = ["/api/", "/t/", "/healthz", "/readyz"];
 /**
  * Whether a request path belongs to something other than the UI.
  *
+ * An endpoint's issuer prefix is reserved, because everything under it is an OAuth
+ * endpoint — with one documented exception: the five end-user pages, which are part of
+ * the UI and are served from the bundle. See `../oauth/endUserPages.js`.
+ *
  * @param path - The request path.
  */
 export function isReservedPath(path: string): boolean {
+  if (isEndUserPagePath(path)) {
+    return false;
+  }
   return (
     path === "/api" ||
     path === "/t" ||

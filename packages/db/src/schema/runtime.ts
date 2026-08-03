@@ -29,7 +29,9 @@ import {
 import { clients } from "./clients.js";
 import {
   createdAt,
+  endpointAndEndUser,
   revocableLifecycle,
+  sessionLifecycle,
   singleUseLifecycle,
 } from "./columns.js";
 import { endpoints, endUsers } from "./endpoints.js";
@@ -261,12 +263,7 @@ export const consents = pgTable(
   "consents",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    endpointId: uuid("endpoint_id")
-      .notNull()
-      .references(() => endpoints.id, { onDelete: "cascade" }),
-    endUserId: uuid("end_user_id")
-      .notNull()
-      .references(() => endUsers.id, { onDelete: "cascade" }),
+    ...endpointAndEndUser(endpoints, endUsers),
     clientId: uuid("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -287,6 +284,33 @@ export const consents = pgTable(
     index("consents_endpoint_id_idx").on(table.endpointId),
     index("consents_client_id_idx").on(table.clientId),
     index("consents_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+/**
+ * An end user's browser session on one endpoint.
+ *
+ * Distinct from an `authorization_sessions` row, which is one app's authorization in
+ * progress: this is "this person is signed in here", and it exists for the management
+ * page. An end user reviewing which apps hold access to their record is not in the
+ * middle of an authorization, so there is no authorization session to hang it off.
+ *
+ * Scoped to the endpoint, not to the tenant. The same person may have accounts on two
+ * endpoints of the same tenant, and a session on one must not be a session on the other:
+ * the accounts are separate rows with separate passwords.
+ */
+export const endUserSessions = pgTable(
+  "end_user_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...endpointAndEndUser(endpoints, endUsers),
+    ...sessionLifecycle(),
+  },
+  (table) => [
+    uniqueIndex("end_user_sessions_token_hash_unique").on(table.tokenHash),
+    index("end_user_sessions_end_user_id_idx").on(table.endUserId),
+    index("end_user_sessions_endpoint_id_idx").on(table.endpointId),
+    index("end_user_sessions_expires_at_idx").on(table.expiresAt),
   ],
 );
 
@@ -351,3 +375,8 @@ export type NewConsent = typeof consents.$inferInsert;
 export type JtiReplay = typeof jtiReplay.$inferSelect;
 /** Values required to insert a `jti` replay ledger row. */
 export type NewJtiReplay = typeof jtiReplay.$inferInsert;
+
+/** An end user session row as selected. */
+export type EndUserSession = typeof endUserSessions.$inferSelect;
+/** Values required to insert an end user session. */
+export type NewEndUserSession = typeof endUserSessions.$inferInsert;

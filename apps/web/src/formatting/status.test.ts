@@ -7,6 +7,12 @@ describe("toneForStatus", () => {
     expect(toneForStatus("active")).toBe("success");
   });
 
+  it("reads an approved request as good", () => {
+    // The developer portal and the console both show a request's review state, and a
+    // black badge for "approved" reads as neutral news rather than good.
+    expect(toneForStatus("approved")).toBe("success");
+  });
+
   it("reads a queued thing as informational", () => {
     expect(toneForStatus("next")).toBe("info");
     expect(toneForStatus("pending")).toBe("info");

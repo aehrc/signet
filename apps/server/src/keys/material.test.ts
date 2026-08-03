@@ -1,3 +1,4 @@
+import { decryptSecret } from "@signet/db";
 import { jwtVerify, importJWK } from "jose";
 import { describe, expect, it } from "vitest";
 
@@ -82,7 +83,17 @@ describe.each(ENDPOINT_KEY_ALGORITHMS)(
     it("stores the private half as envelope ciphertext, not as a JWK", async () => {
       const generated = await generateEndpointKey(algorithm, MASTER_KEY);
       expect(generated.privateJwkEncrypted.startsWith("v1.")).toBe(true);
-      expect(generated.privateJwkEncrypted).not.toContain("kty");
+
+      // Decrypting is what proves the stored value is not the JWK. A substring check
+      // for `kty` against the ciphertext looks equivalent and is not: the ciphertext
+      // is base64, so it contains those three characters in sequence every few
+      // hundred runs — which made this assertion fail at random.
+      const decrypted = await decryptSecret(
+        generated.privateJwkEncrypted,
+        MASTER_KEY,
+      );
+      expect(JSON.parse(decrypted)).toMatchObject({ kty: expect.any(String) });
+      expect(generated.privateJwkEncrypted).not.toBe(decrypted);
     });
 
     it("round-trips the private half", async () => {

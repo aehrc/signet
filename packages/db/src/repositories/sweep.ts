@@ -18,6 +18,7 @@ import { deleteExpiredAdminSessions } from "./adminUsers.js";
 import { deleteExpiredAuthorizationCodes } from "./authorizationCodes.js";
 import { deleteExpiredAuthorizationSessions } from "./authorizationSessions.js";
 import { deleteExpiredConsents } from "./consents.js";
+import { deleteExpiredEndUserSessions } from "./endUserSessions.js";
 import { deleteExpiredJtis } from "./jtiReplay.js";
 import { deleteExpiredLaunchContexts } from "./launchContexts.js";
 import { deleteExpiredRefreshTokens } from "./refreshTokens.js";
@@ -39,6 +40,8 @@ export interface SweepCounts {
    * operate than two.
    */
   readonly adminSessions: number;
+  /** End users' management-page sessions, for the same reason. */
+  readonly endUserSessions: number;
 }
 
 /** How far back the sweep reaches. */
@@ -90,6 +93,7 @@ export async function sweepExpiredRuntimeRows(
   const consents = await deleteExpiredConsents(db, now);
   const jtiReplay = await deleteExpiredJtis(db, now);
   const adminSessions = await deleteExpiredAdminSessions(db, now);
+  const endUserSessions = await deleteExpiredEndUserSessions(db, now);
 
   return {
     launchContexts,
@@ -100,5 +104,6 @@ export async function sweepExpiredRuntimeRows(
     consents,
     jtiReplay,
     adminSessions,
+    endUserSessions,
   };
 }

@@ -135,6 +135,35 @@ function normalisePublicUrl(raw: string): string {
 }
 
 /**
+ * Resolves just the database URL.
+ *
+ * The `migrate` and `bootstrap` commands need a connection and nothing else, and
+ * requiring the whole configuration for them would mean an operator supplying a public
+ * URL and a master key to run a migration that uses neither — and being told off by name
+ * when they did not.
+ *
+ * @param env - The environment to read.
+ * @throws {ConfigError} When neither form of the connection setting is present, or both
+ *   are.
+ */
+export function resolveDatabaseUrl(env: Environment): string {
+  const explicitUrl = read(env, "SIGNET_DATABASE_URL");
+  const composedUrl = composeDatabaseUrl(env);
+  if (explicitUrl !== undefined && composedUrl !== undefined) {
+    throw new ConfigError(
+      "Set either SIGNET_DATABASE_URL or the SIGNET_DATABASE_* parts, not both",
+    );
+  }
+  const databaseUrl = explicitUrl ?? composedUrl;
+  if (databaseUrl === undefined) {
+    throw new ConfigError(
+      "SIGNET_DATABASE_URL or SIGNET_DATABASE_HOST is required",
+    );
+  }
+  return databaseUrl;
+}
+
+/**
  * Resolves configuration from an environment, throwing {@link ConfigError} with
  * an actionable message rather than starting up in a half-configured state.
  */
@@ -153,19 +182,7 @@ export function loadConfig(env: Environment): SignetConfig {
     );
   }
 
-  const explicitUrl = read(env, "SIGNET_DATABASE_URL");
-  const composedUrl = composeDatabaseUrl(env);
-  if (explicitUrl !== undefined && composedUrl !== undefined) {
-    throw new ConfigError(
-      "Set either SIGNET_DATABASE_URL or the SIGNET_DATABASE_* parts, not both",
-    );
-  }
-  const databaseUrl = explicitUrl ?? composedUrl;
-  if (databaseUrl === undefined) {
-    throw new ConfigError(
-      "SIGNET_DATABASE_URL or SIGNET_DATABASE_HOST is required",
-    );
-  }
+  const databaseUrl = resolveDatabaseUrl(env);
 
   const masterKey = read(env, "SIGNET_MASTER_KEY");
   if (masterKey === undefined) {

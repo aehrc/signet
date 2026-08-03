@@ -55,6 +55,7 @@ export const ENDPOINT_TABS: readonly {
   { path: "/users", label: "Users" },
   { path: "/keys", label: "Keys" },
   { path: "/requests", label: "Requests" },
+  { path: "/launch", label: "Launch" },
 ];
 
 /**

@@ -24,11 +24,12 @@ import type {
   ClientRequest,
   NewClientRequest,
 } from "../schema/clients.js";
+import type { SQL } from "drizzle-orm";
 
 /** The caller-supplied half of a registration request. */
 export type ClientRequestInput = Pick<
   NewClientRequest,
-  "requestedByEmail" | "payload"
+  "requestedByEmail" | "payload" | "trackingTokenHash"
 >;
 
 /** Files a registration request against the scoped endpoint. */
@@ -71,23 +72,61 @@ export async function listClientRequests(
     .orderBy(desc(clientRequests.createdAt));
 }
 
+/** Reads the one request a predicate selects, or undefined. */
+async function selectClientRequest(
+  db: Executor,
+  predicate: SQL | undefined,
+): Promise<ClientRequest | undefined> {
+  const [row] = await db
+    .select()
+    .from(clientRequests)
+    .where(predicate)
+    .limit(1);
+  return row;
+}
+
 /** Reads one of the scoped endpoint's registration requests. */
 export async function getClientRequest(
   db: Executor,
   scope: EndpointScope,
   requestId: string,
 ): Promise<ClientRequest | undefined> {
-  const [row] = await db
-    .select()
-    .from(clientRequests)
-    .where(
-      and(
-        eq(clientRequests.endpointId, scope.endpointId),
-        eq(clientRequests.id, requestId),
-      ),
-    )
-    .limit(1);
-  return row;
+  return await selectClientRequest(
+    db,
+    and(
+      eq(clientRequests.endpointId, scope.endpointId),
+      eq(clientRequests.id, requestId),
+    ),
+  );
+}
+
+/**
+ * Reads a request by the token the developer was given for it.
+ *
+ * The developer portal is not an authenticated surface — somebody asking for a client has
+ * no account yet — so this is how a submission is followed up: the identifier says which
+ * request, and the token proves it is the one the caller filed. Both are required, and the
+ * token is compared as a digest, so a leaked identifier alone reveals nothing.
+ *
+ * @param db - The connection or transaction to use.
+ * @param scope - The endpoint the request was filed against.
+ * @param requestId - The identifier from the submission response.
+ * @param trackingTokenHash - SHA-256 of the token from the submission response.
+ */
+export async function findClientRequestByTrackingToken(
+  db: Executor,
+  scope: EndpointScope,
+  requestId: string,
+  trackingTokenHash: string,
+): Promise<ClientRequest | undefined> {
+  return await selectClientRequest(
+    db,
+    and(
+      eq(clientRequests.endpointId, scope.endpointId),
+      eq(clientRequests.id, requestId),
+      eq(clientRequests.trackingTokenHash, trackingTokenHash),
+    ),
+  );
 }
 
 /** Why a decision could not be recorded. */

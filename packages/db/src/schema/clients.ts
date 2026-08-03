@@ -114,6 +114,16 @@ export const clientRequests = pgTable(
       .notNull()
       .references(() => endpoints.id, { onDelete: "cascade" }),
     requestedByEmail: text("requested_by_email").notNull(),
+    /**
+     * SHA-256 of the token the developer keeps to track this request.
+     *
+     * The portal is not an authenticated surface — a developer asking for a client has
+     * no account yet — so the submission returns a bearer token once, and checking the
+     * request's status or collecting its credentials requires presenting it. Nullable
+     * because a request an administrator files on someone's behalf has nobody to hand
+     * a token to.
+     */
+    trackingTokenHash: text("tracking_token_hash"),
     payload: jsonb("payload").$type<ClientRequestPayload>().notNull(),
     status: clientRequestStatusEnum("status").notNull().default("pending"),
     /** Nulled when the reviewing admin is deleted; the decision itself stands. */

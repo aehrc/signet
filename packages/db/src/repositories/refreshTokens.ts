@@ -39,6 +39,7 @@ import type { Executor } from "./executor.js";
 import type { RefreshTokenRefusal } from "./predicates.js";
 import type { ClientScope, EndpointScope } from "./scope.js";
 import type { NewRefreshToken, RefreshToken } from "../schema/runtime.js";
+import type { SQL } from "drizzle-orm";
 
 /**
  * The caller-supplied half of a refresh token.
@@ -305,6 +306,27 @@ export async function revokeRefreshTokenFamily(
 }
 
 /**
+ * Revokes the live refresh tokens a predicate selects.
+ *
+ * The three revocations below differ only in what they select. The statement is the part
+ * that must not be copied: a version that forgot `isNull(revokedAt)` would restamp an
+ * already-revoked row and report it as newly revoked, which is a misleading number in
+ * an audit event about a compromise.
+ */
+async function revokeMatchingRefreshTokens(
+  db: Executor,
+  predicate: SQL | undefined,
+  now?: Date,
+): Promise<number> {
+  const rows = await db
+    .update(refreshTokens)
+    .set({ revokedAt: nowValue(now) })
+    .where(and(predicate, isNull(refreshTokens.revokedAt)))
+    .returning({ id: refreshTokens.id });
+  return rows.length;
+}
+
+/**
  * Revokes every live refresh token issued to the scoped client.
  *
  * @returns How many tokens were revoked.
@@ -314,22 +336,20 @@ export async function revokeRefreshTokensForClient(
   scope: ClientScope,
   now?: Date,
 ): Promise<number> {
-  const rows = await db
-    .update(refreshTokens)
-    .set({ revokedAt: nowValue(now) })
-    .where(
-      and(
-        eq(refreshTokens.clientId, scope.clientRowId),
-        eq(refreshTokens.endpointId, scope.endpointId),
-        isNull(refreshTokens.revokedAt),
-      ),
-    )
-    .returning({ id: refreshTokens.id });
-  return rows.length;
+  return await revokeMatchingRefreshTokens(
+    db,
+    and(
+      eq(refreshTokens.clientId, scope.clientRowId),
+      eq(refreshTokens.endpointId, scope.endpointId),
+    ),
+    now,
+  );
 }
 
 /**
  * Revokes every live refresh token for one subject on the scoped endpoint.
+ *
+ * This is "sign this person out of everything".
  *
  * @returns How many tokens were revoked.
  */
@@ -339,18 +359,39 @@ export async function revokeRefreshTokensForSubject(
   subject: string,
   now?: Date,
 ): Promise<number> {
-  const rows = await db
-    .update(refreshTokens)
-    .set({ revokedAt: nowValue(now) })
-    .where(
-      and(
-        eq(refreshTokens.subject, subject),
-        eq(refreshTokens.endpointId, scope.endpointId),
-        isNull(refreshTokens.revokedAt),
-      ),
-    )
-    .returning({ id: refreshTokens.id });
-  return rows.length;
+  return await revokeMatchingRefreshTokens(
+    db,
+    and(
+      eq(refreshTokens.subject, subject),
+      eq(refreshTokens.endpointId, scope.endpointId),
+    ),
+    now,
+  );
+}
+
+/**
+ * Revokes one subject's live refresh tokens for one client.
+ *
+ * The management page's "disconnect this app": revoking every token the person holds
+ * would disconnect apps they did not ask to disconnect.
+ *
+ * @returns How many tokens were revoked.
+ */
+export async function revokeRefreshTokensForSubjectAndClient(
+  db: Executor,
+  scope: ClientScope,
+  subject: string,
+  now?: Date,
+): Promise<number> {
+  return await revokeMatchingRefreshTokens(
+    db,
+    and(
+      eq(refreshTokens.subject, subject),
+      eq(refreshTokens.endpointId, scope.endpointId),
+      eq(refreshTokens.clientId, scope.clientRowId),
+    ),
+    now,
+  );
 }
 
 /** Lists a subject's refresh tokens on the scoped endpoint, newest first. */

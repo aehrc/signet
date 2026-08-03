@@ -117,3 +117,27 @@ function isSameValue(a: unknown, b: unknown): boolean {
   // null as "clear this field" and an absent key as "leave it alone".
   return a === b;
 }
+
+/**
+ * Drops the fields whose value is blank.
+ *
+ * Several forms build a request body from optional text inputs, where an untouched field
+ * must be absent rather than sent as an empty string — an empty `intent` or `patient` is
+ * not the same request as no `intent` at all, and the API's schemas say so. Written once
+ * because the conditional-spread version of it, repeated per field, is where a stray
+ * empty string gets through.
+ *
+ * @param values - The candidate fields.
+ */
+export function withoutBlanks(
+  values: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
+  const kept: Record<string, string> = {};
+  for (const [name, value] of Object.entries(values)) {
+    const trimmed = value?.trim() ?? "";
+    if (trimmed.length > 0) {
+      kept[name] = trimmed;
+    }
+  }
+  return kept;
+}

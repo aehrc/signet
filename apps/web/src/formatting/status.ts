@@ -21,7 +21,8 @@ export type BadgeTone = "neutral" | "success" | "warning" | "error" | "info";
  */
 export function toneForStatus(status: string): BadgeTone {
   switch (status) {
-    case "active": {
+    case "active":
+    case "approved": {
       return "success";
     }
     case "next":

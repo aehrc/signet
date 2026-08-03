@@ -17,7 +17,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { createdAt, timestamps } from "./columns.js";
+import { createdAt, sessionLifecycle, timestamps } from "./columns.js";
 import { tenantMemberRoleEnum } from "./enums.js";
 
 /** An isolation boundary owning endpoints, clients, policies and audit. */
@@ -126,17 +126,7 @@ export const adminSessions = pgTable(
     adminUserId: uuid("admin_user_id")
       .notNull()
       .references(() => adminUsers.id, { onDelete: "cascade" }),
-    /** SHA-256 of the session cookie value. Stored hashed, never in clear. */
-    tokenHash: text("token_hash").notNull(),
-    ...createdAt(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    /**
-     * Recorded as text rather than `inet`: the value derives from a proxy header
-     * and must be storable even when it is not a well-formed address.
-     */
-    ip: text("ip"),
-    userAgent: text("user_agent"),
+    ...sessionLifecycle(),
   },
   (table) => [
     uniqueIndex("admin_sessions_token_hash_unique").on(table.tokenHash),

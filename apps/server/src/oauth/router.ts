@@ -17,6 +17,11 @@ import { Hono } from "hono";
 
 import { authorizeHandler } from "./authorize.js";
 import {
+  clientRegistrationHandler,
+  clientRequestStatusHandler,
+  submitClientRequestHandler,
+} from "./developerPortal.js";
+import {
   jwksHandler,
   openIdConfigurationHandler,
   smartConfigurationHandler,
@@ -30,6 +35,12 @@ import {
 import { introspectHandler } from "./introspect.js";
 import { ISSUER_PATH_PREFIX, withIssuer } from "./issuer.js";
 import { launchContextHandler } from "./launchContextEndpoint.js";
+import {
+  manageAuthorizationsHandler,
+  manageRevokeHandler,
+  manageSignInHandler,
+  manageSignOutHandler,
+} from "./manage.js";
 import { revokeHandler } from "./revoke.js";
 import { tokenHandler } from "./token.js";
 import { userinfoHandler } from "./userinfo.js";
@@ -96,6 +107,28 @@ export function createOAuthRouter(
   router.post(
     path("/interaction/:sessionId/consent"),
     interactionConsentHandler(context),
+  );
+
+  // The management endpoint, which SMART advertises as `management_endpoint`. Its own
+  // session, because an end user reviewing their authorizations is not in the middle of
+  // one — see `./manage.js`.
+  router.post(path("/manage/session"), manageSignInHandler(context));
+  router.delete(path("/manage/session"), manageSignOutHandler(context));
+  router.get(
+    path("/manage/authorizations"),
+    manageAuthorizationsHandler(context),
+  );
+  router.post(path("/manage/revoke"), manageRevokeHandler(context));
+
+  // The developer portal. Off unless the endpoint accepts self-serve requests.
+  router.post(path("/apps/requests"), submitClientRequestHandler(context));
+  router.get(
+    path("/apps/requests/:requestId"),
+    clientRequestStatusHandler(context),
+  );
+  router.get(
+    path("/apps/registration/:clientId"),
+    clientRegistrationHandler(context),
   );
 
   return router;

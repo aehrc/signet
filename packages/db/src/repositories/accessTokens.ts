@@ -24,6 +24,7 @@ import type { Executor } from "./executor.js";
 import type { ClientScope, EndpointScope } from "./scope.js";
 import type { AccessToken, NewAccessToken } from "../schema/runtime.js";
 import type { IntrospectableToken } from "@signet/core";
+import type { SQL } from "drizzle-orm";
 
 /**
  * The caller-supplied half of an access token record.
@@ -167,10 +168,30 @@ export async function revokeAccessTokensForClient(
 }
 
 /**
+ * Revokes the live tokens a predicate selects.
+ *
+ * The two public revocations below differ only in whether they name a client, and the
+ * statement is the security-relevant part: a copy that forgot `isNull(revokedAt)` would
+ * silently restamp an already-revoked row and report it as newly revoked.
+ */
+async function revokeMatchingAccessTokens(
+  db: Executor,
+  predicate: SQL | undefined,
+  now?: Date,
+): Promise<number> {
+  const rows = await db
+    .update(accessTokens)
+    .set({ revokedAt: nowValue(now) })
+    .where(and(predicate, isNull(accessTokens.revokedAt)))
+    .returning({ jti: accessTokens.jti });
+  return rows.length;
+}
+
+/**
  * Revokes every live token issued for one subject on the scoped endpoint.
  *
- * The subject is an end user identifier, or a client identifier for a backend
- * service. This is "sign this person out of everything".
+ * The subject is an end user identifier, or a client identifier for a backend service.
+ * This is "sign this person out of everything".
  *
  * @returns How many tokens were revoked.
  */
@@ -180,18 +201,40 @@ export async function revokeAccessTokensForSubject(
   subject: string,
   now?: Date,
 ): Promise<number> {
-  const rows = await db
-    .update(accessTokens)
-    .set({ revokedAt: nowValue(now) })
-    .where(
-      and(
-        eq(accessTokens.subject, subject),
-        eq(accessTokens.endpointId, scope.endpointId),
-        isNull(accessTokens.revokedAt),
-      ),
-    )
-    .returning({ jti: accessTokens.jti });
-  return rows.length;
+  return await revokeMatchingAccessTokens(
+    db,
+    and(
+      eq(accessTokens.subject, subject),
+      eq(accessTokens.endpointId, scope.endpointId),
+    ),
+    now,
+  );
+}
+
+/**
+ * Revokes one subject's live tokens for one client.
+ *
+ * Narrower than {@link revokeAccessTokensForSubject}, and the difference matters: this is
+ * the management page's "disconnect this app", where revoking every token the person
+ * holds would disconnect apps they did not ask to disconnect.
+ *
+ * @returns How many tokens were revoked.
+ */
+export async function revokeAccessTokensForSubjectAndClient(
+  db: Executor,
+  scope: ClientScope,
+  subject: string,
+  now?: Date,
+): Promise<number> {
+  return await revokeMatchingAccessTokens(
+    db,
+    and(
+      eq(accessTokens.subject, subject),
+      eq(accessTokens.endpointId, scope.endpointId),
+      eq(accessTokens.clientId, scope.clientRowId),
+    ),
+    now,
+  );
 }
 
 /** Lists a subject's token records on the scoped endpoint, newest first. */

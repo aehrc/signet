@@ -32,14 +32,11 @@ import {
   attachEndUser,
   createAuthorizationCode,
   deleteAuthorizationSession,
-  findEndUserByUsername,
   generateOpaqueToken,
   getClient,
   getEndUser,
   getLiveAuthorizationSession,
   hashToken,
-  isEndUserEnabled,
-  isPersonaSelectable,
   listLiveConsents,
   listSelectablePersonas,
   recordConsent,
@@ -47,7 +44,6 @@ import {
   resolveClientScope,
   setResolvedContext,
   toDefaultLaunchContext,
-  verifyPassword,
 } from "@signet/db";
 
 import {
@@ -56,17 +52,17 @@ import {
   soleCandidate,
 } from "./contextCandidates.js";
 import { contextRequirements } from "./contextRequirements.js";
+import { signInEndUser } from "./endUserAuthentication.js";
 import { decideStep } from "./interactionState.js";
 import { authorizeErrorRedirect } from "../http/oauthErrors.js";
 import { requestMetadata } from "../http/requestMeta.js";
-import { UNMATCHABLE_PASSWORD_HASH } from "../security/passwordTiming.js";
 
 import type {
   ServerContext,
   ResolvedIssuerContext,
   SignetEnvironment,
 } from "../context.js";
-import type { InteractionStep } from "./interactionState.js";
+import type { InteractionView, LaunchContextValues } from "@signet/contracts";
 import type { LaunchContext, Scope } from "@signet/core";
 import type {
   AuditAction,
@@ -105,35 +101,6 @@ interface LoadedSession {
 type AuthenticatedSession = LoadedSession & {
   readonly session: AuthorizationSession & { readonly endUserId: string };
 };
-
-/** What the interaction pages need to render a step. */
-interface InteractionView {
-  readonly step: InteractionStep;
-  readonly client: {
-    readonly clientId: string;
-    readonly name: string;
-    readonly logoUrl: string | null;
-  };
-  readonly requestedScopes: readonly string[];
-  readonly authMode: string;
-  readonly allowsPersonas: boolean;
-  readonly personas: readonly {
-    readonly id: string;
-    readonly displayName: string;
-    readonly fhirUser: string | null;
-  }[];
-  readonly requirements: {
-    readonly patient: boolean;
-    readonly encounter: boolean;
-  };
-  readonly patients: readonly string[];
-  readonly encounters: readonly string[];
-  /** Whether an identifier outside the offered lists may be submitted. */
-  readonly allowsFreeContextSelection: boolean;
-  readonly resolvedContext: LaunchContext | null;
-  /** Present only when the step is `complete`. */
-  readonly redirectTo?: string;
-}
 
 /**
  * Loads a live session and the client it belongs to.
@@ -238,6 +205,7 @@ async function buildView(
   const step = decideStep({
     authenticated: user !== undefined,
     requirements,
+    // Widened to the contract's record shape; a launch context is one.
     resolvedContext: session.resolvedContext,
     consentGranted: session.consentGrantedAt !== null,
     consentMode: endpoint.consentMode,
@@ -271,7 +239,8 @@ async function buildView(
     patients: user === undefined ? [] : contextCandidates(user, "patient"),
     encounters: user === undefined ? [] : contextCandidates(user, "encounter"),
     allowsFreeContextSelection: !endpoint.isProduction,
-    resolvedContext: session.resolvedContext,
+    // Widened to the contract's record shape; a launch context is one.
+    resolvedContext: session.resolvedContext as LaunchContextValues | null,
   };
 }
 
@@ -606,80 +575,25 @@ export function interactionLoginHandler(context: ServerContext) {
       personaId?: unknown;
     };
 
-    /** Records a failed sign-in and answers with the same message either way. */
-    const refuse = async (detail: Record<string, unknown>) => {
-      await recordEndUserEvent(context, issuerContext, metadata, {
-        action: "end-user.login-failed",
-        target: { type: "authorization-session", id: loaded.session.id },
-        detail,
-      });
-      return c.json(
-        {
-          error: "invalid_request",
-          error_description: "Those credentials were not accepted",
-        },
-        401,
-      );
-    };
-
-    let user: EndUser | undefined;
-
-    if (typeof body.personaId === "string") {
-      const persona = await getEndUser(
-        context.db,
-        issuerContext.scope,
-        body.personaId,
-      );
-      // Both halves of the persona rule are checked by one pure predicate, so
-      // neither the production flag nor the persona flag can be relaxed alone.
-      if (persona === undefined || !isPersonaSelectable(endpoint, persona)) {
-        return await refuse({ reason: "persona-not-selectable" });
-      }
-      user = persona;
-    } else if (
-      typeof body.username === "string" &&
-      typeof body.password === "string"
-    ) {
-      if (endpoint.authMode === "oidc") {
-        return c.json(
-          {
-            error: "invalid_request",
-            error_description:
-              "This endpoint federates authentication to an upstream identity provider",
-          },
-          400,
-        );
-      }
-      const candidate = await findEndUserByUsername(
-        context.db,
-        issuerContext.scope,
-        body.username,
-      );
-      // The password is verified even when the user does not exist, against a
-      // hash that cannot match, so that a missing account and a wrong password
-      // take the same time. Argon2 verification is the dominant cost here, and
-      // skipping it would make user enumeration a timing measurement.
-      const stored = candidate?.passwordHash ?? UNMATCHABLE_PASSWORD_HASH;
-      const matches = await verifyPassword(body.password, stored);
-      if (
-        candidate === undefined ||
-        candidate.passwordHash === null ||
-        !matches ||
-        !isEndUserEnabled(candidate)
-      ) {
-        return await refuse({ reason: "password-rejected" });
-      }
-      user = candidate;
-    } else {
-      return c.json(
-        {
-          error: "invalid_request",
-          error_description:
-            "Supply either username and password, or personaId",
-        },
-        400,
-      );
+    const authenticated = await signInEndUser({
+      db: context.db,
+      scope: issuerContext.scope,
+      endpoint,
+      credentials: body,
+      // Named against the session, so the trail shows which authorization the failed
+      // attempt was for and not merely that someone failed to sign in.
+      recordFailure: async (reason) => {
+        await recordEndUserEvent(context, issuerContext, metadata, {
+          action: "end-user.login-failed",
+          target: { type: "authorization-session", id: loaded.session.id },
+          detail: { reason },
+        });
+      },
+    });
+    if (!authenticated.ok) {
+      return c.json(authenticated.body, authenticated.status);
     }
+    const user = authenticated.user;
 
     await attachUser(context, issuerContext, loaded, user);
 

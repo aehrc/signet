@@ -45,6 +45,7 @@ const EXPECTED_TABLES = [
   "client_requests",
   "clients",
   "consents",
+  "end_user_sessions",
   "end_users",
   "endpoint_keys",
   "endpoints",
@@ -333,6 +334,7 @@ describe("deletion behaviour", () => {
     const cascadesToEndpoint = [
       "clients",
       "client_requests",
+      "end_user_sessions",
       "end_users",
       "endpoint_keys",
       "idp_configs",

@@ -24,11 +24,19 @@ import { EndpointLayout } from "./console/endpointLayout.js";
 import { EndpointOverviewPage } from "./console/endpointOverviewPage.js";
 import { EndpointsPage } from "./console/endpointsPage.js";
 import { KeysPage } from "./console/keysPage.js";
+import { LaunchPage } from "./console/launchPage.js";
 import { RequestsPage } from "./console/requestsPage.js";
 import { CONSOLE_BASE, SIGN_IN_ROUTE } from "./console/routes.js";
 import { SignInPage } from "./console/signInPage.js";
 import { TenantSettingsPage } from "./console/tenantSettingsPage.js";
 import { UsersPage } from "./console/usersPage.js";
+import {
+  ConsentPage,
+  LoginPage,
+  PickerPage,
+} from "./endUser/interactionPages.js";
+import { ManagePage } from "./endUser/managePage.js";
+import { PortalPage } from "./endUser/portalPage.js";
 import { PolicyPage } from "./policy/policyPage.js";
 
 const queryClient = new QueryClient({
@@ -67,8 +75,29 @@ export function App() {
               <Route path="users" element={<UsersPage />} />
               <Route path="keys" element={<KeysPage />} />
               <Route path="requests" element={<RequestsPage />} />
+              <Route path="launch" element={<LaunchPage />} />
             </Route>
           </Route>
+
+          {/*
+            The end-user surfaces, under an endpoint's own issuer path. Those URLs are
+            what `/authorize` redirects to and what the discovery document advertises as
+            the management endpoint, so they are fixed rather than ours to choose.
+          */}
+          <Route path="/t/:tenant/e/:endpoint/login" element={<LoginPage />} />
+          <Route
+            path="/t/:tenant/e/:endpoint/picker"
+            element={<PickerPage />}
+          />
+          <Route
+            path="/t/:tenant/e/:endpoint/consent"
+            element={<ConsentPage />}
+          />
+          <Route
+            path="/t/:tenant/e/:endpoint/manage"
+            element={<ManagePage />}
+          />
+          <Route path="/t/:tenant/e/:endpoint/apps" element={<PortalPage />} />
 
           {/* Anything else lands on the console, which decides where to go. */}
           <Route path="*" element={<Navigate to={CONSOLE_BASE} replace />} />

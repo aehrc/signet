@@ -34,6 +34,19 @@ describe("isReservedPath", () => {
     // `/tenants` is a UI route; only `/t/` is the issuer prefix.
     expect(isReservedPath("/tenants")).toBe(false);
   });
+
+  it("does not reserve the end-user pages under an issuer", () => {
+    // These five are part of the UI and are served from the bundle, even though
+    // everything else under the issuer prefix is an OAuth endpoint.
+    for (const page of ["login", "picker", "consent", "manage", "apps"]) {
+      expect(isReservedPath(`/t/demo/e/fhir/${page}`)).toBe(false);
+    }
+  });
+
+  it("still reserves the API those pages call", () => {
+    expect(isReservedPath("/t/demo/e/fhir/manage/session")).toBe(true);
+    expect(isReservedPath("/t/demo/e/fhir/apps/requests")).toBe(true);
+  });
 });
 
 describe("resolveWithinRoot", () => {

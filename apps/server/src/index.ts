@@ -3,15 +3,13 @@ import { createAuditRecorder, createDatabase } from "@signet/db";
 
 import { createApp } from "./app.js";
 import { bootstrapOptionsFrom, runBootstrapCommand } from "./bootstrap.js";
-import { ConfigError, loadConfig } from "./config.js";
+import { ConfigError, loadConfig, resolveDatabaseUrl } from "./config.js";
 import { runMigrateCommand } from "./migrate.js";
 
 import type { AuditRecordFailure } from "@signet/db";
 
-let config;
-try {
-  config = loadConfig(process.env);
-} catch (error) {
+/** Reports a configuration problem the way an operator can act on. */
+function reportConfigError(error: unknown): never {
   if (error instanceof ConfigError) {
     // Fail loudly and specifically rather than starting up half-configured.
     console.error(`Signet configuration error: ${error.message}`);
@@ -20,13 +18,19 @@ try {
   throw error;
 }
 
-// `migrate` is a separate command, invoked by the chart's pre-upgrade hook Job. It
-// deliberately does not run as part of startup: several replicas racing to apply the
-// same migration is how a half-migrated schema happens.
-if (process.argv[2] === "migrate") {
+const command = process.argv[2];
+
+// The commands are dispatched before the server's configuration is resolved, because
+// each needs less than the server does: a migration uses a connection and nothing else,
+// and demanding a public URL and a master key to run one would be an operator being told
+// off by name for omitting something the command never reads.
+if (command === "migrate") {
   try {
-    await runMigrateCommand(config.databaseUrl);
+    await runMigrateCommand(resolveDatabaseUrl(process.env));
   } catch (error) {
+    if (error instanceof ConfigError) {
+      reportConfigError(error);
+    }
     console.error("Signet migration failed:", error);
     process.exit(1);
   }
@@ -37,18 +41,28 @@ if (process.argv[2] === "migrate") {
 // the admin API can do that — both require a membership of a tenant that does not yet
 // exist — and it is not a public route, because a deployment in front of clinical data
 // should not accept a tenant from anybody who can reach the port.
-if (process.argv[2] === "bootstrap") {
+if (command === "bootstrap") {
   try {
     await runBootstrapCommand(
-      bootstrapOptionsFrom(process.env, config.databaseUrl),
+      bootstrapOptionsFrom(process.env, resolveDatabaseUrl(process.env)),
     );
   } catch (error) {
+    if (error instanceof ConfigError) {
+      reportConfigError(error);
+    }
     console.error(
       `Signet bootstrap failed: ${error instanceof Error ? error.message : String(error)}`,
     );
     process.exit(1);
   }
   process.exit(0);
+}
+
+let config;
+try {
+  config = loadConfig(process.env);
+} catch (error) {
+  reportConfigError(error);
 }
 
 const { db, close } = createDatabase({ url: config.databaseUrl });
