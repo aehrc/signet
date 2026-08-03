@@ -4,4 +4,5 @@ export * from "./clients.js";
 export * from "./endpoints.js";
 export * from "./launch.js";
 export * from "./policies.js";
+export * from "./tenants.js";
 export * from "./users.js";

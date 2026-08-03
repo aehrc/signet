@@ -307,6 +307,52 @@ export type AuditTargetType =
   | "refresh-token";
 
 /**
+ * Every target type, as a runtime value.
+ *
+ * Written as an exhaustive `Record` so that adding a member to the union without
+ * adding it here is a compile error. The console's audit browser filters on this,
+ * and a target type missing from the list would be a filter nobody could select.
+ */
+const AUDIT_TARGET_TYPE_SET: Readonly<Record<AuditTargetType, true>> = {
+  tenant: true,
+  "tenant-member": true,
+  "admin-user": true,
+  "api-token": true,
+  endpoint: true,
+  "endpoint-key": true,
+  "idp-config": true,
+  "end-user": true,
+  client: true,
+  "client-request": true,
+  policy: true,
+  consent: true,
+  "launch-context": true,
+  "authorization-session": true,
+  "authorization-code": true,
+  "access-token": true,
+  "refresh-token": true,
+};
+
+/** Every kind of thing an event can be recorded against. */
+export const AUDIT_TARGET_TYPES: readonly AuditTargetType[] = Object.keys(
+  AUDIT_TARGET_TYPE_SET,
+) as AuditTargetType[];
+
+/**
+ * Narrows an arbitrary string to a target type this deployment knows about.
+ *
+ * Needed on the read path for the same reason {@link isAuditAction} is: the column
+ * is text, so a row written by a newer deployment can name a target type this
+ * process has never heard of, and a filter arriving from a query string is
+ * untrusted either way.
+ *
+ * @param value - Candidate target type.
+ */
+export function isAuditTargetType(value: string): value is AuditTargetType {
+  return Object.hasOwn(AUDIT_TARGET_TYPE_SET, value);
+}
+
+/**
  * The principal responsible for an event.
  *
  * `id` is absent for `system` actors and for a failed sign-in where the

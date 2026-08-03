@@ -32,6 +32,40 @@ describe("sqlStateOf", () => {
   it("ignores a non-string code", () => {
     expect(sqlStateOf({ code: 23_505 })).toBeUndefined();
   });
+
+  it("looks through a wrapper that carries the driver error as its cause", () => {
+    // What the application actually catches: the query layer wraps the driver
+    // error to attach the statement, so the outermost value has no SQLSTATE.
+    const wrapped = Object.assign(new Error("Failed query: insert ..."), {
+      cause: driverError(UNIQUE_VIOLATION),
+    });
+    expect(sqlStateOf(wrapped)).toBe("23505");
+    expect(isUniqueViolation(wrapped)).toBe(true);
+  });
+
+  it("looks through more than one wrapper", () => {
+    const wrapped = Object.assign(new Error("outer"), {
+      cause: Object.assign(new Error("inner"), {
+        cause: driverError(SERIALIZATION_FAILURE),
+      }),
+    });
+    expect(sqlStateOf(wrapped)).toBe(SERIALIZATION_FAILURE);
+  });
+
+  it("does not spin on a cause that refers to itself", () => {
+    const looping: { cause?: unknown } = {};
+    looping.cause = looping;
+    expect(sqlStateOf(looping)).toBeUndefined();
+  });
+
+  it("reads the constraint from the wrapped error", () => {
+    const wrapped = Object.assign(new Error("Failed query"), {
+      cause: driverError(UNIQUE_VIOLATION, "endpoints_tenant_id_slug_unique"),
+    });
+    expect(isUniqueViolation(wrapped, "endpoints_tenant_id_slug_unique")).toBe(
+      true,
+    );
+  });
 });
 
 describe("isUniqueViolation", () => {

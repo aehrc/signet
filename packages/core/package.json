@@ -11,7 +11,8 @@
     "./tokens": "./src/tokens/index.ts",
     "./pkce": "./src/pkce/index.ts",
     "./discovery": "./src/discovery/index.ts",
-    "./launch": "./src/launch/index.ts"
+    "./launch": "./src/launch/index.ts",
+    "./integrations": "./src/integrations/index.ts"
   },
   "scripts": {
     "build": "tsc --build",

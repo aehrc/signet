@@ -22,30 +22,28 @@
 import { POLICY_PRESETS } from "@signet/core";
 import { Hono } from "hono";
 
+import { registerAuditRoutes } from "./auditRoutes.js";
 import {
-  requireRole,
   withAdminEndpoint,
   withAdminPrincipal,
   withAdminTenant,
 } from "./authentication.js";
+import { registerClientRoutes } from "./clientRoutes.js";
+import { registerEndpointRoutes } from "./endpointRoutes.js";
+import { registerEndUserRoutes } from "./endUserRoutes.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
+import { registerLaunchRoutes } from "./launchRoutes.js";
+import { ADMIN_BASE_PATH, ENDPOINT_PATH, TENANT_PATH } from "./paths.js";
+import { registerPolicyRoutes } from "./policyRoutes.js";
 import {
   adminLoginHandler,
   adminLogoutHandler,
   adminSessionHandler,
 } from "./session.js";
+import { registerTenantRoutes } from "./tenantRoutes.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { MiddlewareHandler } from "hono";
-
-/** Where the admin API is mounted. */
-export const ADMIN_BASE_PATH = "/api/v1";
-
-/** Every tenant-scoped path, as Hono patterns relative to the API base. */
-const TENANT_PATH = "/tenants/:tenantSlug";
-
-/** Every endpoint-scoped path, relative to the API base. */
-const ENDPOINT_PATH = `${TENANT_PATH}/endpoints/:endpointSlug`;
 
 /**
  * Requests that are answered without a credential.
@@ -120,14 +118,19 @@ export function createAdminRouter(
     }),
   );
 
-  // Tenant.
-  router.get(TENANT_PATH, requireRole("viewer"), (c) => {
-    const { scope, role } = c.get("tenant");
-    return c.json({
-      tenant: { slug: scope.tenantSlug, id: scope.tenantId },
-      role,
-    });
-  });
+  // Resources, in the order they nest. Each module registers its own routes
+  // against the patterns in `./paths.js`, so this reads as a table of contents
+  // rather than as a route table nobody can hold in their head.
+  registerEndpointRoutes(router, context);
+  registerClientRoutes(router, context);
+  registerPolicyRoutes(router, context);
+  registerEndUserRoutes(router, context);
+  registerLaunchRoutes(router, context);
+  registerAuditRoutes(router, context);
+  // Last of the resource modules, because it registers `GET /tenants/:tenantSlug`
+  // and Hono matches in registration order: a more specific path below the tenant
+  // must be registered before the tenant itself.
+  registerTenantRoutes(router, context);
 
   // Registered last, so it answers only what nothing above matched. A `notFound`
   // handler would not do: this router is mounted into the application, and the
@@ -142,3 +145,5 @@ export function createAdminRouter(
 
   return router;
 }
+
+export { ADMIN_BASE_PATH } from "./paths.js";

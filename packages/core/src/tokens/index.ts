@@ -5,6 +5,11 @@ export {
   type IdTokenInput,
 } from "./assemble.js";
 export { buildIntrospectionResponse } from "./introspect.js";
+export {
+  simulateIssuance,
+  type SimulationInput,
+  type SimulationResult,
+} from "./simulate.js";
 export type {
   AccessTokenClaims,
   AccessTokenInput,

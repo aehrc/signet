@@ -46,6 +46,21 @@ export interface LaunchContext {
   readonly smartStyleUrl?: string;
 }
 
+/**
+ * A launch context under construction, where a key may be present and undefined.
+ *
+ * The distinction matters because the codebase compiles with
+ * `exactOptionalPropertyTypes`: `{ patient: undefined }` is not a
+ * {@link LaunchContext}, and that is deliberate — a context whose `patient` key
+ * exists but holds nothing would be serialised as `"patient": null` into a token
+ * response, and SMART clients test for presence. A validated request body,
+ * however, naturally has exactly that shape, so {@link toLaunchContext} is the
+ * one place the two meet.
+ */
+export type LaunchContextDraft = {
+  readonly [Key in keyof LaunchContext]?: LaunchContext[Key] | undefined;
+};
+
 /** Why a launch context was rejected. */
 export type LaunchContextErrorCode =
   | "empty-fhir-context-entry"

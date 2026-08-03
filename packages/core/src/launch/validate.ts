@@ -2,10 +2,28 @@ import type {
   FhirContextEntry,
   FhirIdentifier,
   LaunchContext,
+  LaunchContextDraft,
   LaunchContextErrorCode,
   LaunchContextIssue,
   LaunchContextValidation,
 } from "./types.js";
+
+/**
+ * Drops the keys that are present but hold nothing.
+ *
+ * A validated request body has `{ patient: undefined }` where the caller sent no
+ * patient, which is not a {@link LaunchContext}: an absent value and a present
+ * empty one are different signals to a SMART client, and the token response must
+ * omit the parameter rather than serialise it as null. This is the one place that
+ * conversion happens, so the cast it requires exists once.
+ *
+ * @param draft - A context whose optional keys may be explicitly undefined.
+ */
+export function toLaunchContext(draft: LaunchContextDraft): LaunchContext {
+  return Object.fromEntries(
+    Object.entries(draft).filter(([, value]) => value !== undefined),
+  );
+}
 
 /**
  * The FHIR `id` datatype, which constrains both the logical id half of a
