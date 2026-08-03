@@ -59,6 +59,7 @@ import { contextRequirements } from "./contextRequirements.js";
 import { decideStep } from "./interactionState.js";
 import { authorizeErrorRedirect } from "../http/oauthErrors.js";
 import { requestMetadata } from "../http/requestMeta.js";
+import { UNMATCHABLE_PASSWORD_HASH } from "../security/passwordTiming.js";
 
 import type {
   ServerContext,
@@ -85,16 +86,6 @@ import type { Context } from "hono";
  * and the difference is a minute during which a leaked code is redeemable.
  */
 export const AUTHORIZATION_CODE_TTL_SECONDS = 60;
-
-/**
- * An Argon2id hash no password can match.
- *
- * Used to keep the cost of rejecting an unknown username identical to that of
- * rejecting a wrong password. The salt and hash are fixed nonsense; nothing ever
- * verifies against them successfully.
- */
-const UNMATCHABLE_HASH =
-  "$argon2id$v=19$m=19456,t=2,p=1$c2lnbmV0LW5vLXN1Y2gtdXNlcg$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 /** A session loaded with the client it belongs to. */
 interface LoadedSession {
@@ -668,7 +659,7 @@ export function interactionLoginHandler(context: ServerContext) {
       // hash that cannot match, so that a missing account and a wrong password
       // take the same time. Argon2 verification is the dominant cost here, and
       // skipping it would make user enumeration a timing measurement.
-      const stored = candidate?.passwordHash ?? UNMATCHABLE_HASH;
+      const stored = candidate?.passwordHash ?? UNMATCHABLE_PASSWORD_HASH;
       const matches = await verifyPassword(body.password, stored);
       if (
         candidate === undefined ||

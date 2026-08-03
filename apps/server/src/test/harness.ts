@@ -21,6 +21,8 @@
 import { SMART_BASELINE_PRESET } from "@signet/core";
 import {
   applyMigrationsWithLock,
+  createAdminUser,
+  createApiToken,
   createAuditRecorder,
   createClient,
   createDatabase,
@@ -29,12 +31,16 @@ import {
   createPolicyVersion,
   createTenant,
   decryptSecret,
+  deleteAdminUser,
   deleteTenant,
   endpointScopeFromRow,
+  generateOpaqueToken,
   hashPassword,
+  hashToken,
   insertEndpointKey,
   promoteNextEndpointKey,
   publishPolicy,
+  setTenantMemberRole,
   tenantScopeFromRow,
 } from "@signet/db";
 
@@ -44,11 +50,13 @@ import { generateEndpointKey } from "../keys/material.js";
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { PolicyDocument } from "@signet/core";
 import type {
+  AdminUser,
   Client,
   Endpoint,
   EndpointScope,
   EndUser,
   Tenant,
+  TenantRole,
   TenantScope,
 } from "@signet/db";
 import type { Hono } from "hono";
@@ -99,6 +107,25 @@ export interface TestStack {
   readonly user: EndUser;
   /** A password-free persona with a default patient context. */
   readonly persona: EndUser;
+  /** A console identity holding `owner` in the fixture tenant. */
+  readonly admin: AdminUser;
+  /**
+   * A console identity with no membership anywhere.
+   *
+   * The negative case that matters most for the admin API: a caller who is
+   * authenticated but has no business seeing this tenant must be told the tenant
+   * does not exist, not that they are forbidden from it.
+   */
+  readonly outsider: AdminUser;
+  /**
+   * Signs an admin in and returns the session cookie to present.
+   *
+   * Goes through `POST /api/v1/session` rather than inserting a row, so a suite
+   * built on it exercises the real sign-in path.
+   */
+  readonly signIn: (as?: AdminUser) => Promise<string>;
+  /** Mints a personal access token in the fixture tenant and returns it. */
+  readonly mintApiToken: (role: TenantRole) => Promise<string>;
   /** Advances the harness clock. Requests see the new instant immediately. */
   readonly setNow: (at: Date) => void;
   readonly close: () => Promise<void>;
@@ -282,6 +309,27 @@ export async function createTestStack(
     defaultContext: { patient: "pat-9" },
   });
 
+  const admin = await createAdminUser(db, {
+    email: `admin-${suffix}@signet.test`,
+    passwordHash: await hashPassword(TEST_PASSWORD),
+    displayName: "Test Admin",
+  });
+  const membership = await setTenantMemberRole(
+    db,
+    tenantScope,
+    admin.id,
+    "owner",
+  );
+  if (!membership.ok) {
+    throw new Error(`could not grant membership: ${membership.reason}`);
+  }
+
+  const outsider = await createAdminUser(db, {
+    email: `outsider-${suffix}@signet.test`,
+    passwordHash: await hashPassword(TEST_PASSWORD),
+    displayName: "Test Outsider",
+  });
+
   let now = new Date();
   const context: ServerContext = {
     config: {
@@ -305,8 +353,10 @@ export async function createTestStack(
     clock: () => now,
   };
 
+  const app = createApp(context);
+
   return {
-    app: createApp(context),
+    app,
     context,
     tenant,
     endpoint,
@@ -325,13 +375,45 @@ export async function createTestStack(
     },
     user,
     persona,
+    admin,
+    outsider,
+    signIn: async (as = admin) => {
+      const response = await app.request("/api/v1/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: as.email, password: TEST_PASSWORD }),
+      });
+      const cookie = response.headers.get("set-cookie");
+      if (response.status !== 200 || cookie === null) {
+        throw new Error(
+          `could not sign ${as.email} in: ${String(response.status)} ${await response.text()}`,
+        );
+      }
+      // Only the name=value pair is sent back by a browser; the attributes are
+      // instructions to it, and passing them on would make the header invalid.
+      return cookie.split(";", 1)[0] ?? "";
+    },
+    mintApiToken: async (role) => {
+      const value = generateOpaqueToken();
+      await createApiToken(db, tenantScope, {
+        name: `token-${role}`,
+        tokenHash: await hashToken(value),
+        role,
+        createdBy: admin.id,
+        expiresAt: null,
+      });
+      return value;
+    },
     setNow: (at) => {
       now = at;
     },
     close: async () => {
       // Deleting the tenant cascades to everything the fixtures created, audit
-      // events included.
+      // events included. Console identities are not tenant-owned, so they are
+      // removed explicitly; their sessions and memberships cascade from them.
       await deleteTenant(db, tenantScope);
+      await deleteAdminUser(db, admin.id);
+      await deleteAdminUser(db, outsider.id);
       await handle.close();
     },
   };

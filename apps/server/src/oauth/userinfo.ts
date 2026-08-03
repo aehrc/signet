@@ -18,27 +18,10 @@
 import { accessTokenState, introspectAccessToken } from "@signet/db";
 
 import { unverifiedTokenIdentifier } from "./tokenIdentifier.js";
+import { bearerToken } from "../http/bearer.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { Context } from "hono";
-
-/**
- * Reads a bearer token from the `Authorization` header.
- *
- * Only the header form is accepted. RFC 6750 also defines a form-encoded body
- * parameter and a query parameter; the query form puts a credential in access logs
- * and browser history, and is deprecated for exactly that reason.
- */
-function bearerToken(authorization: string | undefined): string | undefined {
-  if (
-    authorization === undefined ||
-    authorization.slice(0, 7).toLowerCase() !== "bearer "
-  ) {
-    return undefined;
-  }
-  const value = authorization.slice(7).trim();
-  return value.length === 0 ? undefined : value;
-}
 
 /**
  * Answers RFC 6750 §3 with a `WWW-Authenticate` challenge.

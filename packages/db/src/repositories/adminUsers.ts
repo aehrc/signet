@@ -152,6 +152,30 @@ export async function setAdminUserDisabled(
   return row;
 }
 
+/**
+ * Deletes a console identity outright.
+ *
+ * Almost always the wrong operation: {@link setAdminUserDisabled} locks the
+ * account out immediately while keeping a name attached to its audit trail, which
+ * is what an operator revoking somebody's access wants. This exists for the case
+ * disabling cannot serve — erasing a person's record on request — and takes the
+ * consequences with it. Sessions and memberships cascade; audit events do not,
+ * because `actor_id` carries no foreign key, so the trail survives with the
+ * identifier and the display name that were copied into each event.
+ *
+ * @returns Whether an identity was deleted.
+ */
+export async function deleteAdminUser(
+  db: Executor,
+  adminUserId: string,
+): Promise<boolean> {
+  const rows = await db
+    .delete(adminUsers)
+    .where(eq(adminUsers.id, adminUserId))
+    .returning({ id: adminUsers.id });
+  return rows.length > 0;
+}
+
 /** The caller-supplied half of a new console session. */
 export type AdminSessionInput = Pick<
   NewAdminSession,

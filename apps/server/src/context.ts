@@ -8,6 +8,7 @@
  * use instead.
  */
 
+import type { AdminPrincipal } from "./admin/principal.js";
 import type { SignetConfig } from "./config.js";
 import type { EndpointUrls } from "@signet/core";
 import type {
@@ -15,6 +16,7 @@ import type {
   Database,
   Endpoint,
   EndpointScope,
+  MemberTenantScope,
   Tenant,
 } from "@signet/db";
 
@@ -57,6 +59,24 @@ export interface ResolvedIssuerContext {
 }
 
 /**
+ * An endpoint resolved from an admin API path.
+ *
+ * Distinct from {@link ResolvedIssuerContext} because it is reached differently:
+ * an OAuth request names an endpoint by its public issuer path and is
+ * authenticated by client credentials, whereas an admin request names it inside a
+ * tenant the caller has already proved membership of. The tenant row is therefore
+ * absent — the tenant scope already carries its slug — and the endpoint row is
+ * present because every console view renders its configuration.
+ */
+export interface AdminEndpointContext {
+  readonly endpoint: Endpoint;
+  readonly scope: EndpointScope;
+  /** The issuer this endpoint publishes, derived from the public URL. */
+  readonly issuer: string;
+  readonly urls: EndpointUrls;
+}
+
+/**
  * Hono's per-request variable map.
  *
  * Declared once so `c.get("issuer")` is typed at every call site instead of
@@ -65,6 +85,12 @@ export interface ResolvedIssuerContext {
 export interface SignetVariables {
   /** Set by the issuer middleware for every route under an endpoint's issuer. */
   readonly issuer: ResolvedIssuerContext;
+  /** Set by the admin API's authentication middleware. */
+  readonly principal: AdminPrincipal;
+  /** The tenant an admin request acts on, and the authority held in it. */
+  readonly tenant: MemberTenantScope;
+  /** Set for admin routes below `/endpoints/:endpointSlug`. */
+  readonly endpoint: AdminEndpointContext;
 }
 
 /** Hono's generic parameter for a Signet app or router. */

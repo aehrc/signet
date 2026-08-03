@@ -1,6 +1,7 @@
 import { pingDatabase } from "@signet/db";
 import { Hono } from "hono";
 
+import { ADMIN_BASE_PATH, createAdminRouter } from "./admin/router.js";
 import { createOAuthRouter } from "./oauth/router.js";
 
 import type { ServerContext, SignetEnvironment } from "./context.js";
@@ -34,6 +35,11 @@ export function createApp(context: ServerContext): Hono<SignetEnvironment> {
     }
   });
 
+  // The admin API is mounted before the OAuth routes. Neither can shadow the
+  // other — one lives under `/api/v1` and the other under `/t/{tenant}` — but
+  // reading them in this order matches how a request is authenticated: by session
+  // or personal access token here, by client credentials there.
+  app.route(ADMIN_BASE_PATH, createAdminRouter(context));
   app.route("/", createOAuthRouter(context));
 
   return app;
