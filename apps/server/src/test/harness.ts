@@ -414,13 +414,16 @@ export async function createTestStack(
     },
     mintApiToken: async (role) => {
       const value = generateOpaqueToken();
-      await createApiToken(db, tenantScope, {
-        name: `token-${role}`,
-        tokenHash: await hashToken(value),
-        role,
-        createdBy: admin.id,
-        expiresAt: null,
-      });
+      const tokenHash = await hashToken(value);
+      await withTenantScope(db, tenantScope, (bound) =>
+        createApiToken(bound, {
+          name: `token-${role}`,
+          tokenHash,
+          role,
+          createdBy: admin.id,
+          expiresAt: null,
+        }),
+      );
       return value;
     },
     setNow: (at) => {

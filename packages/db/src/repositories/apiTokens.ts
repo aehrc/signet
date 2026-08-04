@@ -16,14 +16,19 @@
 
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 
+import { tenantIdForApiTokenDigest } from "./routines.js";
 import { firstRow, requireRow } from "./rows.js";
-import { tenantScopeFromRow } from "./scope.js";
+import {
+  executorFor,
+  tenantScopeFromRow,
+  withDeclaredTenant,
+} from "./scope.js";
 import { nowValue } from "./time.js";
 import { apiTokens, tenants } from "../schema/tenancy.js";
 
 import type { Executor } from "./executor.js";
 import type { TenantRole } from "./roles.js";
-import type { TenantScope } from "./scope.js";
+import type { BoundTenantScope, TenantScope } from "./scope.js";
 import type { ApiToken, NewApiToken } from "../schema/tenancy.js";
 
 /** The caller-supplied half of a new personal access token. */
@@ -34,11 +39,10 @@ export type ApiTokenInput = Pick<
 
 /** Mints a personal access token within the scoped tenant. */
 export async function createApiToken(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
   input: ApiTokenInput,
 ): Promise<ApiToken> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(apiTokens)
     .values({ ...input, tenantId: scope.tenantId })
     .returning();
@@ -64,45 +68,79 @@ export interface AuthenticatedApiToken {
  * request, and turning an indexed read into a write would serialise concurrent
  * requests holding the same token behind a row lock; {@link touchApiToken} is
  * called separately, after the request has been authorised.
+ *
+ * Two steps, because the digest is all the request carries and `api_tokens` is
+ * tenant-owned: the routine turns the digest into a tenant identifier, and the
+ * liveness predicate is then evaluated inside a transaction declared for it. The
+ * routine deliberately answers for a revoked or expired token as well as a live
+ * one - it maps a digest to a tenant and judges nothing - so the conditions that
+ * decide whether the token may be used are still in the one query below, where a
+ * caller cannot obtain the row and forget to check them.
+ *
+ * @param db - The connection to resolve on. No tenant need be declared.
+ * @param tokenHash - The presented token's digest, never the token.
+ * @param now - The instant to compare the expiry against. Defaults to the
+ *   database clock.
+ * @returns The token, its tenant scope and its role, or undefined when no live
+ *   token has that digest. The scope is unbound, for the reason
+ *   `resolveTenantScope` gives.
  */
 export async function findLiveApiToken(
   db: Executor,
   tokenHash: string,
   now?: Date,
 ): Promise<AuthenticatedApiToken | undefined> {
-  const rows = await db
-    .select({ token: apiTokens, tenant: tenants })
-    .from(apiTokens)
-    .innerJoin(tenants, eq(tenants.id, apiTokens.tenantId))
-    .where(
-      and(
-        eq(apiTokens.tokenHash, tokenHash),
-        isNull(apiTokens.revokedAt),
-        or(isNull(apiTokens.expiresAt), gt(apiTokens.expiresAt, nowValue(now))),
-      ),
-    )
-    .limit(1);
+  const tenantId = await tenantIdForApiTokenDigest(db, tokenHash);
+  if (tenantId === undefined) {
+    return undefined;
+  }
 
-  const row = firstRow(rows);
-  return row === undefined
-    ? undefined
-    : {
-        token: row.token,
-        scope: tenantScopeFromRow(row.tenant),
-        role: row.token.role,
-      };
+  return await withDeclaredTenant(db, tenantId, async (tx) => {
+    const rows = await tx
+      .select({ token: apiTokens, tenant: tenants })
+      .from(apiTokens)
+      .innerJoin(tenants, eq(tenants.id, apiTokens.tenantId))
+      .where(
+        and(
+          eq(apiTokens.tokenHash, tokenHash),
+          isNull(apiTokens.revokedAt),
+          or(
+            isNull(apiTokens.expiresAt),
+            gt(apiTokens.expiresAt, nowValue(now)),
+          ),
+        ),
+      )
+      .limit(1);
+
+    const row = firstRow(rows);
+    return row === undefined
+      ? undefined
+      : {
+          token: row.token,
+          scope: tenantScopeFromRow(row.tenant),
+          role: row.token.role,
+        };
+  });
 }
 
-/** Records that a token was used, for the "last used" column in the console. */
+/**
+ * Records that a token was used, for the "last used" column in the console.
+ *
+ * Takes the scope {@link findLiveApiToken} resolved rather than a token
+ * identifier alone, so the write cannot name a token belonging to another
+ * tenant - the policy would refuse it, and now so does the compiler.
+ */
 export async function touchApiToken(
-  db: Executor,
+  scope: BoundTenantScope,
   tokenId: string,
   now?: Date,
 ): Promise<void> {
-  await db
+  await executorFor(scope)
     .update(apiTokens)
     .set({ lastUsedAt: nowValue(now) })
-    .where(eq(apiTokens.id, tokenId));
+    .where(
+      and(eq(apiTokens.id, tokenId), eq(apiTokens.tenantId, scope.tenantId)),
+    );
 }
 
 /**
@@ -113,10 +151,9 @@ export async function touchApiToken(
  * creation, and cannot be recovered from here.
  */
 export async function listApiTokens(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
 ): Promise<readonly ApiToken[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(apiTokens)
     .where(eq(apiTokens.tenantId, scope.tenantId))
@@ -129,12 +166,11 @@ export async function listApiTokens(
  * @returns Whether a live token belonging to this tenant was revoked.
  */
 export async function revokeApiToken(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
   tokenId: string,
   now?: Date,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(apiTokens)
     .set({ revokedAt: nowValue(now) })
     .where(

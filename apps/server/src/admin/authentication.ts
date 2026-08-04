@@ -34,6 +34,7 @@ import {
   resolveTenantScopeForMember,
   roleAtLeast,
   touchApiToken,
+  withTenantScope,
 } from "@signet/db";
 
 import { readCookie, SESSION_COOKIE_NAME } from "./cookies.js";
@@ -86,7 +87,9 @@ export function withAdminPrincipal(
       // Recorded after the token has been accepted rather than as part of
       // accepting it: the lookup runs on every request, and turning it into a
       // write would serialise concurrent callers holding the same token.
-      await touchApiToken(context.db, authenticated.token.id, context.clock());
+      await withTenantScope(context.db, authenticated.scope, (bound) =>
+        touchApiToken(bound, authenticated.token.id, context.clock()),
+      );
       c.set("principal", {
         kind: "api-token",
         token: authenticated.token,

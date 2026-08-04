@@ -177,10 +177,8 @@ describe.skipIf(testDatabaseUrl === undefined)(
         expect(before.status).toBe(200);
 
         const session = (await before.json()) as { token: { id: string } };
-        await revokeApiToken(
-          stack.context.db,
-          stack.tenantScope,
-          session.token.id,
+        await withTenantScope(stack.context.db, stack.tenantScope, (bound) =>
+          revokeApiToken(bound, session.token.id),
         );
 
         const after = await adminRequest(stack, "GET", "/api/v1/session", {

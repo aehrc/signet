@@ -209,13 +209,15 @@ describeWithDatabase("row-level security as the serving role", () => {
     await withTenantScope(owner, tenantScope, (bound) =>
       setTenantMemberRole(bound, admin.id, "owner"),
     );
-    await createApiToken(owner, tenantScope, {
-      name: "Personal access token",
-      tokenHash: `api-${unique()}`,
-      role: "owner",
-      createdBy: admin.id,
-      expiresAt: soon(),
-    });
+    await withTenantScope(owner, tenantScope, (bound) =>
+      createApiToken(bound, {
+        name: "Personal access token",
+        tokenHash: `api-${unique()}`,
+        role: "owner",
+        createdBy: admin.id,
+        expiresAt: soon(),
+      }),
+    );
 
     const endpoint = await createEndpoint(owner, tenantScope, {
       slug: `e-${unique()}`,

@@ -205,7 +205,9 @@ export function registerTenantRoutes(
   /** Lists the tenant's personal access tokens. */
   router.get(`${TENANT_PATH}/api-tokens`, requireRole("admin"), async (c) => {
     const { scope } = c.get("tenant");
-    const tokens = await listApiTokens(context.db, scope);
+    const tokens = await withTenantScope(context.db, scope, (bound) =>
+      listApiTokens(bound),
+    );
     return c.json({ tokens: tokens.map(apiTokenView) });
   });
 
@@ -234,13 +236,16 @@ export function registerTenantRoutes(
     }
 
     const value = generateOpaqueToken();
-    const token = await createApiToken(context.db, scope, {
-      name: body.name,
-      tokenHash: await hashToken(value),
-      role: body.role,
-      createdBy: principalAdminUserId(c.get("principal")),
-      expiresAt: body.expiresAt ?? null,
-    });
+    const tokenHash = await hashToken(value);
+    const token = await withTenantScope(context.db, scope, (bound) =>
+      createApiToken(bound, {
+        name: body.name,
+        tokenHash,
+        role: body.role,
+        createdBy: principalAdminUserId(c.get("principal")),
+        expiresAt: body.expiresAt ?? null,
+      }),
+    );
 
     await recordAdminEvent(context, c, {
       action: "api-token.created",
@@ -260,11 +265,8 @@ export function registerTenantRoutes(
       const { scope } = c.get("tenant");
       const tokenId = c.req.param("tokenId");
 
-      const revoked = await revokeApiToken(
-        context.db,
-        scope,
-        tokenId,
-        context.clock(),
+      const revoked = await withTenantScope(context.db, scope, (bound) =>
+        revokeApiToken(bound, tokenId, context.clock()),
       );
       if (!revoked) {
         return c.json(
