@@ -42,9 +42,16 @@ COPY --from=build /app/apps/server/dist ./dist
 COPY --from=build /app/apps/web/dist ./web
 COPY --from=build /app/packages/db/drizzle ./drizzle
 
+# The stack seed, so compose can run it as a service between bootstrap and
+# Pathling. Pathling resolves its issuer eagerly at startup and refuses to start
+# if the endpoint does not exist yet, so seeding has to happen inside the
+# dependency graph rather than from the host afterwards. Plain ESM over `fetch`
+# with no imports, so it runs on the runtime Node without any node_modules.
+COPY --from=build /app/scripts/seedStack.mjs ./scripts/seedStack.mjs
+
 # This image ships no node_modules, so anything left external in the bundle would
 # resolve to nothing at startup. Checked here rather than in the build stage so
-# `builtinModules` comes from the exact Node that will run the server — bun's
+# `builtinModules` comes from the exact Node that will run the server - bun's
 # `node` shim reports its own, slightly different, list.
 COPY --from=build /app/scripts/checkBundle.mjs /tmp/checkBundle.mjs
 RUN node /tmp/checkBundle.mjs dist/index.js && rm /tmp/checkBundle.mjs

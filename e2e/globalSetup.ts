@@ -1,19 +1,28 @@
 /**
- * Waits for the stack and seeds it, once, before any test runs.
+ * Waits for the stack, and re-seeds it, before any test runs.
  *
- * The seed is the same script a developer runs by hand (`bun run stack:seed`) and
- * is idempotent, so this is safe against a stack that is already prepared. Running
- * it here means a fresh `stack:up` needs no second command, and a suite cannot
- * fail for want of a fixture in a way that looks like a product bug.
+ * The compose stack seeds itself: Pathling resolves its issuer eagerly at
+ * startup, so the `seed` service has to run between bootstrap and Pathling or
+ * Pathling never starts. By the time this runs, the fixtures are already there.
+ *
+ * It is repeated here anyway, because the suite must also work against a stack
+ * this repository did not bring up - a developer running Signet from source, or a
+ * long-lived stack whose seed predates a change to the script. The seed is
+ * idempotent, so the repeat costs a few requests and removes a whole class of
+ * confusing failure where a missing fixture looks like a product bug.
  *
  * Waiting is for Pathling. Everything else in the stack is ready in seconds;
  * Pathling starts a Spark session first, and a suite that began before it was
  * listening would fail its FHIR assertions for a reason that has nothing to do
  * with authorization.
+ *
+ * Author: John Grimes
  */
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+
+import { SEED } from "./support/stack.js";
 
 const run = promisify(execFile);
 
@@ -54,9 +63,16 @@ export default async function globalSetup(): Promise<void> {
   await waitFor("the stub SMART app", `${APP}/`);
   await waitFor("Pathling", `${FHIR}/metadata`);
 
+  // The stack's own credentials, set last so a developer's `SIGNET_BOOTSTRAP_*`
+  // cannot reach the seed. See `support/stack.ts` for why that matters.
   const { stdout } = await run("bun", ["scripts/seedStack.mjs"], {
     cwd: new URL("..", import.meta.url).pathname,
-    env: { ...process.env, SIGNET_BASE_URL: SIGNET },
+    env: {
+      ...process.env,
+      SIGNET_BASE_URL: SIGNET,
+      SIGNET_BOOTSTRAP_EMAIL: SEED.adminEmail,
+      SIGNET_BOOTSTRAP_PASSWORD: SEED.adminPassword,
+    },
   });
   process.stdout.write(stdout);
 }

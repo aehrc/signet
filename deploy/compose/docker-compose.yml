@@ -3,8 +3,11 @@
 # Four services, and each is here because the suite asserts something that only
 # holds when it is real:
 #
-#   - Postgres, because tenancy is enforced by row-level security as well as by
-#     types, and RLS is not exercisable against a fake.
+#   - Postgres, because the migrations install the tenant isolation policies and
+#     those are not exercisable against a fake. Note that the policies constrain
+#     connections other than the table owner; Signet connects as the owner here,
+#     so what this stack proves is that the migration applies cleanly, not that
+#     the policies constrain Signet itself. See docs/operations.md.
 #   - Signet, built from the production Dockerfile rather than run from source,
 #     so the suite tests the artefact that ships - including the bundle check
 #     that fails the build if anything was left external.
@@ -118,9 +121,40 @@ services:
       bootstrap:
         condition: service_completed_successfully
 
+  # Creates the endpoint, policy, clients and accounts the suite launches
+  # against, then exits.
+  #
+  # This is a service rather than something the developer runs afterwards because
+  # of the ordering Pathling forces. Pathling resolves `pathling.auth.issuer`
+  # eagerly while it starts, and exits 1 if the endpoint behind that URL does not
+  # answer - so the endpoint has to exist *before* Pathling starts. Seeding from
+  # the host after `stack:up` cannot satisfy that: `--wait` would already be
+  # blocked waiting for the Pathling that is waiting for the seed.
+  #
+  # It runs the same script as `bun run stack:seed`, and that script is
+  # idempotent, so running it both ways over one stack is harmless.
+  seed:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    command: ["node", "scripts/seedStack.mjs"]
+    environment:
+      # Compose DNS, not the published URL: this container talks to Signet
+      # directly. What it *stores* is still expressed in browser-reachable terms,
+      # which is what the two seed URLs below are for.
+      SIGNET_BASE_URL: http://signet:${SIGNET_PORT:-3000}
+      SIGNET_SEED_TENANT: demo
+      SIGNET_SEED_FHIR_BASE: http://localhost:${PATHLING_PORT:-8080}/fhir
+      SIGNET_SEED_APP_ORIGIN: http://localhost:${APP_PORT:-4000}
+      SIGNET_BOOTSTRAP_EMAIL: ops@example.org
+      SIGNET_BOOTSTRAP_PASSWORD: correct horse battery staple
+    depends_on:
+      signet:
+        condition: service_healthy
+
   # Pathling with authorization on, pointed at a Signet endpoint. The issuer is
-  # the one `bun run stack:seed` creates; Pathling builds its own
-  # smart-configuration by merging from it, so this is the whole integration.
+  # the one the seed creates; Pathling builds its own smart-configuration by
+  # merging from it, so this is the whole integration.
   pathling:
     image: aehrc/pathling:7.2.0
     # Shares Signet's network stack so that `localhost` means the same host in
@@ -143,9 +177,11 @@ services:
       # the `--add-exports` flags Spark needs on a modern JVM, and overriding it to
       # set a heap size drops them - which fails at startup, deep inside Spark,
       # with an error that says nothing about the flag that went missing.
+    # The seed, not Signet: the endpoint named in `pathling.auth.issuer` has to
+    # exist before Pathling resolves it, and the seed is what creates it.
     depends_on:
-      signet:
-        condition: service_started
+      seed:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -168,6 +204,8 @@ services:
       - ./app:/usr/share/nginx/html:ro
     ports:
       - "${APP_PORT:-4000}:80"
+    # Healthy rather than started: `service_started` returns as soon as the
+    # container exists, which is before the server is listening.
     depends_on:
       signet:
-        condition: service_started
+        condition: service_healthy

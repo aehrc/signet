@@ -5,6 +5,8 @@
  * to another port is one variable and not a search-and-replace. The values match
  * `scripts/seedStack.mjs`; if they drift, the suite fails on its first assertion
  * rather than somewhere confusing.
+ *
+ * Author: John Grimes
  */
 
 const SIGNET_PORT = process.env["SIGNET_PORT"] ?? "3000";
@@ -31,13 +33,38 @@ export const APP = process.env["APP_BASE_URL"] ?? "http://localhost:4000";
  */
 export const CONSOLE_STORAGE_STATE = "playwright/.auth/console.json";
 
-/** The accounts and clients the seed creates. */
+/**
+ * The accounts and clients the seed creates.
+ *
+ * The administrator's credentials are read from `SIGNET_E2E_*` rather than from
+ * `SIGNET_BOOTSTRAP_*`, and the distinction is not cosmetic. `SIGNET_BOOTSTRAP_*`
+ * configures the first account of *a developer's own* Signet instance, and
+ * `.envrc` exports it into every shell in this repository. The compose stack
+ * bootstraps itself with its own fixed values, so inheriting the developer's
+ * would make the suite sign in with credentials the stack under test has never
+ * heard of - which fails as a 401 from the seed, a long way from the cause.
+ */
 export const SEED = {
   username: "clinician",
   password: "clinician-password",
-  adminEmail: process.env["SIGNET_BOOTSTRAP_EMAIL"] ?? "ops@example.org",
+  adminEmail: process.env["SIGNET_E2E_ADMIN_EMAIL"] ?? "ops@example.org",
   adminPassword:
-    process.env["SIGNET_BOOTSTRAP_PASSWORD"] ?? "correct horse battery staple",
+    process.env["SIGNET_E2E_ADMIN_PASSWORD"] ?? "correct horse battery staple",
   backendClientId: "stub-backend",
   backendSecret: "stub-backend-secret-value-0000",
+  /** The public client the stub app launches as. */
+  publicClientId: "stub-app",
+  /** Holds a shared secret; the only client type granted `offline_access`. */
+  confidentialClientId: "stub-confidential",
+  confidentialSecret: "stub-confidential-secret-value-0000",
+  /**
+   * A second confidential client, used only by the refresh-reuse scenario.
+   *
+   * Reuse detection revokes every token the client holds, so that scenario would
+   * pull the tokens out from under any test sharing a client with it.
+   */
+  reuseClientId: "stub-reuse",
+  reuseSecret: "stub-reuse-secret-value-0000",
+  /** Authenticates by signing an assertion rather than presenting a secret. */
+  asymmetricClientId: "stub-asymmetric",
 } as const;
