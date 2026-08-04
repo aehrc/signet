@@ -20,12 +20,11 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { firstRow, requireRow } from "./rows.js";
-import { TenantScopeViolationError } from "./scope.js";
+import { executorFor, TenantScopeViolationError } from "./scope.js";
 import { nowValue } from "./time.js";
 import { authorizationSessions, federationStates } from "../schema/runtime.js";
 
-import type { Executor } from "./executor.js";
-import type { EndpointScope } from "./scope.js";
+import type { BoundEndpointScope } from "./scope.js";
 import type {
   AuthorizationSession,
   FederationState,
@@ -50,14 +49,12 @@ export interface FederationStateInput {
  * assertion about the caller's own consistency, not a permission decision, so it
  * throws rather than returning a refusal.
  *
- * @param db - The connection to use.
  * @param scope - The endpoint the session belongs to.
  * @param session - The authorization the sign-in is part of.
  * @param input - The state digest, nonce, verifier and expiry.
  */
 export async function createFederationState(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   session: AuthorizationSession,
   input: FederationStateInput,
 ): Promise<FederationState> {
@@ -67,7 +64,7 @@ export async function createFederationState(
     );
   }
 
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(federationStates)
     .values({
       endpointId: scope.endpointId,
@@ -94,7 +91,6 @@ export interface ClaimedFederationState {
  * Expiry is part of the claim predicate rather than a check afterwards, so a state
  * that timed out is never consumed at all.
  *
- * @param db - The connection to use.
  * @param scope - The endpoint the callback arrived at.
  * @param stateHash - SHA-256 of the `state` the browser presented.
  * @param now - The current time, injected in tests.
@@ -104,47 +100,44 @@ export interface ClaimedFederationState {
  *   and a callback handler that reports which one it hit is an oracle.
  */
 export async function consumeFederationState(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   stateHash: string,
   now?: Date,
 ): Promise<ClaimedFederationState | undefined> {
-  return await db.transaction(async (tx) => {
-    const claimed = await tx
-      .update(federationStates)
-      .set({ consumedAt: nowValue(now) })
-      .where(
-        and(
-          eq(federationStates.stateHash, stateHash),
-          eq(federationStates.endpointId, scope.endpointId),
-          isNull(federationStates.consumedAt),
-          gt(federationStates.expiresAt, nowValue(now)),
-        ),
-      )
-      .returning();
+  const claimed = await executorFor(scope)
+    .update(federationStates)
+    .set({ consumedAt: nowValue(now) })
+    .where(
+      and(
+        eq(federationStates.stateHash, stateHash),
+        eq(federationStates.endpointId, scope.endpointId),
+        isNull(federationStates.consumedAt),
+        gt(federationStates.expiresAt, nowValue(now)),
+      ),
+    )
+    .returning();
 
-    const state = firstRow(claimed);
-    if (state === undefined) {
-      return;
-    }
+  const state = firstRow(claimed);
+  if (state === undefined) {
+    return undefined;
+  }
 
-    // The session may have expired while the person was upstream. Filtered here
-    // rather than trusted, because the foreign key guarantees the row exists but
-    // says nothing about whether it is still live.
-    const sessions = await tx
-      .select()
-      .from(authorizationSessions)
-      .where(
-        and(
-          eq(authorizationSessions.id, state.sessionId),
-          gt(authorizationSessions.expiresAt, nowValue(now)),
-        ),
-      )
-      .limit(1);
+  // The session may have expired while the person was upstream. Filtered here
+  // rather than trusted, because the foreign key guarantees the row exists but
+  // says nothing about whether it is still live.
+  const sessions = await executorFor(scope)
+    .select()
+    .from(authorizationSessions)
+    .where(
+      and(
+        eq(authorizationSessions.id, state.sessionId),
+        gt(authorizationSessions.expiresAt, nowValue(now)),
+      ),
+    )
+    .limit(1);
 
-    const session = firstRow(sessions);
-    return session === undefined ? undefined : { state, session };
-  });
+  const session = firstRow(sessions);
+  return session === undefined ? undefined : { state, session };
 }
 
 /**
@@ -154,16 +147,14 @@ export async function consumeFederationState(
  * handler that reads first and updates second is the race this module is written
  * to avoid.
  *
- * @param db - The connection to use.
  * @param scope - The endpoint the state belongs to.
  * @param stateHash - SHA-256 of the `state`.
  */
 export async function findFederationState(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   stateHash: string,
 ): Promise<FederationState | undefined> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .select()
     .from(federationStates)
     .where(

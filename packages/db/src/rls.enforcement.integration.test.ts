@@ -306,12 +306,14 @@ describeWithDatabase("row-level security as the serving role", () => {
         expiresAt: soon(),
       }),
     );
-    await createFederationState(owner, endpointScope, session, {
-      stateHash: `state-${unique()}`,
-      nonce: `nonce-${unique()}`,
-      codeVerifier: `verifier-${unique()}`,
-      expiresAt: soon(),
-    });
+    await withTenantScope(owner, endpointScope, (bound) =>
+      createFederationState(bound, session, {
+        stateHash: `state-${unique()}`,
+        nonce: `nonce-${unique()}`,
+        codeVerifier: `verifier-${unique()}`,
+        expiresAt: soon(),
+      }),
+    );
 
     await withTenantScope(owner, clientScope, (bound) =>
       recordAccessToken(bound, {

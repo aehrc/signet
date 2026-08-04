@@ -108,7 +108,4 @@ export const SWEEP_FUNCTIONS: readonly string[] = [
  * to still have an undeclared unbound function - so a module cannot stay listed
  * once it has been converted.
  */
-export const MODULES_AWAITING_BINDING: readonly string[] = [
-  "audit/record",
-  "repositories/federationStates",
-];
+export const MODULES_AWAITING_BINDING: readonly string[] = ["audit/record"];

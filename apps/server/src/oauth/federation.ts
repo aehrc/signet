@@ -271,14 +271,17 @@ async function startRoundTrip(
   const nonce = generateOpaqueToken();
   const codeVerifier = generateOpaqueToken();
 
-  await createFederationState(context.db, issuerContext.scope, session, {
-    stateHash: await hashToken(state),
-    nonce,
-    codeVerifier,
-    expiresAt: new Date(
-      context.clock().getTime() + FEDERATION_STATE_TTL_SECONDS * 1000,
-    ),
-  });
+  const stateHash = await hashToken(state);
+  await withTenantScope(context.db, issuerContext.scope, (bound) =>
+    createFederationState(bound, session, {
+      stateHash,
+      nonce,
+      codeVerifier,
+      expiresAt: new Date(
+        context.clock().getTime() + FEDERATION_STATE_TTL_SECONDS * 1000,
+      ),
+    }),
+  );
 
   const url = new URL(setup.metadata.authorizationEndpoint);
   url.searchParams.set("response_type", "code");
@@ -367,11 +370,11 @@ export function federationCallbackHandler(context: ServerContext) {
       return await fail("missing-parameters");
     }
 
-    const claimed = await consumeFederationState(
+    const stateHash = await hashToken(state);
+    const claimed = await withTenantScope(
       context.db,
       issuerContext.scope,
-      await hashToken(state),
-      context.clock(),
+      (bound) => consumeFederationState(bound, stateHash, context.clock()),
     );
     if (claimed === undefined) {
       // Unknown, expired, already used, or another endpoint's - all one refusal.
