@@ -45,6 +45,7 @@ export * from "./policies.js";
 export * from "./predicates.js";
 export * from "./refreshTokens.js";
 export * from "./roles.js";
+export * from "./routines.js";
 export * from "./rows.js";
 export * from "./scope.js";
 export * from "./sweep.js";

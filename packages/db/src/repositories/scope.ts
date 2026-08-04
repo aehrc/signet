@@ -23,11 +23,23 @@
  * when the scope is built, lets every subsequent query filter on `endpoint_id`
  * alone instead of joining back to `tenants` on every read.
  *
+ * ## Resolution, which necessarily happens unbound
+ *
+ * The resolvers at the foot of this module are where a scope comes into existence,
+ * so they are the one thing here that cannot already have a tenant declared. Each
+ * turns an identifier the request carried into a tenant `uuid` through one of the
+ * routines in `./routines.ts`, then reads the rows that identifier names inside a
+ * transaction declared for it. The scope they hand back is deliberately *unbound*:
+ * that transaction has committed by the time they return, so a scope carrying it
+ * would carry a dead handle. Callers bind it with `withTenantScope` when they come
+ * to use it.
+ *
  * Author: John Grimes
  */
 
 import { and, eq, sql } from "drizzle-orm";
 
+import { tenantIdForSlug } from "./routines.js";
 import { clients } from "../schema/clients.js";
 import { endpoints } from "../schema/endpoints.js";
 import { tenants } from "../schema/tenancy.js";
@@ -224,13 +236,63 @@ export async function declareTenantScope<S extends TenantScope>(
   tx: Executor,
   scope: S,
 ): Promise<S & BoundTenantScope> {
-  // A bound parameter, not string interpolation: `SET LOCAL` does not accept
-  // parameters, and building that statement by concatenation would put a value
-  // into SQL text on the one code path whose whole job is to enforce a boundary.
-  await tx.execute(
-    sql`select set_config(${TENANT_SETTING}, ${scope.tenantId}, true)`,
-  );
+  await declareTenant(tx, scope.tenantId);
   return { ...scope, [boundScopeBrand]: tx };
+}
+
+/**
+ * Issues the statement the policies read.
+ *
+ * A bound parameter, not string interpolation: `SET LOCAL` does not accept
+ * parameters, and building that statement by concatenation would put a value into
+ * SQL text on the one code path whose whole job is to enforce a boundary.
+ *
+ * Separate from {@link declareTenantScope} because {@link withDeclaredTenant}
+ * needs the same statement before any scope exists to declare.
+ */
+async function declareTenant(tx: Executor, tenantId: string): Promise<void> {
+  await tx.execute(
+    sql`select set_config(${TENANT_SETTING}, ${tenantId}, true)`,
+  );
+}
+
+/**
+ * Runs a read in a transaction declared for a tenant identified by uuid alone.
+ *
+ * The resolvers' primitive, and the one place in this package that declares a
+ * tenant without a scope to prove it was resolved - because resolving it is what
+ * the caller is in the middle of doing. Each caller has just been handed a `uuid`
+ * by one of the routines in `./routines.ts`, or by a session the console already
+ * authenticated, and now needs to read the rows that identifier names.
+ *
+ * Deliberately hands over a bare {@link Executor} rather than a bound scope: the
+ * scope is built *from* the rows this read returns, so it cannot exist yet. That
+ * makes this the only unbound handle in the package that can reach an arbitrary
+ * tenant's rows, which is why it is not for general use, is declared with a
+ * justification in `./unscoped.ts`, and is called only by the resolvers.
+ *
+ * @param db - The connection to open a transaction on.
+ * @param tenantId - The tenant to declare, from a routine or an authenticated
+ *   session - never from an unauthenticated request.
+ * @param read - The read to perform, given the declaring transaction.
+ * @returns Whatever the read returns.
+ * @example
+ * ```ts
+ * const tenant = await withDeclaredTenant(db, tenantId, async (tx) => {
+ *   const [row] = await tx.select().from(tenants).limit(1);
+ *   return row;
+ * });
+ * ```
+ */
+export async function withDeclaredTenant<T>(
+  db: Executor,
+  tenantId: string,
+  read: (tx: Executor) => Promise<T>,
+): Promise<T> {
+  return await db.transaction(async (tx) => {
+    await declareTenant(tx, tenantId);
+    return await read(tx);
+  });
 }
 
 /**
@@ -338,41 +400,57 @@ export function clientScopeFromRow(
   };
 }
 
-/** Resolves a tenant scope from the `/t/{slug}` path segment. */
+/**
+ * Resolves a tenant scope from the `/t/{slug}` path segment.
+ *
+ * Two steps, because the slug is all the request carries and `tenants` is
+ * tenant-owned: the routine turns the slug into a tenant identifier, and the row
+ * is then read inside a transaction declared for that tenant. Reading the row at
+ * all - rather than building the scope from the identifier and the slug already in
+ * hand - is what keeps a scope from asserting the existence of a tenant that is
+ * not there, and it is the read that proves the binding reaches the row.
+ *
+ * The scope handed back is *not* bound: the transaction has committed by the time
+ * this returns, so a scope carrying it would carry a dead handle. The caller binds
+ * it with `withTenantScope` when it comes to use it.
+ *
+ * @param db - The connection to resolve on. No tenant need be declared.
+ * @param tenantSlug - The `/t/{slug}` path segment.
+ * @returns The scope, or undefined for a slug that does not resolve.
+ */
 export async function resolveTenantScope(
   db: Executor,
   tenantSlug: string,
 ): Promise<TenantScope | undefined> {
-  const [tenant] = await db
-    .select()
-    .from(tenants)
-    .where(eq(tenants.slug, tenantSlug))
-    .limit(1);
+  const tenantId = await tenantIdForSlug(db, tenantSlug);
+  if (tenantId === undefined) {
+    return undefined;
+  }
 
-  return tenant === undefined ? undefined : tenantScopeFromRow(tenant);
+  return await withDeclaredTenant(db, tenantId, async (tx) => {
+    const [tenant] = await tx
+      .select()
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    return tenant === undefined ? undefined : tenantScopeFromRow(tenant);
+  });
 }
 
-/** Resolves a tenant scope from a tenant identifier. */
-export async function resolveTenantScopeById(
-  db: Executor,
-  tenantId: string,
-): Promise<TenantScope | undefined> {
-  const [tenant] = await db
-    .select()
-    .from(tenants)
-    .where(eq(tenants.id, tenantId))
-    .limit(1);
-
-  return tenant === undefined ? undefined : tenantScopeFromRow(tenant);
-}
-
-/** Narrows a tenant scope to the endpoint with the given `/e/{slug}` segment. */
+/**
+ * Narrows a bound tenant scope to the endpoint with the given `/e/{slug}` segment.
+ *
+ * The tenant predicate stays in the query even though the `endpoints` policy
+ * already applies it. The policy is what makes the read safe; the predicate is
+ * what makes it obvious at the call site, and the two asserting the same thing is
+ * the intent rather than a redundancy.
+ */
 export async function resolveEndpointScope(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
   endpointSlug: string,
-): Promise<EndpointScope | undefined> {
-  const [endpoint] = await db
+): Promise<BoundEndpointScope | undefined> {
+  const [endpoint] = await executorFor(scope)
     .select()
     .from(endpoints)
     .where(
@@ -407,11 +485,10 @@ export interface ResolvedClient {
  * the grant handler's to make and audit.
  */
 export async function resolveClientScope(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   clientId: string,
 ): Promise<ResolvedClient | undefined> {
-  const [client] = await db
+  const [client] = await executorFor(scope)
     .select()
     .from(clients)
     .where(
@@ -435,34 +512,58 @@ export interface ResolvedIssuer {
 }
 
 /**
- * Resolves `/t/{tenantSlug}/e/{endpointSlug}` in a single round trip.
+ * Resolves `/t/{tenantSlug}/e/{endpointSlug}`.
  *
  * Every OAuth request begins here, and every one of them needs the endpoint row
  * as well as the scope - its TTLs, capability flags and FHIR base URL. Resolving
  * the two separately would double the query count on the hottest path in the
- * server for no gain.
+ * server for no gain, so the join is kept and both rows come back together.
+ *
+ * The routine call is the one statement this gained: the tenant slug has to become
+ * a tenant identifier before either row is reachable, and the join then runs inside
+ * the transaction that declared it. The endpoint row is deliberately read *after*
+ * binding rather than returned by a routine, because it holds a tenant's FHIR base
+ * URL and capability flags - configuration an unbound caller must not be able to
+ * reach.
+ *
+ * Both scopes handed back are unbound, for the reason
+ * {@link resolveTenantScope} gives.
+ *
+ * @param db - The connection to resolve on. No tenant need be declared.
+ * @param tenantSlug - The `/t/{slug}` path segment.
+ * @param endpointSlug - The `/e/{slug}` path segment.
+ * @returns The scope and both rows, or undefined when either segment does not
+ *   resolve - including the case where the endpoint exists under another tenant.
  */
 export async function resolveIssuer(
   db: Executor,
   tenantSlug: string,
   endpointSlug: string,
 ): Promise<ResolvedIssuer | undefined> {
-  const [row] = await db
-    .select({ tenant: tenants, endpoint: endpoints })
-    .from(endpoints)
-    .innerJoin(tenants, eq(tenants.id, endpoints.tenantId))
-    .where(and(eq(tenants.slug, tenantSlug), eq(endpoints.slug, endpointSlug)))
-    .limit(1);
-
-  if (row === undefined) {
+  const tenantId = await tenantIdForSlug(db, tenantSlug);
+  if (tenantId === undefined) {
     return undefined;
   }
 
-  const scope = endpointScopeFromRow(
-    tenantScopeFromRow(row.tenant),
-    row.endpoint,
-  );
-  return { scope, tenant: row.tenant, endpoint: row.endpoint };
+  return await withDeclaredTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({ tenant: tenants, endpoint: endpoints })
+      .from(endpoints)
+      .innerJoin(tenants, eq(tenants.id, endpoints.tenantId))
+      .where(and(eq(tenants.id, tenantId), eq(endpoints.slug, endpointSlug)))
+      .limit(1);
+
+    return row === undefined
+      ? undefined
+      : {
+          scope: endpointScopeFromRow(
+            tenantScopeFromRow(row.tenant),
+            row.endpoint,
+          ),
+          tenant: row.tenant,
+          endpoint: row.endpoint,
+        };
+  });
 }
 
 /**

@@ -21,6 +21,7 @@ import {
   hashToken,
   resolveClientScope,
   setResolvedContext,
+  withTenantScope,
 } from "@signet/db";
 
 import { validateAuthorizeRequest } from "./authorizeRequest.js";
@@ -201,10 +202,13 @@ export function authorizeHandler(context: ServerContext) {
       );
     };
 
+    const clientId = params.clientId;
     const resolved =
-      params.clientId === undefined
+      clientId === undefined
         ? undefined
-        : await resolveClientScope(context.db, scope, params.clientId);
+        : await withTenantScope(context.db, scope, (bound) =>
+            resolveClientScope(bound, clientId),
+          );
 
     const validation = validateAuthorizeRequest({
       params,

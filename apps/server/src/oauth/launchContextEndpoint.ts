@@ -30,6 +30,7 @@ import {
   hashToken,
   isClientUsable,
   resolveClientScope,
+  withTenantScope,
 } from "@signet/db";
 
 import {
@@ -171,10 +172,11 @@ export function launchContextHandler(context: ServerContext) {
           400,
         );
       }
-      const target = await resolveClientScope(
+      const forClientId = body.forClientId;
+      const target = await withTenantScope(
         context.db,
         issuerContext.scope,
-        body.forClientId,
+        (bound) => resolveClientScope(bound, forClientId),
       );
       if (target === undefined || !isClientUsable(target.client)) {
         return c.json(

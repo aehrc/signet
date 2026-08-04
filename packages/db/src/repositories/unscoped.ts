@@ -43,8 +43,20 @@ export const UNSCOPED_MODULES: Readonly<Record<string, string>> = {
  * followed by the function's name.
  */
 export const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
+  "repositories/routines.tenantIdForSlug":
+    "The tenant slug in /t/{slug} is the only tenant identifier an incoming OAuth or console request carries, so turning it into a tenant necessarily precedes declaring one. Reaches one security definer routine that returns a uuid or NULL, and no table.",
+  "repositories/routines.tenantIdForApiTokenDigest":
+    "A personal access token is presented with no tenant in the request, and api_tokens is tenant-owned, so the row cannot be found under the policies. Reaches one security definer routine, takes the digest rather than the token, and returns a uuid or NULL.",
+  "repositories/routines.tenantIdsForAdminUser":
+    "Answering which tenants a signed-in console user may see necessarily precedes choosing one, and is the only genuinely cross-tenant read the server performs. Reaches one security definer routine that returns tenant ids and nothing else.",
   "repositories/scope.declareTenantScope":
     "The function that makes a transaction's tenant known to the database. It necessarily receives the transaction before anything has been declared on it, since declaring is what it does.",
+  "repositories/scope.withDeclaredTenant":
+    "The resolvers' primitive: it declares a tenant identified by uuid alone, because the scope that would prove the tenant was resolved is built from the rows this read returns and so cannot exist yet. Called only by the resolvers, each of which has just been handed that uuid by a routine above or by an already-authenticated console session.",
+  "repositories/scope.resolveTenantScope":
+    "Turns the /t/{slug} segment into a scope, which is what establishes the tenant every later query binds to. Reads the tenant row inside a transaction declared for the identifier the slug routine returned, so the only thing it reaches unbound is that routine.",
+  "repositories/scope.resolveIssuer":
+    "Turns /t/{tenant}/e/{endpoint} into a scope, which every OAuth request begins with and therefore precedes any tenant being known. Reads both rows inside a transaction declared for the identifier the slug routine returned; the endpoint row, which holds a tenant's configuration, is deliberately read after binding rather than returned by a routine.",
   "repositories/scope.databaseNow":
     "Reads the transaction clock and no table at all, so there is no tenant for it to be scoped to. Exists so that a caller needing the instant a conditional update compared against gets it from the same source rather than from the process clock.",
   "repositories/sweep.sweepExpiredRuntimeRows":
@@ -81,6 +93,5 @@ export const MODULES_AWAITING_BINDING: readonly string[] = [
   "repositories/members",
   "repositories/policies",
   "repositories/refreshTokens",
-  "repositories/scope",
   "repositories/tenants",
 ];

@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { TENANT_SETTING } from "../rls.js";
+import { TENANT_SETTING, withTenantScope } from "../rls.js";
 import {
   introspectAccessToken,
   recordAccessToken,
@@ -339,10 +339,8 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
       // client_id is globally unique, so this is the lookup that would leak
       // across tenants without an endpoint predicate.
-      const resolved = await resolveClientScope(
-        db,
-        mine.endpointScope,
-        theirs.clientScope.clientId,
+      const resolved = await withTenantScope(db, mine.endpointScope, (bound) =>
+        resolveClientScope(bound, theirs.clientScope.clientId),
       );
       expect(resolved).toBeUndefined();
 

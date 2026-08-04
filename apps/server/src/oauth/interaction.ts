@@ -47,6 +47,7 @@ import {
   resolveClientScope,
   setResolvedContext,
   toDefaultLaunchContext,
+  withTenantScope,
 } from "@signet/db";
 
 import {
@@ -168,10 +169,8 @@ async function resolveClientScopeForSession(
   if (client === undefined) {
     return undefined;
   }
-  return await resolveClientScope(
-    context.db,
-    issuerContext.scope,
-    client.clientId,
+  return await withTenantScope(context.db, issuerContext.scope, (bound) =>
+    resolveClientScope(bound, client.clientId),
   );
 }
 

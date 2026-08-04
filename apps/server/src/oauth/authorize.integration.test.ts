@@ -154,11 +154,12 @@ describeWithDatabase("the authorization endpoint", () => {
   });
 
   it("refuses a suspended client", async () => {
-    const { setClientStatus, resolveClientScope } = await import("@signet/db");
-    const resolved = await resolveClientScope(
+    const { setClientStatus, resolveClientScope, withTenantScope } =
+      await import("@signet/db");
+    const resolved = await withTenantScope(
       stack.context.db,
       stack.scope,
-      stack.symmetricClient.clientId,
+      (bound) => resolveClientScope(bound, stack.symmetricClient.clientId),
     );
     await setClientStatus(stack.context.db, resolved!.scope, "suspended");
     try {

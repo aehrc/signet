@@ -30,6 +30,7 @@ import {
   recordJti,
   resolveClientScope,
   verifyPassword,
+  withTenantScope,
 } from "@signet/db";
 import {
   createLocalJWKSet,
@@ -370,10 +371,10 @@ export async function authenticateClient(
     );
   }
 
-  const resolved = await resolveClientScope(
+  const resolved = await withTenantScope(
     context.db,
     issuerContext.scope,
-    clientId,
+    (bound) => resolveClientScope(bound, clientId),
   );
   if (resolved === undefined) {
     return refuse("invalid_client", "Client authentication failed", clientId);

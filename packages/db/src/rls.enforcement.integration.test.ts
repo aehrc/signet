@@ -66,6 +66,9 @@ import {
   clientScopeFromRow,
   endpointScopeFromRow,
   executorFor,
+  isBoundScope,
+  resolveIssuer,
+  resolveTenantScope,
   tenantScopeFromRow,
 } from "./repositories/scope.js";
 import { createTenant } from "./repositories/tenants.js";
@@ -441,6 +444,76 @@ describeWithDatabase("row-level security as the serving role", () => {
       for (const [column, value] of checks) {
         expect(row?.[column]).toBe(value);
       }
+    });
+  });
+
+  describe("resolution before a tenant is known", () => {
+    // These are the reads that cannot be bound, because they are what establishes
+    // the binding. As the serving role they must still work - through the
+    // privileged routines - and must still refuse an identifier that resolves to
+    // nothing, without distinguishing it from somebody else's tenant.
+
+    it("resolves a tenant slug", async () => {
+      const resolved = await resolveTenantScope(
+        serving,
+        mine.tenantScope.tenantSlug,
+      );
+
+      expect(resolved?.tenantId).toBe(mine.tenantScope.tenantId);
+      expect(resolved?.tenantSlug).toBe(mine.tenantScope.tenantSlug);
+    });
+
+    it("returns nothing for a slug that does not resolve", async () => {
+      expect(
+        await resolveTenantScope(serving, "no-such-tenant"),
+      ).toBeUndefined();
+    });
+
+    it("hands back a scope with no binding of its own", async () => {
+      // The transaction the resolution read on has committed by the time this
+      // returns, so a scope claiming to be bound would carry a dead handle. The
+      // caller binds it with `withTenantScope` when it comes to use it.
+      const resolved = await resolveTenantScope(
+        serving,
+        mine.tenantScope.tenantSlug,
+      );
+
+      expect(resolved).toBeDefined();
+      expect(resolved !== undefined && isBoundScope(resolved)).toBe(false);
+    });
+
+    it("resolves an issuer's tenant and endpoint together", async () => {
+      const resolved = await resolveIssuer(
+        serving,
+        mine.tenantScope.tenantSlug,
+        mine.endpointScope.endpointSlug,
+      );
+
+      expect(resolved?.tenant.id).toBe(mine.tenantScope.tenantId);
+      expect(resolved?.endpoint.id).toBe(mine.endpointScope.endpointId);
+      expect(resolved?.scope.endpointId).toBe(mine.endpointScope.endpointId);
+    });
+
+    it("returns nothing when the endpoint belongs to another tenant", async () => {
+      // The endpoint exists; the tenant named in the path does not own it. That
+      // must read as absent rather than resolving across the boundary.
+      expect(
+        await resolveIssuer(
+          serving,
+          mine.tenantScope.tenantSlug,
+          theirs.endpointScope.endpointSlug,
+        ),
+      ).toBeUndefined();
+    });
+
+    it("returns nothing for an unknown tenant slug", async () => {
+      expect(
+        await resolveIssuer(
+          serving,
+          "no-such-tenant",
+          mine.endpointScope.endpointSlug,
+        ),
+      ).toBeUndefined();
     });
   });
 
