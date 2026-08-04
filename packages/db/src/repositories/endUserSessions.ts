@@ -21,12 +21,13 @@
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
 import { firstRow, requireRow } from "./rows.js";
+import { executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { endUsers } from "../schema/endpoints.js";
 import { endUserSessions } from "../schema/runtime.js";
 
 import type { Executor } from "./executor.js";
-import type { EndpointScope } from "./scope.js";
+import type { BoundEndpointScope } from "./scope.js";
 import type { EndUser } from "../schema/endpoints.js";
 import type { EndUserSession, NewEndUserSession } from "../schema/runtime.js";
 
@@ -38,11 +39,10 @@ export type EndUserSessionInput = Pick<
 
 /** Opens a session for a cookie whose digest is `tokenHash`. */
 export async function createEndUserSession(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   input: EndUserSessionInput,
 ): Promise<EndUserSession> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(endUserSessions)
     .values({ ...input, endpointId: scope.endpointId })
     .returning();
@@ -64,12 +64,11 @@ export interface AuthenticatedEndUser {
  * the next request rather than at the next sign-in.
  */
 export async function findLiveEndUserSession(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   tokenHash: string,
   now?: Date,
 ): Promise<AuthenticatedEndUser | undefined> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .select({ session: endUserSessions, user: endUsers })
     .from(endUserSessions)
     .innerJoin(endUsers, eq(endUsers.id, endUserSessions.endUserId))
@@ -94,12 +93,11 @@ export async function findLiveEndUserSession(
  *   distinguishable from signing out once.
  */
 export async function revokeEndUserSession(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   tokenHash: string,
   now?: Date,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(endUserSessions)
     .set({ revokedAt: nowValue(now) })
     .where(
@@ -123,12 +121,11 @@ export async function revokeEndUserSession(
  * @returns How many sessions were revoked.
  */
 export async function revokeEndUserSessionsFor(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   endUserId: string,
   now?: Date,
 ): Promise<number> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(endUserSessions)
     .set({ revokedAt: nowValue(now) })
     .where(

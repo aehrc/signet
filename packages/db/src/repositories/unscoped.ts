@@ -72,6 +72,32 @@ export const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The expiry sweep's per-table deletes.
+ *
+ * Declared as a set with one justification rather than nine identical ones,
+ * because they are one decision: the sweep is cross-tenant by design, and these
+ * are the statements it is made of. `./sweep.ts` is their only caller.
+ *
+ * Every predicate is a property of the row itself - an expiry that has passed -
+ * so none of them can match a row that is still usable, and none returns anything
+ * but a count. That, together with requiring the owning identity, is what makes a
+ * job with no tenant acceptable: attempted with the serving role each of these
+ * deletes nothing, because the policies hide every row from a connection that has
+ * declared no tenant.
+ */
+export const SWEEP_FUNCTIONS: readonly string[] = [
+  "repositories/accessTokens.deleteExpiredAccessTokens",
+  "repositories/adminUsers.deleteExpiredAdminSessions",
+  "repositories/authorizationCodes.deleteExpiredAuthorizationCodes",
+  "repositories/authorizationSessions.deleteExpiredAuthorizationSessions",
+  "repositories/consents.deleteExpiredConsents",
+  "repositories/endUserSessions.deleteExpiredEndUserSessions",
+  "repositories/jtiReplay.deleteExpiredJtis",
+  "repositories/launchContexts.deleteExpiredLaunchContexts",
+  "repositories/refreshTokens.deleteExpiredRefreshTokens",
+];
+
+/**
  * Modules whose functions still take an unbound executor pending conversion.
  *
  * Temporary, and empty by the end of the conversion: until then the assertion
@@ -88,8 +114,6 @@ export const MODULES_AWAITING_BINDING: readonly string[] = [
   "repositories/authorizationCodes",
   "repositories/authorizationSessions",
   "repositories/consents",
-  "repositories/endUserSessions",
-  "repositories/endUsers",
   "repositories/federationStates",
   "repositories/jtiReplay",
   "repositories/launchContexts",

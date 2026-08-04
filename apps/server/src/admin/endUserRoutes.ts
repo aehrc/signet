@@ -33,6 +33,7 @@ import {
   setEndUserDisabled,
   setEndUserPasswordHash,
   updateEndUser,
+  withTenantScope,
 } from "@signet/db";
 
 import { recordAdminEvent } from "./auditTrail.js";
@@ -69,7 +70,9 @@ async function loadEndUserRoute(
 ): Promise<EndUserRoute | Response> {
   const { scope } = c.get("endpoint");
   const userId = c.req.param("userId") ?? "";
-  const user = await getEndUser(context.db, scope, userId);
+  const user = await withTenantScope(context.db, scope, (bound) =>
+    getEndUser(bound, userId),
+  );
   if (user === undefined) {
     return c.json(
       adminErrorBody("not_found", "No such user on this endpoint"),
@@ -92,7 +95,9 @@ export function registerEndUserRoutes(
   /** Lists the endpoint's users and personas. */
   router.get(`${ENDPOINT_PATH}/users`, requireRole("viewer"), async (c) => {
     const { scope } = c.get("endpoint");
-    const users = await listEndUsers(context.db, scope);
+    const users = await withTenantScope(context.db, scope, (bound) =>
+      listEndUsers(bound),
+    );
     return c.json({ users: users.map(endUserView) });
   });
 
@@ -106,24 +111,26 @@ export function registerEndUserRoutes(
 
     let user;
     try {
-      user = await createEndUser(context.db, scope, {
-        username: body.username,
-        displayName: body.displayName,
-        isPersona: body.isPersona ?? false,
-        ...(body.password === undefined
-          ? {}
-          : { passwordHash: await hashPassword(body.password) }),
-        ...(body.fhirUserReference === undefined
-          ? {}
-          : { fhirUserReference: body.fhirUserReference }),
-        ...(body.roles === undefined ? {} : { roles: body.roles }),
-        ...(body.attributes === undefined
-          ? {}
-          : { attributes: body.attributes }),
-        ...(body.defaultContext === undefined || body.defaultContext === null
-          ? {}
-          : { defaultContext: toLaunchContext(body.defaultContext) }),
-      });
+      user = await withTenantScope(context.db, scope, async (bound) =>
+        createEndUser(bound, {
+          username: body.username,
+          displayName: body.displayName,
+          isPersona: body.isPersona ?? false,
+          ...(body.password === undefined
+            ? {}
+            : { passwordHash: await hashPassword(body.password) }),
+          ...(body.fhirUserReference === undefined
+            ? {}
+            : { fhirUserReference: body.fhirUserReference }),
+          ...(body.roles === undefined ? {} : { roles: body.roles }),
+          ...(body.attributes === undefined
+            ? {}
+            : { attributes: body.attributes }),
+          ...(body.defaultContext === undefined || body.defaultContext === null
+            ? {}
+            : { defaultContext: toLaunchContext(body.defaultContext) }),
+        }),
+      );
     } catch (error) {
       if (isUniqueViolation(error)) {
         return c.json(
@@ -187,7 +194,9 @@ export function registerEndUserRoutes(
 
       let user = existing;
       if (Object.keys(patch).length > 0) {
-        const updated = await updateEndUser(context.db, scope, userId, patch);
+        const updated = await withTenantScope(context.db, scope, (bound) =>
+          updateEndUser(bound, userId, patch),
+        );
         if (updated === undefined) {
           return c.json(
             adminErrorBody("not_found", "No such user on this endpoint"),
@@ -198,12 +207,8 @@ export function registerEndUserRoutes(
       }
 
       if (disabled !== undefined) {
-        const toggled = await setEndUserDisabled(
-          context.db,
-          scope,
-          userId,
-          disabled,
-          context.clock(),
+        const toggled = await withTenantScope(context.db, scope, (bound) =>
+          setEndUserDisabled(bound, userId, disabled, context.clock()),
         );
         if (toggled !== undefined) {
           user = toggled;
@@ -257,11 +262,12 @@ export function registerEndUserRoutes(
         return body;
       }
 
-      await setEndUserPasswordHash(
-        context.db,
-        scope,
-        userId,
-        await hashPassword(body.password),
+      await withTenantScope(context.db, scope, async (bound) =>
+        setEndUserPasswordHash(
+          bound,
+          userId,
+          await hashPassword(body.password),
+        ),
       );
 
       await recordAdminEvent(context, c, {
@@ -292,7 +298,9 @@ export function registerEndUserRoutes(
         detail: { deleted: true, username: route.user.username },
       });
 
-      await deleteEndUser(context.db, route.scope, route.userId);
+      await withTenantScope(context.db, route.scope, (bound) =>
+        deleteEndUser(bound, route.userId),
+      );
       return c.body(null, 204);
     },
   );

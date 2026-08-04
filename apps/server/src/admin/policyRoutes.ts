@@ -244,11 +244,14 @@ export function registerPolicyRoutes(
         );
       }
 
+      const endUserId = body.endUserId;
       const user =
-        body.endUserId === undefined
+        endUserId === undefined
           ? undefined
-          : await getEndUser(context.db, scope, body.endUserId);
-      if (body.endUserId !== undefined && user === undefined) {
+          : await withTenantScope(context.db, scope, (bound) =>
+              getEndUser(bound, endUserId),
+            );
+      if (endUserId !== undefined && user === undefined) {
         return c.json(
           adminErrorBody("not_found", "No such user on this endpoint"),
           statusForAdminError("not_found"),

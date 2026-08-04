@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   MODULES_AWAITING_BINDING,
+  SWEEP_FUNCTIONS,
   UNSCOPED_FUNCTIONS,
   UNSCOPED_MODULES,
 } from "./unscoped.js";
@@ -90,7 +91,10 @@ function moduleIsExempt(module: string): boolean {
 
 /** Whether one function is accounted for by name. */
 function isDeclared(signature: Signature): boolean {
-  return Object.hasOwn(UNSCOPED_FUNCTIONS, signature.key);
+  return (
+    Object.hasOwn(UNSCOPED_FUNCTIONS, signature.key) ||
+    SWEEP_FUNCTIONS.includes(signature.key)
+  );
 }
 
 describe("the declared unscoped surface", () => {
@@ -119,13 +123,30 @@ describe("the declared unscoped surface", () => {
 
   it("declares nothing that is not in the source", () => {
     const keys = new Set(unbound.map((signature) => signature.key));
-    const stale = Object.keys(UNSCOPED_FUNCTIONS).filter(
-      (key) => !keys.has(key),
-    );
+    const stale = [
+      ...Object.keys(UNSCOPED_FUNCTIONS),
+      ...SWEEP_FUNCTIONS,
+    ].filter((key) => !keys.has(key));
 
     // A declaration for a function that has been renamed, deleted or converted is
     // a justification for something nobody can read any more.
     expect(stale).toEqual([]);
+  });
+
+  it("names every table the sweep touches", () => {
+    // The sweep's counts and its declared statements are the same list. A delete
+    // added to the sweep without being declared here reaches tenant-owned data
+    // with no tenant and nothing would have said so.
+    const swept = readFileSync(`${sourceRoot}repositories/sweep.ts`, "utf8");
+    const called = SWEEP_FUNCTIONS.map((key) => key.split(".", 2)[1] ?? "");
+
+    expect(called).not.toContain("");
+    for (const name of called) {
+      expect(swept).toContain(name);
+    }
+    expect(
+      [...swept.matchAll(/\bdeleteExpired\w+/g)].map((match) => match[0]),
+    ).toEqual(expect.arrayContaining(called));
   });
 
   it("declares no module that has no unbound function", () => {

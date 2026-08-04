@@ -27,6 +27,7 @@ import {
   isEndUserEnabled,
   isPersonaSelectable,
   verifyPassword,
+  withTenantScope,
 } from "@signet/db";
 
 import { UNMATCHABLE_PASSWORD_HASH } from "../security/passwordTiming.js";
@@ -87,8 +88,11 @@ export async function authenticateEndUser(
   endpoint: Endpoint,
   credentials: EndUserCredentials,
 ): Promise<EndUserAuthentication> {
-  if (typeof credentials.personaId === "string") {
-    const persona = await getEndUser(db, scope, credentials.personaId);
+  const personaId = credentials.personaId;
+  if (typeof personaId === "string") {
+    const persona = await withTenantScope(db, scope, (bound) =>
+      getEndUser(bound, personaId),
+    );
     // Both halves of the persona rule are checked by one pure predicate, so neither the
     // production flag nor the persona flag can be relaxed alone.
     if (persona === undefined || !isPersonaSelectable(endpoint, persona)) {
@@ -97,17 +101,16 @@ export async function authenticateEndUser(
     return { ok: true, user: persona };
   }
 
+  const username = credentials.username;
   if (
-    typeof credentials.username !== "string" ||
+    typeof username !== "string" ||
     typeof credentials.password !== "string"
   ) {
     return { ok: false, reason: "no-credential" };
   }
 
-  const candidate = await findEndUserByUsername(
-    db,
-    scope,
-    credentials.username,
+  const candidate = await withTenantScope(db, scope, (bound) =>
+    findEndUserByUsername(bound, username),
   );
   // Verified even when the account does not exist, against a hash that cannot match, so
   // that a missing account and a wrong password take the same time. See the header.

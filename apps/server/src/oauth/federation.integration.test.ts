@@ -15,7 +15,7 @@
  * Author: John Grimes
  */
 
-import { listEndUsers } from "@signet/db";
+import { listEndUsers, withTenantScope } from "@signet/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { adminRequest, endpointPath, tenantPath } from "../test/adminApi.js";
@@ -167,7 +167,11 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
     );
     expect(location.searchParams.get("code")).not.toBeNull();
 
-    const users = await listEndUsers(stack.context.db, stack.scope);
+    const users = await withTenantScope(
+      stack.context.db,
+      stack.scope,
+      (bound) => listEndUsers(bound),
+    );
     const federated = users.find(
       (user) => user.username === `${idp.issuer}#${UPSTREAM_SUBJECT}`,
     );
@@ -201,7 +205,11 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
       },
     });
 
-    const users = await listEndUsers(stack.context.db, stack.scope);
+    const users = await withTenantScope(
+      stack.context.db,
+      stack.scope,
+      (bound) => listEndUsers(bound),
+    );
     const matching = users.filter(
       (user) => user.username === `${idp.issuer}#${UPSTREAM_SUBJECT}`,
     );
@@ -223,7 +231,11 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
       },
     });
 
-    const users = await listEndUsers(stack.context.db, stack.scope);
+    const users = await withTenantScope(
+      stack.context.db,
+      stack.scope,
+      (bound) => listEndUsers(bound),
+    );
     const federated = users.find(
       (user) => user.username === `${idp.issuer}#${UPSTREAM_SUBJECT}`,
     );
@@ -406,12 +418,20 @@ describe.skipIf(testDatabaseUrl === undefined)(
     });
 
     it("provisions nobody through a callback", async () => {
-      const before = await listEndUsers(stack.context.db, stack.scope);
+      const before = await withTenantScope(
+        stack.context.db,
+        stack.scope,
+        (bound) => listEndUsers(bound),
+      );
       const response = await stack.app.request(
         `${issuerPath(stack)}/federation/callback?state=anything&code=x`,
       );
       expect(response.status).toBe(400);
-      const after = await listEndUsers(stack.context.db, stack.scope);
+      const after = await withTenantScope(
+        stack.context.db,
+        stack.scope,
+        (bound) => listEndUsers(bound),
+      );
       expect(after).toHaveLength(before.length);
     });
   },
@@ -451,7 +471,11 @@ describe.skipIf(testDatabaseUrl === undefined)("the outbound guard", () => {
     // send the browser. This is the guard doing its job on a real address.
     expect(response.status).toBe(400);
 
-    const users = await listEndUsers(stack.context.db, stack.scope);
+    const users = await withTenantScope(
+      stack.context.db,
+      stack.scope,
+      (bound) => listEndUsers(bound),
+    );
     expect(users.some((user) => user.username.startsWith(idp.issuer))).toBe(
       false,
     );

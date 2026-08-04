@@ -10,7 +10,7 @@
  * Author: John Grimes
  */
 
-import { getEndUser } from "@signet/db";
+import { getEndUser, withTenantScope } from "@signet/db";
 
 import { grantRefusal } from "./types.js";
 
@@ -35,7 +35,9 @@ export async function requireEndUser(
   issuerContext: ResolvedIssuerContext,
   subject: string,
 ): Promise<EndUserResolution> {
-  const user = await getEndUser(context.db, issuerContext.scope, subject);
+  const user = await withTenantScope(context.db, issuerContext.scope, (bound) =>
+    getEndUser(bound, subject),
+  );
   return user === undefined
     ? {
         ok: false,

@@ -201,10 +201,13 @@ async function buildView(
   const { session, client } = loaded;
   const requirements = contextRequirements(loaded.requested);
 
+  const endUserId = session.endUserId;
   const user =
-    session.endUserId === null
+    endUserId === null
       ? undefined
-      : await getEndUser(context.db, issuerContext.scope, session.endUserId);
+      : await withTenantScope(context.db, issuerContext.scope, (bound) =>
+          getEndUser(bound, endUserId),
+        );
 
   const step = decideStep({
     authenticated: user !== undefined,
@@ -221,7 +224,9 @@ async function buildView(
 
   const personas =
     user === undefined
-      ? await listSelectablePersonas(context.db, issuerContext.scope, endpoint)
+      ? await withTenantScope(context.db, issuerContext.scope, (bound) =>
+          listSelectablePersonas(bound, endpoint),
+        )
       : [];
 
   // Read only in `oidc` mode: an endpoint with local accounts has no provider to
@@ -602,10 +607,10 @@ export function interactionContextHandler(context: ServerContext) {
       return loaded;
     }
 
-    const user = await getEndUser(
+    const user = await withTenantScope(
       context.db,
       issuerContext.scope,
-      loaded.session.endUserId,
+      (bound) => getEndUser(bound, loaded.session.endUserId),
     );
     if (user === undefined) {
       return unknownSession(c);

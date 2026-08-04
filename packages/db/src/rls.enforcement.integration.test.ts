@@ -243,10 +243,12 @@ describeWithDatabase("row-level security as the serving role", () => {
       }),
     );
 
-    const endUser = await createEndUser(owner, endpointScope, {
-      username: `user-${unique()}`,
-      displayName: "End user",
-    });
+    const endUser = await withTenantScope(owner, endpointScope, (bound) =>
+      createEndUser(bound, {
+        username: `user-${unique()}`,
+        displayName: "End user",
+      }),
+    );
 
     const client = await withTenantScope(owner, endpointScope, (bound) =>
       createClient(bound, {
@@ -272,12 +274,16 @@ describeWithDatabase("row-level security as the serving role", () => {
       }),
     );
 
-    await withTenantScope(owner, endpointScope, (bound) => createPolicyVersion(bound, {
-      document: POLICY,
-      createdBy: admin.id,
-      note: "Seeded",
-    }));
-    await withTenantScope(owner, clientScope, (bound) => setClientPolicyOverride(bound, POLICY));
+    await withTenantScope(owner, endpointScope, (bound) =>
+      createPolicyVersion(bound, {
+        document: POLICY,
+        createdBy: admin.id,
+        note: "Seeded",
+      }),
+    );
+    await withTenantScope(owner, clientScope, (bound) =>
+      setClientPolicyOverride(bound, POLICY),
+    );
 
     await createLaunchContext(owner, endpointScope, {
       handleHash: `launch-${unique()}`,
@@ -320,13 +326,15 @@ describeWithDatabase("row-level security as the serving role", () => {
       scope: "patient/Observation.rs",
       expiresAt: soon(),
     });
-    await createEndUserSession(owner, endpointScope, {
-      endUserId: endUser.id,
-      tokenHash: `session-${unique()}`,
-      expiresAt: soon(),
-      ip: null,
-      userAgent: null,
-    });
+    await withTenantScope(owner, endpointScope, (bound) =>
+      createEndUserSession(bound, {
+        endUserId: endUser.id,
+        tokenHash: `session-${unique()}`,
+        expiresAt: soon(),
+        ip: null,
+        userAgent: null,
+      }),
+    );
     await recordJti(owner, clientScope, `assertion-${unique()}`, soon());
 
     // Non-fatal by design, so a failure here would leave `audit_events` empty

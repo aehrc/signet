@@ -16,12 +16,11 @@ import { and, asc, eq, isNull, isNotNull, sql } from "drizzle-orm";
 
 import { isPersonaSelectable } from "./predicates.js";
 import { requireRow } from "./rows.js";
-import { TenantScopeViolationError } from "./scope.js";
+import { executorFor, TenantScopeViolationError } from "./scope.js";
 import { nowValue } from "./time.js";
 import { endUsers } from "../schema/endpoints.js";
 
-import type { Executor } from "./executor.js";
-import type { EndpointScope } from "./scope.js";
+import type { BoundEndpointScope } from "./scope.js";
 import type { Endpoint, EndUser, NewEndUser } from "../schema/endpoints.js";
 
 /** The caller-supplied half of an end user. */
@@ -32,11 +31,10 @@ export type EndUserInput = Omit<
 
 /** Creates an end user or persona on the scoped endpoint. */
 export async function createEndUser(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   input: EndUserInput,
 ): Promise<EndUser> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(endUsers)
     .values({ ...input, endpointId: scope.endpointId })
     .returning();
@@ -45,10 +43,9 @@ export async function createEndUser(
 
 /** Lists the scoped endpoint's users, by username. */
 export async function listEndUsers(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<readonly EndUser[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(endUsers)
     .where(eq(endUsers.endpointId, scope.endpointId))
@@ -57,11 +54,10 @@ export async function listEndUsers(
 
 /** Reads one of the scoped endpoint's users. */
 export async function getEndUser(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   endUserId: string,
 ): Promise<EndUser | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(endUsers)
     .where(
@@ -86,11 +82,10 @@ export async function getEndUser(
  * the same thing in both cases.
  */
 export async function findEndUserByUsername(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   username: string,
 ): Promise<EndUser | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(endUsers)
     .where(
@@ -117,8 +112,7 @@ export async function findEndUserByUsername(
  * have to pass it.
  */
 export async function listSelectablePersonas(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   endpoint: Endpoint,
 ): Promise<readonly EndUser[]> {
   if (endpoint.id !== scope.endpointId) {
@@ -130,7 +124,7 @@ export async function listSelectablePersonas(
     return [];
   }
 
-  const rows = await db
+  const rows = await executorFor(scope)
     .select()
     .from(endUsers)
     .where(
@@ -147,10 +141,9 @@ export async function listSelectablePersonas(
 
 /** Lists the endpoint's password-holding users, for the console. */
 export async function listLocalEndUsers(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<readonly EndUser[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(endUsers)
     .where(
@@ -164,12 +157,11 @@ export async function listLocalEndUsers(
 
 /** Applies a patch to one of the scoped endpoint's users. */
 export async function updateEndUser(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   endUserId: string,
   patch: Partial<EndUserInput>,
 ): Promise<EndUser | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .update(endUsers)
     .set(patch)
     .where(
@@ -190,12 +182,11 @@ export async function updateEndUser(
  * login on a production endpoint, only an account that cannot log in at all.
  */
 export async function setEndUserPasswordHash(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   endUserId: string,
   passwordHash: string | null,
 ): Promise<EndUser | undefined> {
-  return await updateEndUser(db, scope, endUserId, { passwordHash });
+  return await updateEndUser(scope, endUserId, { passwordHash });
 }
 
 /**
@@ -206,13 +197,12 @@ export async function setEndUserPasswordHash(
  * "this person's tokens are compromised" are different situations.
  */
 export async function setEndUserDisabled(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   endUserId: string,
   disabled: boolean,
   now?: Date,
 ): Promise<EndUser | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .update(endUsers)
     .set({ disabledAt: disabled ? nowValue(now) : null })
     .where(
@@ -235,11 +225,10 @@ export async function setEndUserDisabled(
  * @returns Whether a user was deleted.
  */
 export async function deleteEndUser(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   endUserId: string,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .delete(endUsers)
     .where(
       and(
@@ -281,13 +270,11 @@ export interface FederatedIdentity {
  * `is_persona` stays false for the same reason - a persona is selectable without
  * any credential at all.
  *
- * @param db - The connection to use.
  * @param scope - The endpoint the account belongs to.
  * @param identity - The mapped claims from the provider.
  */
 export async function upsertFederatedEndUser(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   identity: FederatedIdentity,
 ): Promise<EndUser> {
   const values = {
@@ -297,7 +284,7 @@ export async function upsertFederatedEndUser(
     attributes: identity.attributes as Record<string, unknown>,
   };
 
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(endUsers)
     .values({
       endpointId: scope.endpointId,
@@ -315,10 +302,9 @@ export async function upsertFederatedEndUser(
 
 /** Counts the scoped endpoint's users, for the console's endpoint list. */
 export async function countEndUsers(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<number> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select({ count: sql<number>`count(*)::int` })
     .from(endUsers)
     .where(eq(endUsers.endpointId, scope.endpointId));

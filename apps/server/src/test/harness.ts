@@ -323,22 +323,26 @@ export async function createTestStack(
     }),
   );
 
-  const user = await createEndUser(db, scope, {
-    username: "clinician",
-    passwordHash: await hashPassword(TEST_PASSWORD),
-    fhirUserReference: "Practitioner/prac-1",
-    displayName: "Test Clinician",
-    roles: ["practitioner"],
-    attributes: { patients: ["pat-1", "pat-2"] },
-  });
+  const user = await withTenantScope(db, scope, async (bound) =>
+    createEndUser(bound, {
+      username: "clinician",
+      passwordHash: await hashPassword(TEST_PASSWORD),
+      fhirUserReference: "Practitioner/prac-1",
+      displayName: "Test Clinician",
+      roles: ["practitioner"],
+      attributes: { patients: ["pat-1", "pat-2"] },
+    }),
+  );
 
-  const persona = await createEndUser(db, scope, {
-    username: "persona-patient",
-    fhirUserReference: "Patient/pat-9",
-    displayName: "Persona Patient",
-    isPersona: true,
-    defaultContext: { patient: "pat-9" },
-  });
+  const persona = await withTenantScope(db, scope, (bound) =>
+    createEndUser(bound, {
+      username: "persona-patient",
+      fhirUserReference: "Patient/pat-9",
+      displayName: "Persona Patient",
+      isPersona: true,
+      defaultContext: { patient: "pat-9" },
+    }),
+  );
 
   const admin = await createAdminUser(db, {
     email: `admin-${suffix}@signet.test`,

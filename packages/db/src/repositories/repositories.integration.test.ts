@@ -1141,10 +1141,12 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   describe("consents", () => {
     it("returns only live consents", async () => {
       const fixture = await newFixture();
-      const user = await createEndUser(db, fixture.endpointScope, {
-        username: `alice-${unique()}`,
-        displayName: "Alice",
-      });
+      const user = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createEndUser(bound, {
+          username: `alice-${unique()}`,
+          displayName: "Alice",
+        }),
+      );
 
       const live = await recordConsent(db, fixture.clientScope, {
         endUserId: user.id,
@@ -1179,31 +1181,37 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         return;
       }
 
-      await createEndUser(db, fixture.endpointScope, {
-        username: `persona-${unique()}`,
-        displayName: "Dr Persona",
-        isPersona: true,
-      });
-      await createEndUser(db, fixture.endpointScope, {
-        username: `local-${unique()}`,
-        displayName: "Local account",
-        passwordHash: "$argon2id$placeholder",
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createEndUser(bound, {
+          username: `persona-${unique()}`,
+          displayName: "Dr Persona",
+          isPersona: true,
+        }),
+      );
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createEndUser(bound, {
+          username: `local-${unique()}`,
+          displayName: "Local account",
+          passwordHash: "$argon2id$placeholder",
+        }),
+      );
 
-      const offered = await listSelectablePersonas(
+      const offered = await withTenantScope(
         db,
         fixture.endpointScope,
-        endpoint,
+        (bound) => listSelectablePersonas(bound, endpoint),
       );
       expect(offered).toHaveLength(1);
       expect(offered[0]?.displayName).toBe("Dr Persona");
 
       // The same rows, on a production endpoint, must not be selectable.
       expect(
-        await listSelectablePersonas(db, fixture.endpointScope, {
-          ...endpoint,
-          isProduction: true,
-        }),
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          listSelectablePersonas(bound, {
+            ...endpoint,
+            isProduction: true,
+          }),
+        ),
       ).toHaveLength(0);
     });
   });

@@ -131,11 +131,15 @@ async function authenticate(
   if (presented === undefined) {
     return unauthenticated(c);
   }
-  const session = await findLiveEndUserSession(
+  const session = await withTenantScope(
     context.db,
     issuerContext.scope,
-    await hashToken(presented),
-    context.clock(),
+    async (bound) =>
+      findLiveEndUserSession(
+        bound,
+        await hashToken(presented),
+        context.clock(),
+      ),
   );
   return session ?? unauthenticated(c);
 }
@@ -185,15 +189,17 @@ export function manageSignInHandler(context: ServerContext) {
     const user = authenticated.user;
 
     const token = generateOpaqueToken();
-    await createEndUserSession(context.db, issuerContext.scope, {
-      endUserId: user.id,
-      tokenHash: await hashToken(token),
-      expiresAt: new Date(
-        context.clock().getTime() + MANAGE_SESSION_TTL_SECONDS * 1000,
-      ),
-      ip: metadata.ip ?? null,
-      userAgent: metadata.userAgent ?? null,
-    });
+    await withTenantScope(context.db, issuerContext.scope, async (bound) =>
+      createEndUserSession(bound, {
+        endUserId: user.id,
+        tokenHash: await hashToken(token),
+        expiresAt: new Date(
+          context.clock().getTime() + MANAGE_SESSION_TTL_SECONDS * 1000,
+        ),
+        ip: metadata.ip ?? null,
+        userAgent: metadata.userAgent ?? null,
+      }),
+    );
 
     await context.audit.record(context.db, {
       tenantId: issuerContext.tenant.id,
@@ -239,11 +245,12 @@ export function manageSignOutHandler(context: ServerContext) {
     const presented = readCookie(c.req.header("cookie"), MANAGE_COOKIE_NAME);
 
     if (presented !== undefined) {
-      await revokeEndUserSession(
-        context.db,
-        issuerContext.scope,
-        await hashToken(presented),
-        context.clock(),
+      await withTenantScope(context.db, issuerContext.scope, async (bound) =>
+        revokeEndUserSession(
+          bound,
+          await hashToken(presented),
+          context.clock(),
+        ),
       );
     }
 

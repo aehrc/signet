@@ -396,18 +396,23 @@ export function federationCallbackHandler(context: ServerContext) {
       loaded.setup.config.claimMappings,
       identity.claims,
     );
-    const user = await upsertFederatedEndUser(context.db, issuerContext.scope, {
-      username: federatedUsername(
-        loaded.setup.metadata.issuer,
-        identity.subject,
-      ),
-      // The provider is not obliged to send a name, and an account with a blank
-      // one is unreadable in the console - so the subject stands in for it.
-      displayName: mapped.displayName ?? identity.subject,
-      fhirUserReference: mapped.fhirUser ?? null,
-      roles: mapped.roles,
-      attributes: mapped.attributes,
-    });
+    const user = await withTenantScope(
+      context.db,
+      issuerContext.scope,
+      (bound) =>
+        upsertFederatedEndUser(bound, {
+          username: federatedUsername(
+            loaded.setup.metadata.issuer,
+            identity.subject,
+          ),
+          // The provider is not obliged to send a name, and an account with a blank
+          // one is unreadable in the console - so the subject stands in for it.
+          displayName: mapped.displayName ?? identity.subject,
+          fhirUserReference: mapped.fhirUser ?? null,
+          roles: mapped.roles,
+          attributes: mapped.attributes,
+        }),
+    );
 
     await recordFederationEvent(context, issuerContext, metadata, {
       action: "end-user.login",
