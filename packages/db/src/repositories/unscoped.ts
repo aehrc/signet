@@ -11,10 +11,11 @@
  *
  * That set is the escape hatch, and an escape hatch nobody enumerates is not much
  * better than no guarantee at all. So it is declared here with a justification
- * each, and `./unscoped.test.ts` compares the declaration against the source: a
- * new function taking an unbound executor fails a test rather than passing
- * unnoticed. It is the same pattern `RLS_EXEMPT_TABLES` in `../rls.ts` uses, for
- * the same reason.
+ * each, and `./unscoped.test.ts` compares the declaration against the source in
+ * both directions: a new function taking an unbound executor fails a test rather
+ * than passing unnoticed, and a declaration whose function has been renamed,
+ * deleted or converted fails too. It is the same pattern `RLS_EXEMPT_TABLES` in
+ * `../rls.ts` uses, for the same reason.
  *
  * The declaration is by name rather than by type, because the property is about
  * what a reviewer can enumerate. A type could express "takes an executor", and the
@@ -98,16 +99,3 @@ export const SWEEP_FUNCTIONS: readonly string[] = [
   "repositories/launchContexts.deleteExpiredLaunchContexts",
   "repositories/refreshTokens.deleteExpiredRefreshTokens",
 ];
-
-/**
- * Modules whose functions still take an unbound executor pending conversion.
- *
- * Temporary, and empty by the end of the conversion: until then the assertion
- * above would fail for every unconverted function, which would either block the
- * conversion from landing in reviewable steps or force a hundred declarations that
- * are immediately deleted. Listing the modules instead keeps the assertion biting
- * for everything already converted, and `./unscoped.test.ts` requires each entry
- * to still have an undeclared unbound function - so a module cannot stay listed
- * once it has been converted.
- */
-export const MODULES_AWAITING_BINDING: readonly string[] = ["audit/record"];

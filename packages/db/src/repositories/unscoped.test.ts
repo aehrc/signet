@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
-  MODULES_AWAITING_BINDING,
   SWEEP_FUNCTIONS,
   UNSCOPED_FUNCTIONS,
   UNSCOPED_MODULES,
@@ -110,9 +109,7 @@ describe("the declared unscoped surface", () => {
     const unaccounted = unbound
       .filter(
         (signature) =>
-          !isDeclared(signature) &&
-          !moduleIsExempt(signature.module) &&
-          !MODULES_AWAITING_BINDING.includes(signature.module),
+          !isDeclared(signature) && !moduleIsExempt(signature.module),
       )
       .map((signature) => signature.key);
 
@@ -163,23 +160,5 @@ describe("the declared unscoped surface", () => {
     ]) {
       expect(reason.length).toBeGreaterThan(40);
     }
-  });
-
-  it("keeps no module on the conversion list once it is converted", () => {
-    // The ratchet. An entry survives only while the module still has an unbound
-    // function nobody has declared; the moment the conversion lands, leaving the
-    // entry in place fails here.
-    const outstanding = new Set(
-      unbound
-        .filter(
-          (signature) =>
-            !isDeclared(signature) && !moduleIsExempt(signature.module),
-        )
-        .map((signature) => signature.module),
-    );
-
-    expect(
-      MODULES_AWAITING_BINDING.filter((module) => !outstanding.has(module)),
-    ).toEqual([]);
   });
 });
