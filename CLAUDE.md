@@ -40,30 +40,41 @@ outside that directory. Every tenant-owned table MUST carry a row-level security
 policy comparing against `current_setting('signet.tenant_id', true)`, added in
 the same migration that creates the table.
 
-Any connection to the database other than Signet's own MUST be made as a
-non-owning role. Postgres exempts a table's owner from its policies, so a
+Every connection to the database MUST be made as a non-owning role, including
+Signet's own. Postgres exempts a table's owner from its policies, so a server, a
 reporting job or a `psql` session that connects as the owner is a way past the
-isolation that no code review will catch.
+isolation that no code review will catch. The owning identity is permitted only
+where owner authority is unavoidable - applying migrations, and the cross-tenant
+expiry sweep - and MUST NOT be held by a serving process. The server MUST verify
+this of its own connection at startup and MUST refuse to serve when the role it
+was given turns out to be exempt.
 
 Rationale: the two layers bind different callers, and each is the only thing
 binding its own.
 
 The type system binds the application. It fails at build time in every
 environment, whether or not anybody configured anything, and it is what stops a
-hand-written query or a contributor reaching past the repositories - because
-Signet connects as the table owner, which Postgres exempts from policies, and it
-connects that way deliberately: the admin API resolves which tenants a session
-may see before any tenant is known, and the expiry sweep and the migrations are
-cross-tenant by design.
+hand-written query or a contributor reaching past the repositories. It also gives
+the better diagnostic: a compiler naming a file and a line, rather than a query
+that quietly returns nothing.
 
-Row-level security binds everything else that reaches the database - a `psql`
-session, a reporting job, an analytics tool, a service added later - none of
-which passes through the compiler at all, which is why the non-owning role is
-required above.
+Row-level security binds every connection whose role is not exempt. That includes
+Signet's own, which it did not until the serving role was introduced, and
+everything else that reaches the database - a `psql` session, a reporting job, an
+analytics tool, a service added later - none of which passes through the compiler
+at all.
+
+The reads that must happen before any tenant is known - resolving `/t/{slug}`,
+resolving a personal access token's digest, answering which tenants a console user
+may see - reach past the policies through an enumerated set of `security definer`
+routines rather than through a privileged connection, so the process holds no
+handle that can read an arbitrary tenant. That set MUST be declared with a
+justification for each member, and a test MUST fail when what the database grants
+differs from it.
 
 Neither substitutes for the other, and neither may be dropped on the grounds
-that the other exists. See `packages/db/src/rls.ts` and the "Tenant isolation in
-the database" section of `docs/operations.md`.
+that the other exists. See `packages/db/src/rls.ts`, `packages/db/src/privileges.ts`
+and the "Tenant isolation in the database" section of `docs/operations.md`.
 
 #### III. Logic lives in pure functions
 
