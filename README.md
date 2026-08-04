@@ -10,9 +10,9 @@ SMART App Launch and SMART Backend Services in front of it.
 
 Built for two things at once:
 
-- **Production FHIR deployments** — per-endpoint signing keys, key rotation,
+- **Production FHIR deployments** - per-endpoint signing keys, key rotation,
   audit, and federation to an existing identity provider.
-- **Connectathons and SMART app marketplaces** — stand up an endpoint in a
+- **Connectathons and SMART app marketplaces** - stand up an endpoint in a
   minute, seed personas, let app developers self-serve a client registration,
   and simulate an EHR launch without an EHR.
 
@@ -20,7 +20,7 @@ Built for two things at once:
 
 Resource servers do not agree on what an access token should look like, and some
 do not read SMART scopes at all. [Pathling](https://pathling.csiro.au)
-authorizes off its own `authorities` claim, so `patient/Observation.rs` has to
+authorises off its own `authorities` claim, so `patient/Observation.rs` has to
 become `["pathling:read:Observation", "pathling:search"]` before Pathling will
 honour it.
 
@@ -42,11 +42,28 @@ and asserts that Pathling accepts the token Signet minted.
 See [docs/operations.md](docs/operations.md) for configuration, key rotation and
 deployment.
 
+### Deliberately not built
+
+**Dynamic client registration** (`POST {iss}/register`, RFC 7591). Signet serves
+no registration endpoint and advertises none, so a client cannot obtain
+credentials by asking for them.
+
+The developer portal at `{iss}/apps` is the alternative, and it is a different
+trade rather than a smaller one: a developer submits a request, an administrator
+approves it in the console, and the developer then collects the credentials. That
+puts a person between "anybody who can reach this endpoint" and "holds a client
+credential on it", which is the property worth having on a server whose endpoints
+front clinical data.
+
+`apps/server/src/conformance.integration.test.ts` asserts both halves - nothing is
+advertised, and `/register` answers 404 - so this stays a decision rather than
+drifting into an accident.
+
 ## Layout
 
 | Path                 | Contents                                                                                                 |
 | -------------------- | -------------------------------------------------------------------------------------------------------- |
-| `packages/core`      | Pure, I/O-free domain logic — scope grammar, policy engine, tokens, discovery. Exhaustively unit tested. |
+| `packages/core`      | Pure, I/O-free domain logic - scope grammar, policy engine, tokens, discovery. Exhaustively unit tested. |
 | `packages/contracts` | Zod schemas shared between server and web.                                                               |
 | `packages/db`        | Drizzle schema, migrations, tenant-scoped repositories.                                                  |
 | `apps/server`        | Hono: OAuth endpoints and admin API.                                                                     |
@@ -99,7 +116,7 @@ every issuer identifier with it.
 docker build -f deploy/docker/Dockerfile -t signet:dev .
 ```
 
-The runtime image ships no `node_modules` — the server is bundled into a single
+The runtime image ships no `node_modules` - the server is bundled into a single
 self-contained file. The Dockerfile enforces this: adding a dependency that
 cannot be bundled (a native addon) fails the build rather than the deployment.
 Prefer WASM or pure-JS dependencies.
@@ -124,7 +141,7 @@ helm install signet deploy/helm/signet \
 
 `SIGNET_MASTER_KEY` encrypts endpoint signing keys at rest. Manage it outside
 the chart in production and back it up somewhere other than the database it
-protects — if it is lost, every stored signing key becomes undecryptable.
+protects - if it is lost, every stored signing key becomes undecryptable.
 
 ## Putting Signet in front of Pathling
 

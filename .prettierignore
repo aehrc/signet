@@ -5,10 +5,14 @@ node_modules
 .turbo
 playwright-report
 test-results
+# Signed-in browser state, written by the e2e suite. Git ignores it, but Prettier
+# does not read .gitignore, so without this `format:check` goes red on any machine
+# that has run the suite.
+e2e/playwright/.auth
 packages/db/drizzle
 bun.lock
 
-# Helm templates are Go templates, not YAML — Prettier cannot parse them.
+# Helm templates are Go templates, not YAML - Prettier cannot parse them.
 deploy/helm/*/templates
 deploy/helm/*/charts
 deploy/helm/*/Chart.lock
