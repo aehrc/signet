@@ -1288,10 +1288,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
     beforeAll(async () => {
       ownerSql = postgres(databaseUrl ?? "", { max: 2, onnotice: () => {} });
-      owner =
-        ownerSql === undefined
-          ? db
-          : (drizzle(ownerSql) as unknown as Executor);
+      owner = drizzle(ownerSql);
 
       if (!isTestSchemaReady()) {
         await prepareServingRole(owner);
@@ -1301,7 +1298,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         max: 2,
         onnotice: () => {},
       });
-      serving = drizzle(servingSql) as unknown as Executor;
+      serving = drizzle(servingSql);
     }, 60_000);
 
     afterAll(async () => {
