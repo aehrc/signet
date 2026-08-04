@@ -40,10 +40,25 @@ outside that directory. Every tenant-owned table MUST carry a row-level security
 policy comparing against `current_setting('signet.tenant_id', true)`, added in
 the same migration that creates the table.
 
-Rationale: the type system fails at build time in every environment, whether or
-not anybody configured anything; RLS covers what it cannot - a hand-written
-query, a migration, a contributor reaching past the repositories. Neither alone
-is sufficient. See `packages/db/src/rls.ts`.
+Rationale: the two layers bind different callers, and each is the only thing
+binding its own.
+
+The type system binds the application. It fails at build time in every
+environment, whether or not anybody configured anything, and it is what stops a
+hand-written query or a contributor reaching past the repositories - because
+Signet connects as the table owner, which Postgres exempts from policies, and it
+connects that way deliberately: the admin API resolves which tenants a session
+may see before any tenant is known, and the expiry sweep and the migrations are
+cross-tenant by design.
+
+Row-level security binds everything else that reaches the database - a `psql`
+session, a reporting job, an analytics tool, a service added later - none of
+which passes through the compiler at all. Those connections MUST be made as a
+non-owning role.
+
+Neither substitutes for the other, and neither may be dropped on the grounds
+that the other exists. See `packages/db/src/rls.ts` and the "Tenant isolation in
+the database" section of `docs/operations.md`.
 
 #### III. Logic lives in pure functions
 
