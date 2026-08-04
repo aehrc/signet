@@ -88,20 +88,79 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Smoke test the image
+      # A real database with the two identities a deployment runs, because the
+      # server verifies at startup that its role is bound by the tenant isolation
+      # policies and refuses to serve when it is not. Started against nothing, the
+      # image would exit 1 - correctly - and prove only that it can refuse.
+      - name: Start PostgreSQL with the two identities
         run: |
-          docker run -d --name signet -p 3000:3000 \
+          docker network create signet-ci
+          docker run -d --name postgres --network signet-ci \
+            -e POSTGRES_USER=signet \
+            -e POSTGRES_PASSWORD=signet \
+            -e POSTGRES_DB=signet \
+            postgres:18-alpine
+          for i in $(seq 1 30); do
+            if docker exec postgres pg_isready -U signet -d signet; then break; fi
+            sleep 1
+          done
+          docker exec postgres psql -U signet -d signet \
+            -c "create role signet_app login password 'signet_app'"
+
+      # Applied by the owning identity, which then grants the serving role its
+      # access. The same command the chart's pre-install hook Job runs.
+      - name: Migrate as the owning identity
+        run: |
+          docker run --rm --network signet-ci \
+            -e SIGNET_DATABASE_OWNER_URL=postgres://signet:signet@postgres:5432/signet \
+            -e SIGNET_DATABASE_URL=postgres://signet_app:signet_app@postgres:5432/signet \
+            -e SIGNET_MASTER_KEY=0123456789abcdef0123456789abcdef \
+            signet:ci node dist/index.js migrate
+
+      - name: Smoke test the image as the serving role
+        run: |
+          docker run -d --name signet --network signet-ci -p 3000:3000 \
             -e SIGNET_PUBLIC_URL=http://localhost:3000 \
-            -e SIGNET_DATABASE_URL=postgres://signet:signet@localhost:5432/signet \
+            -e SIGNET_DATABASE_URL=postgres://signet_app:signet_app@postgres:5432/signet \
             -e SIGNET_MASTER_KEY=0123456789abcdef0123456789abcdef \
             signet:ci
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:3000/healthz; then echo "ok"; exit 0; fi
+            if curl -fsS http://localhost:3000/healthz; then echo "ok"; break; fi
+            if [ "$i" = "30" ]; then
+              echo "Server did not become healthy"
+              docker logs signet
+              exit 1
+            fi
             sleep 1
           done
-          echo "Server did not become healthy"
-          docker logs signet
-          exit 1
+          # The startup check reports the role it verified, so the smoke test can
+          # assert the image came up bound by the policies rather than merely up.
+          docker logs signet 2>&1 | grep -q signet_app || {
+            echo "Startup did not report verifying the serving role"
+            docker logs signet
+            exit 1
+          }
+
+      # The other half of the claim: given the owning identity, the same image must
+      # refuse. Without this the check above passes against a startup check that
+      # approves anything.
+      - name: Assert the image refuses the owning identity
+        run: |
+          if docker run --rm --network signet-ci \
+            -e SIGNET_PUBLIC_URL=http://localhost:3000 \
+            -e SIGNET_DATABASE_URL=postgres://signet:signet@postgres:5432/signet \
+            -e SIGNET_MASTER_KEY=0123456789abcdef0123456789abcdef \
+            signet:ci > owner-start.log 2>&1; then
+            echo "The image started with the owning identity, which it must refuse"
+            cat owner-start.log
+            exit 1
+          fi
+          grep -q signet owner-start.log || {
+            echo "The refusal did not name the role"
+            cat owner-start.log
+            exit 1
+          }
+          cat owner-start.log
 
   helm:
     name: Helm chart
@@ -122,9 +181,16 @@ jobs:
           helm template signet deploy/helm/signet \
             --set postgresql.enabled=false \
             --set database.existingSecret=external-db \
+            --set database.ownerExistingSecret=external-db-owner \
             --set masterKey.existingSecret=external-key \
             --set ingress.enabled=true \
             --set autoscaling.enabled=true > /dev/null
+
+      # Rendering proves the templates are valid; this proves they keep the two
+      # database identities apart. A chart that leaks the owning identity into the
+      # server's pod spec renders perfectly and lints clean.
+      - name: Assert the owner credential reaches only the migration Job
+        run: node scripts/checkChartCredentials.mjs
 
   e2e:
     name: End to end

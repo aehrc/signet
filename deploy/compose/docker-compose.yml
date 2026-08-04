@@ -4,10 +4,12 @@
 # holds when it is real:
 #
 #   - Postgres, because the migrations install the tenant isolation policies and
-#     those are not exercisable against a fake. Note that the policies constrain
-#     connections other than the table owner; Signet connects as the owner here,
-#     so what this stack proves is that the migration applies cleanly, not that
-#     the policies constrain Signet itself. See docs/operations.md.
+#     those are not exercisable against a fake. The stack runs the two identities
+#     a real deployment runs: `signet` owns the schema and applies migrations,
+#     and `signet_app` - created by deploy/compose/initdb, non-owning, and
+#     therefore bound by the policies - is what the server connects as. So the
+#     suite exercises the policies constraining Signet itself, not merely a
+#     migration applying cleanly. See docs/operations.md.
 #   - Signet, built from the production Dockerfile rather than run from source,
 #     so the suite tests the artefact that ships - including the bundle check
 #     that fails the build if anything was left external.
@@ -49,6 +51,11 @@ services:
       POSTGRES_USER: signet
       POSTGRES_PASSWORD: signet
       POSTGRES_DB: signet
+    # Creates the serving role on first initialisation. The image runs every file
+    # here in name order when the data directory is empty, which is why bringing
+    # the stack up from an empty volume needs no manual step.
+    volumes:
+      - ./initdb:/docker-entrypoint-initdb.d:ro
     # Published so a developer can inspect the database the suite ran against.
     # A port distinct from the usual 5432, so it cannot collide with a local one.
     ports:
@@ -69,7 +76,13 @@ services:
       dockerfile: deploy/docker/Dockerfile
     command: ["node", "dist/index.js", "migrate"]
     environment:
-      SIGNET_DATABASE_URL: postgres://signet:signet@postgres:5432/signet
+      # The only container given the owning identity. It applies the DDL and then
+      # grants the serving role, which must be done by the role that owns the
+      # objects being granted.
+      SIGNET_DATABASE_OWNER_URL: postgres://signet:signet@postgres:5432/signet
+      # Read for the role name alone, so this command knows who to grant to. Its
+      # password is never used here.
+      SIGNET_DATABASE_URL: postgres://signet_app:signet_app@postgres:5432/signet
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,7 +93,9 @@ services:
       dockerfile: deploy/docker/Dockerfile
     command: ["node", "dist/index.js", "bootstrap"]
     environment:
-      SIGNET_DATABASE_URL: postgres://signet:signet@postgres:5432/signet
+      # The serving role, like the server. Creating the first tenant declares the
+      # tenant being created, so it needs no owner authority.
+      SIGNET_DATABASE_URL: postgres://signet_app:signet_app@postgres:5432/signet
       SIGNET_BOOTSTRAP_TENANT: demo
       SIGNET_BOOTSTRAP_TENANT_NAME: Demo Hospital
       SIGNET_BOOTSTRAP_EMAIL: ops@example.org
@@ -103,7 +118,10 @@ services:
       # token minted for `http://signet:3000` would not verify against the
       # issuer an app on the host discovered.
       SIGNET_PUBLIC_URL: http://localhost:${SIGNET_PORT:-3000}
-      SIGNET_DATABASE_URL: postgres://signet:signet@postgres:5432/signet
+      # The serving role, which owns nothing and is therefore bound by the tenant
+      # isolation policies. The startup check refuses to serve if this credential
+      # turns out to be exempt, so the stack cannot silently regress to the owner.
+      SIGNET_DATABASE_URL: postgres://signet_app:signet_app@postgres:5432/signet
       # Development only. Never a real deployment's key.
       SIGNET_MASTER_KEY: compose-master-key-not-for-production-0000
       SIGNET_LOG_LEVEL: info

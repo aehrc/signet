@@ -15,6 +15,7 @@
   "scripts": {
     "build": "bun run --filter '*' build",
     "check:bundle": "bun run --filter @signet/server build && node scripts/checkBundle.mjs apps/server/dist/index.js",
+    "check:chart": "node scripts/checkChartCredentials.mjs",
     "dev": "bun run --filter '*' dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

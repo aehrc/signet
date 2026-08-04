@@ -34,7 +34,11 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           command: ["node", "dist/index.js", "migrate"]
           env:
-            {{- include "signet.env" . | nindent 12 }}
+            # The only pod spec in this chart carrying the owning identity. The
+            # server's Deployment gets `signet.env`, which is the serving role and
+            # nothing else, and `scripts/checkChartCredentials.mjs` asserts the
+            # difference against the rendered output.
+            {{- include "signet.migrationEnv" . | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

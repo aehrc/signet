@@ -21,11 +21,35 @@ publicUrl: https://signet.example.org
 
 logLevel: info
 
+# A deployment runs two database identities, and keeping them apart is what makes
+# the tenant isolation policies bind Signet at all.
+#
+#   - The serving role is what the server connects as. It must own none of
+#     Signet's tables: Postgres exempts a table's owner from that table's
+#     row-level security policies, so a server connecting as the owner would be
+#     unconstrained by them. The server verifies this at startup and refuses to
+#     serve if the role it is given is exempt.
+#   - The owning identity applies migrations and issues the grants that follow
+#     them. It reaches only the migration Job, never the server's pods.
+#
+# With the bundled subchart, both already exist and nothing has to be created:
+# `postgresql.auth.username` below is the serving role, and the subchart's
+# `postgres` superuser is the owning identity. Pointing at an external database
+# means creating the serving role yourself and supplying both URLs here; see the
+# tenant isolation section of docs/operations.md for the statements.
 database:
   # Ignored when postgresql.enabled is true.
   existingSecret: ""
   existingSecretKey: url
+  # The serving role's connection URL.
   url: ""
+  # The owning identity, read only by the migration Job. Required when
+  # postgresql.enabled is false, and it must name a different role from the one
+  # above - `migrate` refuses two URLs naming the same role, because that
+  # deployment could not enforce isolation.
+  ownerExistingSecret: ""
+  ownerExistingSecretKey: ownerUrl
+  ownerUrl: ""
 
 # Envelope key protecting endpoint signing keys at rest. Never set this in
 # values for a real deployment - supply it through existingSecret.
@@ -109,10 +133,18 @@ extraEnv: []
 postgresql:
   enabled: true
   auth:
+    # The serving role. A custom user in this subchart owns the database but none
+    # of the tables in it, because the migrations are applied by the superuser
+    # below - which is what leaves the policies applying to this role.
     username: signet
     database: signet
     # Leave unset to have the subchart generate a password.
     password: ""
+    # The owning identity, used by the migration Job alone. Leave unset to have
+    # the subchart generate one. A password supplied here reaches the Job as part
+    # of a connection URL, so it must be URL-safe; pass a complete URL through
+    # `database.ownerExistingSecret` if it is not.
+    postgresPassword: ""
   primary:
     persistence:
       enabled: true

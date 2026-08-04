@@ -1,0 +1,25 @@
+-- Creates the role the server connects as.
+--
+-- Signet must not connect as the identity that owns its tables: Postgres exempts
+-- a table's owner from that table's row-level security policies, so a server
+-- connecting as the owner is unconstrained by the tenant isolation this stack
+-- exists to demonstrate. The startup check in the Signet container refuses to
+-- serve when its role turns out to be exempt, so getting this wrong fails the
+-- stack rather than quietly weakening it.
+--
+-- Run once by the `postgres` image, which executes every file in
+-- `/docker-entrypoint-initdb.d` in name order when the data directory is empty.
+-- It therefore does not run on a stack brought up over an existing volume, which
+-- is correct: the role already exists there.
+--
+-- Nothing is granted here. The `migrate` command issues the grants immediately
+-- after applying the migrations, as the owning identity and under the same
+-- advisory lock, so a table added by a later migration cannot ship ungranted -
+-- see `packages/db/src/privileges.ts`.
+--
+-- The password is a development credential in a repository. It is not a secret
+-- and is not treated as one; a real deployment supplies its own.
+--
+-- Author: John Grimes
+
+create role signet_app login password 'signet_app';
