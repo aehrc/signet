@@ -1,16 +1,33 @@
 /**
- * The scheduled expiry sweep.
+ * The scheduled expiry sweep - the one job in Signet that acts across tenants.
  *
  * Every runtime table stores an `expires_at`, and every credential is refused on the
  * strength of that column rather than of its absence from the table - so a sweep
- * removes storage, never permission. That is what makes it safe for the one job in
- * Signet that has no tenant: the predicates are properties of the rows themselves,
- * they can only match rows that are already unusable, and nothing but a count is
- * returned.
+ * removes storage, never permission. That is what makes a job with no tenant
+ * acceptable: the predicates are properties of the rows themselves, they can only
+ * match rows that are already unusable, and nothing but a count is returned.
  *
  * The one exception is deliberately *not* here: access token records are a
  * revocation list, and deleting one early would un-revoke a live token. Their sweep
  * takes an explicit cut-off, and the caller is expected to leave a grace period.
+ *
+ * ## Which identity this needs, and why it cannot be the server's
+ *
+ * The owning identity. Acting across tenants is exactly what the serving role must
+ * not be able to do, so this is not a capability the running server has: reached
+ * with the serving role, every statement below matches nothing, because the
+ * policies hide every row from a connection that has declared no tenant. That is
+ * asserted in `./repositories.integration.test.ts`, and it is the reason the
+ * function can safely remain callable at all - there is no partial outcome, and its
+ * existence grants the server nothing.
+ *
+ * ## No caller
+ *
+ * Nothing in `apps/server` invokes this. There is no command, no route and no
+ * scheduler; an operator who wants the sweep run must arrange it against the
+ * owning credential themselves, and `docs/operations.md` says so. Wiring it to a
+ * command and a scheduled job is separate work, deliberately left out of the
+ * feature that made the two identities distinct.
  *
  * Author: John Grimes
  */
@@ -74,6 +91,11 @@ export interface SweepOptions {
  * Not one transaction. Each statement is independent and idempotent, and wrapping
  * a potentially very large multi-table delete in a single transaction on a busy
  * database buys atomicity nobody needs at the cost of a long-held lock footprint.
+ *
+ * @param db - A connection with the owning identity; see the module header. Given
+ *   the serving role every count comes back zero.
+ * @param options - How far back to reach.
+ * @returns How many rows each table gave up.
  */
 export async function sweepExpiredRuntimeRows(
   db: Executor,

@@ -89,6 +89,7 @@ import {
   RLS_TEST_ROLE,
 } from "../test/rlsRole.js";
 import { isTestSchemaReady } from "../test/schemaReady.js";
+import { prepareServingRole, servingRoleUrl } from "../test/servingRole.js";
 
 import type { Executor } from "./executor.js";
 import type {
@@ -1275,6 +1276,105 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   });
 
   describe("the expiry sweep", () => {
+    // Every other test in this file uses `db`, whichever identity that happens to
+    // be. The sweep must not: it is cross-tenant by design, so it is reachable
+    // only with the identity that owns the tables, and a test that relied on `db`
+    // happening to be that identity would stop asserting anything the moment it
+    // was not. So the authority is named here.
+    let ownerSql: ReturnType<typeof postgres> | undefined;
+    let owner: Executor;
+    let servingSql: ReturnType<typeof postgres> | undefined;
+    let serving: Executor;
+
+    beforeAll(async () => {
+      ownerSql = postgres(databaseUrl ?? "", { max: 2, onnotice: () => {} });
+      owner =
+        ownerSql === undefined
+          ? db
+          : (drizzle(ownerSql) as unknown as Executor);
+
+      if (!isTestSchemaReady()) {
+        await prepareServingRole(owner);
+      }
+
+      servingSql = postgres(servingRoleUrl(databaseUrl ?? ""), {
+        max: 2,
+        onnotice: () => {},
+      });
+      serving = drizzle(servingSql) as unknown as Executor;
+    }, 60_000);
+
+    afterAll(async () => {
+      await ownerSql?.end();
+      await servingSql?.end();
+    });
+
+    /** One expired launch handle, one live one, and one expired refresh token. */
+    async function seedForSweep(): Promise<{
+      readonly fixture: Fixture;
+      readonly liveHandle: string;
+    }> {
+      const fixture = await newFixture();
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createLaunchContext(bound, {
+          handleHash: `sweep-old-${unique()}`,
+          context: {},
+          expiresAt: new Date(Date.now() - 1000),
+        }),
+      );
+      const liveHandle = `sweep-live-${unique()}`;
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createLaunchContext(bound, {
+          handleHash: liveHandle,
+          context: {},
+          expiresAt: new Date(Date.now() + 600_000),
+        }),
+      );
+      await withTenantScope(db, fixture.clientScope, (bound) =>
+        issueRefreshToken(bound, {
+          tokenHash: `sweep-refresh-${unique()}`,
+          subject: "user-1",
+          scope: "patient/Observation.rs",
+          expiresAt: new Date(Date.now() - 1000),
+        }),
+      );
+      return { fixture, liveHandle };
+    }
+
+    it("affects no rows when the serving role attempts it", async () => {
+      // The converse of the test below, and the reason it is safe for the serving
+      // role to be able to call the sweep at all. The policies hide every row from
+      // a connection that has declared no tenant, so a cross-tenant delete issued
+      // by the serving role deletes nothing rather than some of it - there is no
+      // partial outcome to reason about.
+      const { fixture, liveHandle } = await seedForSweep();
+
+      const counts = await sweepExpiredRuntimeRows(serving);
+
+      expect(counts).toEqual({
+        launchContexts: 0,
+        authorizationCodes: 0,
+        authorizationSessions: 0,
+        accessTokens: 0,
+        refreshTokens: 0,
+        consents: 0,
+        jtiReplay: 0,
+        adminSessions: 0,
+        endUserSessions: 0,
+      });
+
+      // And the expired rows it could not see are still there for the owner to
+      // sweep, so the empty result was the policies rather than an empty database.
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          findLaunchContext(bound, liveHandle),
+        ),
+      ).toBeDefined();
+      expect(
+        (await sweepExpiredRuntimeRows(owner)).launchContexts,
+      ).toBeGreaterThanOrEqual(1);
+    });
+
     it("removes expired runtime rows and leaves live ones", async () => {
       const fixture = await newFixture();
       await withTenantScope(db, fixture.endpointScope, (bound) =>
@@ -1301,7 +1401,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         }),
       );
 
-      const counts = await sweepExpiredRuntimeRows(db);
+      const counts = await sweepExpiredRuntimeRows(owner);
       expect(counts.launchContexts).toBeGreaterThanOrEqual(1);
       expect(counts.refreshTokens).toBeGreaterThanOrEqual(1);
 
