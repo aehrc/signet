@@ -44,10 +44,38 @@ const tenantScopeBrand = Symbol("signet.tenantScope");
 const endpointScopeBrand = Symbol("signet.endpointScope");
 const clientScopeBrand = Symbol("signet.clientScope");
 
+/**
+ * The transaction a scope's tenant was declared on.
+ *
+ * The brand and the transaction are one value deliberately: holding the brand is
+ * holding the transaction in which {@link declareTenantScope} declared this
+ * tenant, so there is no way to have one without the other. See
+ * {@link BoundTenantScope}.
+ */
+const boundScopeBrand = Symbol("signet.boundScope");
+
+/**
+ * The session variable every tenant isolation policy reads.
+ *
+ * Declared here rather than in `../rls.ts`, which owns the policies that read it,
+ * because this is the module that writes it - and a constant defined where it is
+ * written keeps the dependency between the two modules pointing one way. `../rls.ts`
+ * re-exports it, so the policies and their readers still name one thing.
+ */
+export const TENANT_SETTING = "signet.tenant_id";
+
 /** Proof that the caller is operating within one tenant. */
 export interface TenantScope {
   /** Unforgeable brand; see the module documentation. */
   readonly [tenantScopeBrand]: true;
+  /**
+   * The transaction this tenant was declared on, when it has been.
+   *
+   * Present only on a {@link BoundTenantScope}. Optional here so that the
+   * narrowing functions can carry it across without a cast; it cannot be written
+   * from outside this module, because the key is a private symbol.
+   */
+  readonly [boundScopeBrand]?: Executor;
   readonly tenantId: string;
   /** The tenant's URL path segment, as in `/t/{slug}`. */
   readonly tenantSlug: string;
@@ -86,6 +114,126 @@ export interface ClientScope extends EndpointScope {
 }
 
 /**
+ * A tenant scope whose tenant has been declared to the database.
+ *
+ * Carries the transaction the declaration was made on, so the established tenant
+ * and the declared tenant are the same value and cannot disagree. Every data-layer
+ * function that touches tenant-owned data takes one of these rather than a
+ * connection and a scope: a query with no declared tenant does not compile, and
+ * neither does one that declares tenant A and filters for tenant B, because there
+ * is no expression naming both.
+ *
+ * Obtained only from {@link declareTenantScope} - in practice from
+ * `withTenantScope` in `../rls.ts`, which opens the transaction it is declared on.
+ */
+export interface BoundTenantScope extends TenantScope {
+  /** The transaction this tenant was declared on. */
+  readonly [boundScopeBrand]: Executor;
+}
+
+/**
+ * An endpoint scope whose tenant has been declared; see {@link BoundTenantScope}.
+ *
+ * An intersection rather than an interface: the brand is optional on
+ * {@link TenantScope} so that the narrowing functions can carry it across without
+ * a cast, and an interface cannot narrow an inherited optional member to a
+ * required one.
+ */
+export type BoundEndpointScope = EndpointScope & BoundTenantScope;
+
+/** A client scope whose tenant has been declared; see {@link BoundTenantScope}. */
+export type BoundClientScope = ClientScope & BoundTenantScope;
+
+/**
+ * Whether a scope's tenant has been declared to the database.
+ *
+ * @param scope - Any scope.
+ * @returns True when it carries a transaction the tenant was declared on.
+ * @example
+ * ```ts
+ * // `withTenantScope` uses this to reuse a declaration rather than repeat it.
+ * if (isBoundScope(scope)) {
+ *   return await work(scope);
+ * }
+ * ```
+ */
+export function isBoundScope<S extends TenantScope>(
+  scope: S,
+): scope is S & BoundTenantScope {
+  return scope[boundScopeBrand] !== undefined;
+}
+
+/**
+ * The transaction a bound scope declared its tenant on.
+ *
+ * Every tenant-owned read and write goes through this, which is what makes the
+ * declared tenant and the queried tenant the same value rather than two values a
+ * caller has to keep in step.
+ *
+ * @param scope - A bound scope.
+ * @returns The transaction to issue tenant-owned reads and writes on.
+ */
+export function executorFor(scope: BoundTenantScope): Executor {
+  return scope[boundScopeBrand];
+}
+
+/**
+ * Copies a binding onto a narrowed scope, when the scope it narrows has one.
+ *
+ * Written as a copy rather than a spread of the whole source, because spreading an
+ * endpoint or client scope into a narrower one would carry the source's own
+ * identifiers - and a stale `clientRowId` under an intact brand is exactly the
+ * mismatch the brands exist to make impossible.
+ */
+function carryBinding<S extends TenantScope>(
+  narrowed: S,
+  from: TenantScope,
+): S {
+  const executor = from[boundScopeBrand];
+  return executor === undefined
+    ? narrowed
+    : { ...narrowed, [boundScopeBrand]: executor };
+}
+
+/**
+ * Declares a scope's tenant on a transaction, and returns the two as one value.
+ *
+ * The declaration and the brand are inseparable by construction: this is the only
+ * function that produces a {@link BoundTenantScope}, and it does so only after
+ * issuing the `set_config` that the policies read. A scope that claims a tenant is
+ * declared therefore had it declared, on the transaction it carries.
+ *
+ * `tx` must be a transaction. `set_config(..., true)` outside a transaction block
+ * affects nothing at all, silently, so a caller handing over a pooled connection
+ * would get a scope whose reads see nothing - which is fail-closed but a poor
+ * diagnostic. `withTenantScope` in `../rls.ts` is the intended caller, and it opens
+ * the transaction itself.
+ *
+ * @param tx - The transaction to declare on.
+ * @param scope - The tenant, endpoint or client scope to declare.
+ * @returns The same scope, bound to `tx`.
+ * @example
+ * ```ts
+ * await db.transaction(async (tx) => {
+ *   const bound = await declareTenantScope(tx, scope);
+ *   return await listEndpoints(bound);
+ * });
+ * ```
+ */
+export async function declareTenantScope<S extends TenantScope>(
+  tx: Executor,
+  scope: S,
+): Promise<S & BoundTenantScope> {
+  // A bound parameter, not string interpolation: `SET LOCAL` does not accept
+  // parameters, and building that statement by concatenation would put a value
+  // into SQL text on the one code path whose whole job is to enforce a boundary.
+  await tx.execute(
+    sql`select set_config(${TENANT_SETTING}, ${scope.tenantId}, true)`,
+  );
+  return { ...scope, [boundScopeBrand]: tx };
+}
+
+/**
  * Thrown when a row is offered to a scope constructor that does not own it.
  *
  * This is a programming error rather than a user-facing condition: it means two
@@ -121,7 +269,18 @@ export function tenantScopeFromRow(tenant: Tenant): TenantScope {
  * Throws {@link TenantScopeViolationError} when the endpoint belongs to a
  * different tenant. That check is what makes every later `endpoint_id`-only
  * predicate sound.
+ *
+ * A bound scope narrows to a bound scope: the endpoint belongs to the tenant that
+ * was declared, so the declaration still holds and there is nothing to re-declare.
  */
+export function endpointScopeFromRow(
+  scope: BoundTenantScope,
+  endpoint: Endpoint,
+): BoundEndpointScope;
+export function endpointScopeFromRow(
+  scope: TenantScope,
+  endpoint: Endpoint,
+): EndpointScope;
 export function endpointScopeFromRow(
   scope: TenantScope,
   endpoint: Endpoint,
@@ -132,14 +291,17 @@ export function endpointScopeFromRow(
     );
   }
 
-  return {
-    [tenantScopeBrand]: true,
-    [endpointScopeBrand]: true,
-    tenantId: scope.tenantId,
-    tenantSlug: scope.tenantSlug,
-    endpointId: endpoint.id,
-    endpointSlug: endpoint.slug,
-  };
+  return carryBinding(
+    {
+      [tenantScopeBrand]: true,
+      [endpointScopeBrand]: true,
+      tenantId: scope.tenantId,
+      tenantSlug: scope.tenantSlug,
+      endpointId: endpoint.id,
+      endpointSlug: endpoint.slug,
+    },
+    scope,
+  );
 }
 
 /**
@@ -150,6 +312,14 @@ export function endpointScopeFromRow(
  * that looked one up without an endpoint predicate could otherwise hold a client
  * from another tenant entirely; this is where that is caught.
  */
+export function clientScopeFromRow(
+  scope: BoundEndpointScope,
+  client: Client,
+): BoundClientScope;
+export function clientScopeFromRow(
+  scope: EndpointScope,
+  client: Client,
+): ClientScope;
 export function clientScopeFromRow(
   scope: EndpointScope,
   client: Client,

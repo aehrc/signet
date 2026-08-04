@@ -7,14 +7,25 @@ import { PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
+  endpointScopeFromRow,
+  executorFor,
+  isBoundScope,
+  tenantScopeFromRow,
+} from "./repositories/scope.js";
+import {
   RLS_EXEMPT_TABLES,
   RLS_TABLES,
   rowLevelSecurityScript,
   rowLevelSecurityStatements,
   TENANT_POLICY_NAME,
   TENANT_SETTING,
+  withTenantScope,
 } from "./rls.js";
 import * as schema from "./schema/index.js";
+import { createFakeExecutor } from "./test/fakeExecutor.js";
+
+import type { Endpoint } from "./schema/endpoints.js";
+import type { Tenant } from "./schema/tenancy.js";
 
 /** Every table the schema actually declares, by its SQL name. */
 const schemaTables = Object.values<unknown>(schema)
@@ -197,5 +208,103 @@ describe("rowLevelSecurityScript", () => {
     const lines = script.trimEnd().split("\n");
     expect(lines.length).toBeGreaterThan(RLS_TABLES.length);
     expect(script.endsWith(";\n")).toBe(true);
+  });
+});
+
+describe("withTenantScope", () => {
+  const AT = new Date("2026-01-01T00:00:00.000Z");
+  const tenant: Tenant = {
+    id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    slug: "demo",
+    name: "Demo",
+    createdAt: AT,
+    updatedAt: AT,
+  };
+  /** An endpoint row reduced to what the scope constructors read. */
+  const endpoint = {
+    id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+    tenantId: tenant.id,
+    slug: "e1",
+  } as Endpoint;
+
+  it("hands the work a scope bound to the transaction it opened", async () => {
+    const fake = createFakeExecutor();
+    const scope = tenantScopeFromRow(tenant);
+
+    const bound = await withTenantScope(fake.db, scope, (inner) =>
+      Promise.resolve(inner),
+    );
+
+    expect(isBoundScope(bound)).toBe(true);
+    expect(bound.tenantId).toBe(tenant.id);
+    // The transaction, not the connection: a bound scope that carried the pool
+    // would issue its reads outside the transaction that declared the tenant.
+    expect(executorFor(bound)).toBe(fake.transactions[0]);
+    expect(fake.transactions).toHaveLength(1);
+  });
+
+  it("declares the tenant inside that transaction, as a parameter", async () => {
+    const fake = createFakeExecutor();
+
+    await withTenantScope(fake.db, tenantScopeFromRow(tenant), () =>
+      Promise.resolve(undefined),
+    );
+
+    expect(fake.statements).toEqual([
+      {
+        text: "select set_config($1, $2, true)",
+        params: [TENANT_SETTING, tenant.id],
+      },
+    ]);
+    // The uuid must not appear in the SQL text; see the module header.
+    expect(fake.statements[0]?.text).not.toContain(tenant.id);
+  });
+
+  it("asks for a transaction-local declaration, which cannot outlive the work", async () => {
+    const fake = createFakeExecutor();
+
+    await withTenantScope(fake.db, tenantScopeFromRow(tenant), () =>
+      Promise.resolve(undefined),
+    );
+
+    // `set_config(..., true)` is released when the transaction ends, so the next
+    // request to borrow this pooled connection inherits nothing. That it is
+    // actually gone afterwards is asserted against a real database in
+    // `rls.enforcement.integration.test.ts`.
+    expect(fake.statements[0]?.text.endsWith(", true)")).toBe(true);
+  });
+
+  it("keeps the scope's narrowing, so an endpoint scope stays one", async () => {
+    const fake = createFakeExecutor();
+    const endpointScope = endpointScopeFromRow(
+      tenantScopeFromRow(tenant),
+      endpoint,
+    );
+
+    const bound = await withTenantScope(fake.db, endpointScope, (inner) =>
+      Promise.resolve(inner),
+    );
+
+    expect(bound.endpointId).toBe(endpoint.id);
+    expect(isBoundScope(bound)).toBe(true);
+  });
+
+  it("reuses an existing binding rather than declaring a second time", async () => {
+    const fake = createFakeExecutor();
+    const outer = await withTenantScope(
+      fake.db,
+      tenantScopeFromRow(tenant),
+      (inner) => Promise.resolve(inner),
+    );
+
+    const inner = await withTenantScope(fake.db, outer, (nested) =>
+      Promise.resolve(nested),
+    );
+
+    // The property FR-006 names: a data-layer function calling another must reuse
+    // the tenant already declared rather than opening a second transaction.
+    expect(inner).toBe(outer);
+    expect(fake.transactions).toHaveLength(1);
+    expect(fake.statements).toHaveLength(1);
   });
 });

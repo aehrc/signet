@@ -6,10 +6,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   clientScopeFromRow,
+  declareTenantScope,
   endpointScopeFromRow,
+  executorFor,
+  isBoundScope,
+  TENANT_SETTING,
   tenantScopeFromRow,
   TenantScopeViolationError,
 } from "./scope.js";
+import { createFakeExecutor } from "../test/fakeExecutor.js";
 
 import type { Client } from "../schema/clients.js";
 import type { Endpoint } from "../schema/endpoints.js";
@@ -114,6 +119,127 @@ describe("clientScopeFromRow", () => {
   it("refuses a client registered on another endpoint", () => {
     // The case that matters: client_id is globally unique, so a lookup without an
     // endpoint predicate can return a client from an entirely different tenant.
+    expect(() =>
+      clientScopeFromRow(endpointScope, clientRow("c-1", "e-2")),
+    ).toThrow(TenantScopeViolationError);
+  });
+});
+
+describe("declareTenantScope", () => {
+  it("returns a scope carrying the tenant it declared", async () => {
+    const fake = createFakeExecutor();
+    const bound = await declareTenantScope(fake.db, tenantScopeFromRow(tenant));
+
+    expect(bound.tenantId).toBe(tenant.id);
+    expect(bound.tenantSlug).toBe("demo");
+    // The transaction and the established tenant are now one value, which is
+    // what makes it impossible to declare one tenant and query for another.
+    expect(executorFor(bound)).toBe(fake.db);
+  });
+
+  it("declares the tenant with the value bound as a parameter", async () => {
+    const fake = createFakeExecutor();
+    await declareTenantScope(fake.db, tenantScopeFromRow(tenant));
+
+    // Not interpolated: this is the one statement whose entire job is to enforce
+    // a boundary, so the tenant must not reach it as SQL text.
+    expect(fake.statements).toEqual([
+      {
+        text: "select set_config($1, $2, true)",
+        params: [TENANT_SETTING, tenant.id],
+      },
+    ]);
+  });
+
+  it("asks for a transaction-local setting, so it cannot outlive the work", async () => {
+    const fake = createFakeExecutor();
+    await declareTenantScope(fake.db, tenantScopeFromRow(tenant));
+
+    // The third argument to set_config is what releases the setting at the end of
+    // the transaction, so the next request to borrow the pooled connection cannot
+    // inherit this tenant.
+    expect(fake.statements[0]?.text).toContain(", true)");
+  });
+
+  it("marks the scope as bound, which no hand-built object is", async () => {
+    const fake = createFakeExecutor();
+    const unbound = tenantScopeFromRow(tenant);
+
+    expect(isBoundScope(unbound)).toBe(false);
+    expect(isBoundScope(await declareTenantScope(fake.db, unbound))).toBe(true);
+
+    // The brand is a module-private symbol holding the transaction itself, so a
+    // bound scope cannot be assembled from data - only obtained by declaring.
+    const forged = {
+      ...unbound,
+      tenantId: tenant.id,
+      tenantSlug: "demo",
+    } as unknown as Parameters<typeof isBoundScope>[0];
+    expect(isBoundScope(forged)).toBe(false);
+  });
+
+  it("keeps the transaction out of the scope's enumerable data", async () => {
+    const fake = createFakeExecutor();
+    const bound = await declareTenantScope(fake.db, tenantScopeFromRow(tenant));
+
+    // A symbol key, like the other brands: a bound scope still serialises to the
+    // two fields it carries, and a transaction cannot end up in a response body.
+    expect(Object.keys(bound)).toEqual(["tenantId", "tenantSlug"]);
+    expect(JSON.stringify(bound)).toBe(
+      `{"tenantId":"${tenant.id}","tenantSlug":"demo"}`,
+    );
+  });
+});
+
+describe("narrowing a bound scope", () => {
+  it("preserves the binding through an endpoint and then a client", async () => {
+    const fake = createFakeExecutor();
+    const bound = await declareTenantScope(fake.db, tenantScopeFromRow(tenant));
+
+    const endpointScope = endpointScopeFromRow(
+      bound,
+      endpointRow("e-1", tenant.id),
+    );
+    expect(isBoundScope(endpointScope)).toBe(true);
+    expect(executorFor(endpointScope)).toBe(fake.db);
+
+    const clientScope = clientScopeFromRow(
+      endpointScope,
+      clientRow("c-1", "e-1"),
+    );
+    expect(isBoundScope(clientScope)).toBe(true);
+    expect(executorFor(clientScope)).toBe(fake.db);
+    // Narrowing must not have declared anything a second time.
+    expect(fake.statements).toHaveLength(1);
+  });
+
+  it("leaves an unbound scope unbound", () => {
+    // Narrowing is not a way to acquire a binding: an endpoint scope narrowed
+    // from a scope that declared nothing still has nothing declared.
+    const endpointScope = endpointScopeFromRow(
+      tenantScopeFromRow(tenant),
+      endpointRow("e-1", tenant.id),
+    );
+    expect(isBoundScope(endpointScope)).toBe(false);
+  });
+
+  it("still refuses a row belonging to another tenant", async () => {
+    const fake = createFakeExecutor();
+    const bound = await declareTenantScope(fake.db, tenantScopeFromRow(tenant));
+
+    // The binding does not replace the ownership check: a bound transaction is
+    // proof of which tenant was declared, not proof that this row is theirs.
+    expect(() =>
+      endpointScopeFromRow(
+        bound,
+        endpointRow("e-1", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+      ),
+    ).toThrow(TenantScopeViolationError);
+
+    const endpointScope = endpointScopeFromRow(
+      bound,
+      endpointRow("e-1", tenant.id),
+    );
     expect(() =>
       clientScopeFromRow(endpointScope, clientRow("c-1", "e-2")),
     ).toThrow(TenantScopeViolationError);

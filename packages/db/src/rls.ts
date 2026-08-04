@@ -1,31 +1,30 @@
 /**
- * Postgres row-level security - the backstop, not the defence.
+ * Postgres row-level security - the second of the two layers that bind Signet.
  *
- * Tenant isolation in Signet is primarily a property of the type system. Every
- * repository function demands a `TenantScope`, `EndpointScope` or `ClientScope`,
- * none of which can be written down by hand, so a query that has not proved which
- * tenant it belongs to does not compile. That is the defence, and it is first
+ * Tenant isolation is a property of the type system first. Every data-layer
+ * function demands a `BoundTenantScope`, `BoundEndpointScope` or
+ * `BoundClientScope`, none of which can be written down by hand, so a query that
+ * has not proved which tenant it belongs to does not compile. That layer is first
  * because it fails at build time, in every environment, whether or not anybody
- * remembered to configure anything.
+ * remembered to configure anything, and because a compiler naming a file and a
+ * line is a better diagnostic than a query that quietly returns nothing.
  *
- * Row-level security binds a different set of callers, and it is important to be
- * exact about which, because the obvious reading is wrong.
+ * The policies below are what make the database refuse the same query rather than
+ * trust that the types prevented it from being written. They bind every connection
+ * the role of which is not exempt - a `psql` session, a reporting job, an analytics
+ * tool, a service added later, none of which passes through the compiler at all -
+ * and, since this feature, Signet's own. Signet connects as a non-owning serving
+ * role, because Postgres exempts a table's owner from its policies; the owning
+ * identity is used only where it is unavoidable, which is `migrate` and the
+ * cross-tenant expiry sweep. `../enforcement.ts` refuses to start a server whose
+ * role turns out to be exempt after all, since that is a configuration mistake no
+ * code review could catch.
  *
- * Postgres exempts a table's owner from its policies, and Signet connects as the
- * owner. That is deliberate rather than an oversight: the admin API works out the
- * set of tenants a session may see before any tenant is known, the expiry sweep
- * is cross-tenant by design, and migrations must be able to alter every table. A
- * process pinned to one tenant per connection could not serve those paths. So the
- * policies below do *not* constrain the Signet process, and they are not what
- * stops a hand-written query inside it - the scope types are, and they fail the
- * build rather than the request.
- *
- * What the policies constrain is every *other* connection to the database: a
- * `psql` session, a reporting job, an analytics tool, a backup verification
- * script, a service added later. None of those passes through the compiler at
- * all, which is precisely why they need the database to refuse them. They must
- * connect as a non-owning role for the policies to apply; `docs/operations.md`
- * has the role recipe.
+ * Three reads cannot declare a tenant, because they are what establishes one:
+ * resolving `/t/{slug}`, resolving a personal access token's digest, and answering
+ * which tenants a signed-in console user may see. They reach past the policies
+ * through the `security definer` routines declared in `./privileges.ts`, so the
+ * process holds no handle that can read an arbitrary tenant.
  *
  * Neither layer substitutes for the other, and neither may be dropped because the
  * other exists. See the second principle in `CLAUDE.md`.
@@ -38,16 +37,11 @@
  * the variable sees no tenant-owned rows at all. Fail-closed: forgetting the
  * setting produces an obviously empty result, never a quietly cross-tenant one.
  *
- * {@link withTenantScope} sets it, and nothing calls that function today. That
- * follows from the paragraphs above rather than being an omission: Signet
- * connects as the owner, so setting the variable would change nothing about what
- * its queries return, and there is no other non-owning consumer in this
- * repository. It exists for one that is added later.
- *
- * The suite that proves the policies work does not use it either, and cannot: it
- * has to `set local role` in the same transaction to become a role the policies
- * apply to, so it sets the variable inline alongside that - see `asTenant` in
- * `./repositories/repositories.integration.test.ts`.
+ * {@link withTenantScope} is what sets it, and
+ * `declareTenantScope` in `./repositories/scope.ts` issues the statement. The two
+ * are one mechanism: the value that proves a tenant was resolved is the same value
+ * that carries the transaction the tenant was declared on, so the established
+ * tenant and the declared tenant cannot disagree.
  *
  * The value is bound as a parameter to `set_config`, not interpolated into a
  * `SET LOCAL` statement, because `SET LOCAL` does not accept parameters and
@@ -56,9 +50,9 @@
  *
  * `set_config(..., true)` is transaction-local, so the setting is released when the
  * transaction ends and cannot leak to the next request that borrows the pooled
- * connection. That is why this function opens a transaction rather than setting the
- * variable on the connection: `SET LOCAL` outside a transaction block affects
- * nothing at all, silently.
+ * connection. That is why {@link withTenantScope} opens a transaction rather than
+ * setting the variable on the connection: `SET LOCAL` outside a transaction block
+ * affects nothing at all, silently.
  *
  * ## Deployment
  *
@@ -66,24 +60,36 @@
  * is generated from this file, so running `migrate` is all a deployment does to
  * get them. `rls.migration.test.ts` asserts they are actually in the migration
  * folder rather than merely generatable, which is the failure this file once had.
+ * `rls.enforcement.integration.test.ts` then asserts they bite for the serving
+ * role, per covered table, unbound and bound.
  *
- * `force: true` additionally subjects the owner to the policies. That is the
- * stricter posture, and it is not what Signet runs: it would require every
- * cross-tenant path - the sweep, the admin API's tenant resolution, the
- * migrations themselves - to hold `BYPASSRLS` or to set the variable, which is
- * the design the paragraphs above explain Signet does not have. It is offered for
- * a deployment that wants it and is prepared to arrange those roles.
+ * `force: true` additionally subjects the owner to the policies. It stays off:
+ * forcing would subject the owning identity to them too, which breaks the
+ * cross-tenant sweep and the migrations themselves, and it buys nothing once the
+ * serving role is non-owning and the startup check refuses an exempt one. It is
+ * offered for a deployment that wants it and is prepared to arrange those roles.
  *
  * Author: John Grimes
  */
 
 import { sql } from "drizzle-orm";
 
-import type { Executor } from "./repositories/executor.js";
-import type { TenantScope } from "./repositories/scope.js";
+import {
+  declareTenantScope,
+  isBoundScope,
+  TENANT_SETTING,
+} from "./repositories/scope.js";
 
-/** The session variable every policy reads. */
-export const TENANT_SETTING = "signet.tenant_id";
+import type { Executor } from "./repositories/executor.js";
+import type { BoundTenantScope, TenantScope } from "./repositories/scope.js";
+
+/**
+ * The session variable every policy reads.
+ *
+ * Defined in `./repositories/scope.js`, which is the module that writes it, and
+ * re-exported here because the policies below are what read it.
+ */
+export { TENANT_SETTING } from "./repositories/scope.js";
 
 /** The name every policy is created under, so it can be replaced idempotently. */
 export const TENANT_POLICY_NAME = "signet_tenant_isolation";
@@ -266,33 +272,48 @@ export async function applyRowLevelSecurity(
 }
 
 /**
- * Runs work in a transaction that the tenant policies will accept.
+ * Runs work in a transaction that has declared the scope's tenant.
  *
  * The scope is the proof that a tenant was resolved; this makes the database agree
- * with it. Use it to wrap a request's data access when the application connects as
- * a role that policies apply to:
+ * with it, and hands the work back a scope that carries both facts as one value:
  *
  * ```ts
- * const endpoints = await withTenantScope(db, scope, (tx) =>
- *   listEndpoints(tx, scope),
+ * const endpoints = await withTenantScope(db, scope, (bound) =>
+ *   listEndpoints(bound),
  * );
  * ```
  *
- * The setting is transaction-local, so it is gone when this returns and cannot
+ * Handed a scope that is already bound, it reuses the declaration: the work runs on
+ * the transaction already open, with no second `set_config` and no nested
+ * transaction. That is what makes a data-layer function safe to call from another
+ * one, and it is why the binding is carried by the scope rather than inferred from
+ * "a transaction is open" - a transaction bound to another tenant is exactly the
+ * bug this exists to prevent, so it cannot be a safe thing to reuse blindly.
+ *
+ * The declaration is transaction-local, so it is gone when this returns and cannot
  * follow the pooled connection into the next request.
+ *
+ * @param db - The connection to open a transaction on. Not consulted when `scope`
+ *   is already bound, since the transaction it carries is the one to use.
+ * @param scope - The tenant, endpoint or client scope the work acts for.
+ * @param work - What to run, given the scope bound to the declaring transaction.
+ * @returns Whatever the work returns.
  */
-export async function withTenantScope<T>(
+export async function withTenantScope<S extends TenantScope, T>(
   db: Executor,
-  scope: TenantScope,
-  work: (tx: Executor) => Promise<T>,
+  scope: S,
+  work: (bound: S & BoundTenantScope) => Promise<T>,
 ): Promise<T> {
-  return await db.transaction(async (tx) => {
-    // A bound parameter, not string interpolation; see the module header.
-    await tx.execute(
-      sql`select set_config(${TENANT_SETTING}, ${scope.tenantId}, true)`,
-    );
-    return await work(tx);
-  });
+  if (isBoundScope(scope)) {
+    // Already declared, so `db` is not consulted: opening a second transaction
+    // here would give the inner work its own atomicity boundary, and declaring a
+    // second time would be a statement that changes nothing.
+    return await work(scope);
+  }
+
+  return await db.transaction(
+    async (tx) => await work(await declareTenantScope(tx, scope)),
+  );
 }
 
 /**
