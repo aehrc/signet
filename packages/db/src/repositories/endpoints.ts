@@ -30,6 +30,7 @@ import type {
   NewEndpoint,
   NewIdpConfig,
 } from "../schema/endpoints.js";
+import type { SQL } from "drizzle-orm";
 
 /**
  * The caller-supplied half of an endpoint.
@@ -66,19 +67,31 @@ export async function listEndpoints(
     .orderBy(endpoints.slug);
 }
 
+/**
+ * Reads the one endpoint a predicate selects within the scoped tenant.
+ *
+ * Written once, so that the tenant predicate cannot be present on the lookup by
+ * identifier and absent on the lookup by slug. The two public readers differ only
+ * in which column names the row.
+ */
+async function selectEndpoint(
+  scope: BoundTenantScope,
+  identifies: SQL | undefined,
+): Promise<Endpoint | undefined> {
+  const [row] = await executorFor(scope)
+    .select()
+    .from(endpoints)
+    .where(and(eq(endpoints.tenantId, scope.tenantId), identifies))
+    .limit(1);
+  return row;
+}
+
 /** Reads one of the scoped tenant's endpoints by identifier. */
 export async function getEndpoint(
   scope: BoundTenantScope,
   endpointId: string,
 ): Promise<Endpoint | undefined> {
-  const [row] = await executorFor(scope)
-    .select()
-    .from(endpoints)
-    .where(
-      and(eq(endpoints.tenantId, scope.tenantId), eq(endpoints.id, endpointId)),
-    )
-    .limit(1);
-  return row;
+  return await selectEndpoint(scope, eq(endpoints.id, endpointId));
 }
 
 /** Reads one of the scoped tenant's endpoints by `/e/{slug}` segment. */
@@ -86,14 +99,7 @@ export async function getEndpointBySlug(
   scope: BoundTenantScope,
   slug: string,
 ): Promise<Endpoint | undefined> {
-  const [row] = await executorFor(scope)
-    .select()
-    .from(endpoints)
-    .where(
-      and(eq(endpoints.tenantId, scope.tenantId), eq(endpoints.slug, slug)),
-    )
-    .limit(1);
-  return row;
+  return await selectEndpoint(scope, eq(endpoints.slug, slug));
 }
 
 /**

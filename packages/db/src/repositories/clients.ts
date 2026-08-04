@@ -14,12 +14,13 @@
 import { and, asc, eq } from "drizzle-orm";
 
 import { requireRow } from "./rows.js";
-import { executorFor } from "./scope.js";
+import { clientScopeFromRow, executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { clients } from "../schema/clients.js";
 
 import type { BoundClientScope, BoundEndpointScope } from "./scope.js";
 import type { Client, NewClient } from "../schema/clients.js";
+import type { SQL } from "drizzle-orm";
 
 /** The caller-supplied half of a client registration. */
 export type ClientInput = Omit<
@@ -62,17 +63,31 @@ export async function listClients(
     .orderBy(asc(clients.name));
 }
 
+/**
+ * Reads the one client a predicate selects within the scoped endpoint.
+ *
+ * Written once, and the endpoint predicate is why: `clients.client_id` is unique
+ * across the deployment, so a lookup by it that lost the endpoint predicate would
+ * return another tenant's client rather than nothing.
+ */
+async function selectClient(
+  scope: BoundEndpointScope,
+  identifies: SQL | undefined,
+): Promise<Client | undefined> {
+  const [row] = await executorFor(scope)
+    .select()
+    .from(clients)
+    .where(and(eq(clients.endpointId, scope.endpointId), identifies))
+    .limit(1);
+  return row;
+}
+
 /** Reads one of the scoped endpoint's clients by surrogate identifier. */
 export async function getClient(
   scope: BoundEndpointScope,
   id: string,
 ): Promise<Client | undefined> {
-  const [row] = await executorFor(scope)
-    .select()
-    .from(clients)
-    .where(and(eq(clients.endpointId, scope.endpointId), eq(clients.id, id)))
-    .limit(1);
-  return row;
+  return await selectClient(scope, eq(clients.id, id));
 }
 
 /**
@@ -84,17 +99,41 @@ export async function getClientByClientId(
   scope: BoundEndpointScope,
   clientId: string,
 ): Promise<Client | undefined> {
-  const [row] = await executorFor(scope)
-    .select()
-    .from(clients)
-    .where(
-      and(
-        eq(clients.endpointId, scope.endpointId),
-        eq(clients.clientId, clientId),
-      ),
-    )
-    .limit(1);
-  return row;
+  return await selectClient(scope, eq(clients.clientId, clientId));
+}
+
+/** A client resolved by its OAuth identifier, with its scope. */
+export interface ResolvedClient {
+  readonly scope: BoundClientScope;
+  readonly client: Client;
+}
+
+/**
+ * Resolves the `client_id` presented at `/authorize` or `/token`.
+ *
+ * The endpoint predicate {@link getClientByClientId} applies is re-checked by
+ * {@link clientScopeFromRow}: a client identifier registered on another endpoint
+ * must read as unknown here, not as a client that then fails a later check - the
+ * two are different error responses and different audit events.
+ *
+ * The client's status is deliberately not filtered. A suspended client presenting a
+ * valid secret must be told it is suspended, and that decision is the grant
+ * handler's to make and audit.
+ *
+ * @param scope - The endpoint the client must belong to, bound to the transaction
+ *   that declared its tenant.
+ * @param clientId - The OAuth `client_id` the caller presented.
+ * @returns The client and a scope narrowed to it, or undefined when the endpoint
+ *   has no such client.
+ */
+export async function resolveClientScope(
+  scope: BoundEndpointScope,
+  clientId: string,
+): Promise<ResolvedClient | undefined> {
+  const client = await getClientByClientId(scope, clientId);
+  return client === undefined
+    ? undefined
+    : { scope: clientScopeFromRow(scope, client), client };
 }
 
 /** Reads the client the scope refers to. */

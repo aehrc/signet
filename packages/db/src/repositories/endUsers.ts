@@ -22,6 +22,7 @@ import { endUsers } from "../schema/endpoints.js";
 
 import type { BoundEndpointScope } from "./scope.js";
 import type { Endpoint, EndUser, NewEndUser } from "../schema/endpoints.js";
+import type { SQL } from "drizzle-orm";
 
 /** The caller-supplied half of an end user. */
 export type EndUserInput = Omit<
@@ -52,22 +53,31 @@ export async function listEndUsers(
     .orderBy(asc(endUsers.username));
 }
 
+/**
+ * Reads the one user a predicate selects within the scoped endpoint.
+ *
+ * Written once, so that the endpoint predicate cannot be present on the lookup by
+ * identifier and absent on the lookup by username - which is where it matters
+ * most, since usernames are unique only per endpoint.
+ */
+async function selectEndUser(
+  scope: BoundEndpointScope,
+  identifies: SQL | undefined,
+): Promise<EndUser | undefined> {
+  const [row] = await executorFor(scope)
+    .select()
+    .from(endUsers)
+    .where(and(eq(endUsers.endpointId, scope.endpointId), identifies))
+    .limit(1);
+  return row;
+}
+
 /** Reads one of the scoped endpoint's users. */
 export async function getEndUser(
   scope: BoundEndpointScope,
   endUserId: string,
 ): Promise<EndUser | undefined> {
-  const [row] = await executorFor(scope)
-    .select()
-    .from(endUsers)
-    .where(
-      and(
-        eq(endUsers.endpointId, scope.endpointId),
-        eq(endUsers.id, endUserId),
-      ),
-    )
-    .limit(1);
-  return row;
+  return await selectEndUser(scope, eq(endUsers.id, endUserId));
 }
 
 /**
@@ -85,17 +95,7 @@ export async function findEndUserByUsername(
   scope: BoundEndpointScope,
   username: string,
 ): Promise<EndUser | undefined> {
-  const [row] = await executorFor(scope)
-    .select()
-    .from(endUsers)
-    .where(
-      and(
-        eq(endUsers.endpointId, scope.endpointId),
-        eq(endUsers.username, username),
-      ),
-    )
-    .limit(1);
-  return row;
+  return await selectEndUser(scope, eq(endUsers.username, username));
 }
 
 /**

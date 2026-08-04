@@ -14,6 +14,7 @@ import {
   deleteAdminUser,
   deleteTenant,
   resolveTenantScope,
+  servingRoleUrl,
   withTenantScope,
 } from "@signet/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -89,7 +90,11 @@ describe.skipIf(testDatabaseUrl === undefined)("the bootstrap command", () => {
   let stack: TestStack;
   const suffix = String(process.pid);
   const options = {
-    databaseUrl: testDatabaseUrl ?? "",
+    // The serving credential, which is the whole point: creating the first tenant
+    // and its first owner must be possible without the owning identity, or a
+    // deployment would have to hand the migration credential to a hook Job that
+    // also serves requests.
+    databaseUrl: servingRoleUrl(testDatabaseUrl ?? ""),
     tenantSlug: `bootstrap-${suffix}`,
     tenantName: "Bootstrapped",
     email: `bootstrap-${suffix}@signet.test`,

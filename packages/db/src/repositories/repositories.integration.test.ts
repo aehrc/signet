@@ -8,6 +8,13 @@
  * predicate actually excludes another tenant's rows. Those are properties of SQL
  * statements under concurrency, so they are asserted against a real server.
  *
+ * Every call is made as the serving role, which the tenant isolation policies
+ * apply to. That matters for what these tests mean: with the owning identity they
+ * would pass whether or not a policy were installed, because Postgres exempts a
+ * table's owner. The owning identity appears in two places only - creating the
+ * schema, and the expiry sweep, which is cross-tenant by design and has its own
+ * tests below.
+ *
  * Skipped unless `SIGNET_TEST_DATABASE_URL` names a throwaway database. CI has none
  * yet, and a suite that connected regardless would fail the build.
  *
@@ -18,14 +25,14 @@
  * Author: John Grimes
  */
 
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { TENANT_SETTING, withTenantScope } from "../rls.js";
+import { withTenantScope } from "../rls.js";
 import {
   introspectAccessToken,
   recordAccessToken,
@@ -39,7 +46,11 @@ import {
 } from "./authorizationCodes.js";
 import { createAuthorizationSession } from "./authorizationSessions.js";
 import { approveClientRequest, createClientRequest } from "./clientRequests.js";
-import { createClient, getClientByClientId } from "./clients.js";
+import {
+  createClient,
+  getClientByClientId,
+  resolveClientScope,
+} from "./clients.js";
 import { listLiveConsents, recordConsent, revokeConsent } from "./consents.js";
 import {
   getActiveEndpointKey,
@@ -73,7 +84,6 @@ import {
 import {
   clientScopeFromRow,
   endpointScopeFromRow,
-  resolveClientScope,
   resolveIssuer,
   tenantScopeFromRow,
   TenantScopeViolationError,
@@ -81,13 +91,7 @@ import {
 import { sweepExpiredRuntimeRows } from "./sweep.js";
 import { createTenant } from "./tenants.js";
 import { clients } from "../schema/clients.js";
-import { endpoints } from "../schema/endpoints.js";
-import { launchContexts, refreshTokens } from "../schema/runtime.js";
 import { tenants } from "../schema/tenancy.js";
-import {
-  prepareRowLevelSecurityFixtures,
-  RLS_TEST_ROLE,
-} from "../test/rlsRole.js";
 import { isTestSchemaReady } from "../test/schemaReady.js";
 import { prepareServingRole, servingRoleUrl } from "../test/servingRole.js";
 
@@ -178,25 +182,42 @@ async function newAdmin(db: Executor, email: string): Promise<string> {
 
 describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   let sql_: ReturnType<typeof postgres> | undefined;
+  let ownerSql: ReturnType<typeof postgres> | undefined;
   let connection: ReturnType<typeof drizzle>;
   let db: Executor;
+  /** The owning identity; see `beforeAll`. */
+  let owner: Executor;
   const createdTenantIds: string[] = [];
   let sequence = 0;
 
   beforeAll(async () => {
-    sql_ = postgres(databaseUrl ?? "", { max: 5, onnotice: () => {} });
-    connection = drizzle(sql_);
+    // The owning identity, kept for the schema, for the fixture teardown that
+    // cascades across tenants, and for the sweep's own tests. Nothing this file
+    // asserts on is issued through it.
+    ownerSql = postgres(databaseUrl ?? "", { max: 2, onnotice: () => {} });
+    const ownerConnection = drizzle(ownerSql);
+    owner = ownerConnection;
 
     // See the audit suite: the schema is normally already there, migrated once by
     // the Vitest global setup before any worker started.
     if (!isTestSchemaReady()) {
-      await sql_`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
+      await ownerSql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
       try {
-        await migrate(connection, { migrationsFolder });
+        await migrate(ownerConnection, { migrationsFolder });
+        await prepareServingRole(owner);
       } finally {
-        await sql_`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`;
+        await ownerSql`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`;
       }
     }
+
+    // Every repository call below is made as the serving role - the same
+    // non-owning role a deployment uses - so the results are the results the
+    // policies permit rather than the results the owner is exempt from.
+    sql_ = postgres(servingRoleUrl(databaseUrl ?? ""), {
+      max: 5,
+      onnotice: () => {},
+    });
+    connection = drizzle(sql_);
 
     // `drizzle(sql)` and `Executor` differ in a phantom schema type parameter
     // only; the query surface used here is identical.
@@ -205,17 +226,20 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
   afterEach(async () => {
     // Cascades through every tenant-owned table, so each test starts clean without
-    // truncating anything a parallel suite might be using.
+    // truncating anything a parallel suite might be using. Issued as the owner:
+    // deleting several tenants is cross-tenant work, and the point of the suite is
+    // that the serving role cannot do it.
     while (createdTenantIds.length > 0) {
       const id = createdTenantIds.pop();
       if (id !== undefined) {
-        await connection.delete(tenants).where(eq(tenants.id, id));
+        await owner.delete(tenants).where(eq(tenants.id, id));
       }
     }
   });
 
   afterAll(async () => {
     await sql_?.end();
+    await ownerSql?.end();
   });
 
   /**
@@ -1276,35 +1300,10 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   });
 
   describe("the expiry sweep", () => {
-    // Every other test in this file uses `db`, whichever identity that happens to
-    // be. The sweep must not: it is cross-tenant by design, so it is reachable
-    // only with the identity that owns the tables, and a test that relied on `db`
-    // happening to be that identity would stop asserting anything the moment it
-    // was not. So the authority is named here.
-    let ownerSql: ReturnType<typeof postgres> | undefined;
-    let owner: Executor;
-    let servingSql: ReturnType<typeof postgres> | undefined;
-    let serving: Executor;
-
-    beforeAll(async () => {
-      ownerSql = postgres(databaseUrl ?? "", { max: 2, onnotice: () => {} });
-      owner = drizzle(ownerSql);
-
-      if (!isTestSchemaReady()) {
-        await prepareServingRole(owner);
-      }
-
-      servingSql = postgres(servingRoleUrl(databaseUrl ?? ""), {
-        max: 2,
-        onnotice: () => {},
-      });
-      serving = drizzle(servingSql);
-    }, 60_000);
-
-    afterAll(async () => {
-      await ownerSql?.end();
-      await servingSql?.end();
-    });
+    // The sweep is the one thing in this file that needs the owning identity, and
+    // `db` is deliberately not it: the suite connects as the serving role, so a
+    // test that used `db` here would be asserting the converse below rather than
+    // the sweep itself.
 
     /** One expired launch handle, one live one, and one expired refresh token. */
     async function seedForSweep(): Promise<{
@@ -1346,7 +1345,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       // partial outcome to reason about.
       const { fixture, liveHandle } = await seedForSweep();
 
-      const counts = await sweepExpiredRuntimeRows(serving);
+      const counts = await sweepExpiredRuntimeRows(db);
 
       expect(counts).toEqual({
         launchContexts: 0,
@@ -1407,94 +1406,6 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
           findLaunchContext(bound, liveHandle),
         ),
       ).toBeDefined();
-    });
-  });
-
-  describe("row-level security", () => {
-    /** A login-less role that the policies apply to, unlike the owner. */
-    const ROLE = RLS_TEST_ROLE;
-
-    beforeAll(async () => {
-      // The role and the policies are created by the Vitest global setup, before
-      // any worker starts: all of it is DDL, and DDL taking exclusive table locks
-      // while another worker holds row locks on the same tables is a deadlock. The
-      // fallback covers running this file on its own.
-      if (!isTestSchemaReady()) {
-        await prepareRowLevelSecurityFixtures(db);
-      }
-    }, 60_000);
-
-    /** Runs work as the restricted role, scoped to one tenant. */
-    async function asTenant<T>(
-      scope: TenantScope | undefined,
-      work: (tx: Executor) => Promise<T>,
-    ): Promise<T> {
-      return await db.transaction(async (tx) => {
-        await tx.execute(sql.raw(`set local role ${ROLE}`));
-        if (scope !== undefined) {
-          await tx.execute(
-            sql`select set_config(${TENANT_SETTING}, ${scope.tenantId}, true)`,
-          );
-        }
-        return await work(tx);
-      });
-    }
-
-    it("hides another tenant's rows from a scoped connection", async () => {
-      const mine = await newFixture();
-      const theirs = await newFixture();
-
-      const visible = await asTenant(mine.tenantScope, async (tx) =>
-        tx.select({ id: endpoints.id }).from(endpoints),
-      );
-
-      expect(visible.map((row) => row.id)).toEqual([
-        mine.endpointScope.endpointId,
-      ]);
-      expect(visible.map((row) => row.id)).not.toContain(
-        theirs.endpointScope.endpointId,
-      );
-    });
-
-    it("shows nothing at all when the tenant setting is missing", async () => {
-      await newFixture();
-
-      // Fail-closed: a query that forgot to declare its tenant sees no rows rather
-      // than everyone's.
-      const visible = await asTenant(undefined, async (tx) =>
-        tx.select({ id: endpoints.id }).from(endpoints),
-      );
-      expect(visible).toEqual([]);
-    });
-
-    it("protects rows two joins from their tenant", async () => {
-      const mine = await newFixture();
-      const theirs = await newFixture();
-      await withTenantScope(db, theirs.endpointScope, (bound) =>
-        createLaunchContext(bound, {
-          handleHash: `rls-${unique()}`,
-          context: {},
-          expiresAt: new Date(Date.now() + 600_000),
-        }),
-      );
-      await withTenantScope(db, theirs.clientScope, (bound) =>
-        issueRefreshToken(bound, {
-          tokenHash: `rls-refresh-${unique()}`,
-          subject: "user-1",
-          scope: "patient/Observation.rs",
-          expiresAt: new Date(Date.now() + 600_000),
-        }),
-      );
-
-      const counts = await asTenant(mine.tenantScope, async (tx) => ({
-        handles: await tx
-          .select({ id: launchContexts.id })
-          .from(launchContexts),
-        tokens: await tx.select({ id: refreshTokens.id }).from(refreshTokens),
-      }));
-
-      expect(counts.handles).toEqual([]);
-      expect(counts.tokens).toEqual([]);
     });
   });
 });

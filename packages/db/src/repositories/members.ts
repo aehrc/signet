@@ -21,13 +21,8 @@
 import { and, eq } from "drizzle-orm";
 
 import { wouldRemoveLastOwner } from "./roles.js";
-import { tenantIdForSlug } from "./routines.js";
 import { requireRow } from "./rows.js";
-import {
-  executorFor,
-  tenantScopeFromRow,
-  withDeclaredTenant,
-} from "./scope.js";
+import { executorFor, tenantScopeFromRow, withTenantForSlug } from "./scope.js";
 import { adminUsers, tenantMembers, tenants } from "../schema/tenancy.js";
 
 import type { Executor } from "./executor.js";
@@ -68,12 +63,7 @@ export async function resolveTenantScopeForMember(
   tenantSlug: string,
   adminUserId: string,
 ): Promise<MemberTenantScope | undefined> {
-  const tenantId = await tenantIdForSlug(db, tenantSlug);
-  if (tenantId === undefined) {
-    return undefined;
-  }
-
-  return await withDeclaredTenant(db, tenantId, async (tx) => {
+  return await withTenantForSlug(db, tenantSlug, async (tx, tenantId) => {
     const [row] = await tx
       .select({ tenant: tenants, role: tenantMembers.role })
       .from(tenantMembers)

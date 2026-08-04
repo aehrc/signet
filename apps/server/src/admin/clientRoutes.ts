@@ -50,7 +50,7 @@ import { generateClientId, generateClientSecret } from "./credentials.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
 import { ENDPOINT_PATH } from "./paths.js";
 import { principalAdminUserId } from "./principal.js";
-import { parseBody } from "./requestBody.js";
+import { definedFields, parseBody } from "./requestBody.js";
 import { clientRequestView, clientView } from "./views.js";
 
 import type { AdminEndpointContext } from "../context.js";
@@ -334,9 +334,7 @@ export function registerClientRoutes(
         return body;
       }
 
-      const patch = Object.fromEntries(
-        Object.entries(body).filter(([, value]) => value !== undefined),
-      );
+      const patch = definedFields(body);
       const updated = await withTenantScope(
         context.db,
         clientScopeFromRow(endpointContext.scope, existing),

@@ -40,7 +40,6 @@
 import { and, eq, sql } from "drizzle-orm";
 
 import { tenantIdForSlug } from "./routines.js";
-import { clients } from "../schema/clients.js";
 import { endpoints } from "../schema/endpoints.js";
 import { tenants } from "../schema/tenancy.js";
 
@@ -67,6 +66,28 @@ const clientScopeBrand = Symbol("signet.clientScope");
 const boundScopeBrand = Symbol("signet.boundScope");
 
 /**
+ * A declaration, and whether the transaction that made it is still open.
+ *
+ * A scope can outlive its transaction, and nothing in the type system stops it: a
+ * handler resolves a client inside one transaction and then uses the scope in the
+ * next, which is the ordinary shape of the OAuth code and is correct - the scope is
+ * proof that a tenant was resolved, and that stays true. What is *not* true any more
+ * is the declaration, and a transaction-local setting on a committed transaction is
+ * not merely stale, it is absent: statements issued afterwards run on the pooled
+ * connection with no tenant declared, so a read sees nothing and a write is refused.
+ *
+ * Silently. That is the failure this flag exists to prevent. `live` is cleared when
+ * the declaring transaction ends, so {@link isBoundScope} answers false afterwards
+ * and `withTenantScope` opens a fresh transaction and declares again, and
+ * {@link executorFor} throws rather than issuing a statement that cannot work.
+ */
+interface Binding {
+  readonly executor: Executor;
+  /** False once the declaring transaction has committed or rolled back. */
+  live: boolean;
+}
+
+/**
  * The session variable every tenant isolation policy reads.
  *
  * Declared here rather than in `../rls.ts`, which owns the policies that read it,
@@ -87,7 +108,7 @@ export interface TenantScope {
    * narrowing functions can carry it across without a cast; it cannot be written
    * from outside this module, because the key is a private symbol.
    */
-  readonly [boundScopeBrand]?: Executor;
+  readonly [boundScopeBrand]?: Binding;
   readonly tenantId: string;
   /** The tenant's URL path segment, as in `/t/{slug}`. */
   readonly tenantSlug: string;
@@ -140,7 +161,7 @@ export interface ClientScope extends EndpointScope {
  */
 export interface BoundTenantScope extends TenantScope {
   /** The transaction this tenant was declared on. */
-  readonly [boundScopeBrand]: Executor;
+  readonly [boundScopeBrand]: Binding;
 }
 
 /**
@@ -157,10 +178,14 @@ export type BoundEndpointScope = EndpointScope & BoundTenantScope;
 export type BoundClientScope = ClientScope & BoundTenantScope;
 
 /**
- * Whether a scope's tenant has been declared to the database.
+ * Whether a scope's tenant is declared on a transaction that is still open.
+ *
+ * False for a scope whose declaring transaction has ended, which is why
+ * `withTenantScope` can be handed a scope resolved in an earlier transaction and
+ * do the right thing with it: the declaration is gone, so it makes another.
  *
  * @param scope - Any scope.
- * @returns True when it carries a transaction the tenant was declared on.
+ * @returns True when it carries a live declaration.
  * @example
  * ```ts
  * // `withTenantScope` uses this to reuse a declaration rather than repeat it.
@@ -172,7 +197,7 @@ export type BoundClientScope = ClientScope & BoundTenantScope;
 export function isBoundScope<S extends TenantScope>(
   scope: S,
 ): scope is S & BoundTenantScope {
-  return scope[boundScopeBrand] !== undefined;
+  return scope[boundScopeBrand]?.live === true;
 }
 
 /**
@@ -184,9 +209,33 @@ export function isBoundScope<S extends TenantScope>(
  *
  * @param scope - A bound scope.
  * @returns The transaction to issue tenant-owned reads and writes on.
+ * @throws {Error} When that transaction has already ended. The alternative is a
+ *   statement on the pooled connection with no tenant declared, which reads as an
+ *   empty result rather than as the mistake it is - and a bad diagnostic is the one
+ *   thing the compile-time layer exists to avoid.
  */
 export function executorFor(scope: BoundTenantScope): Executor {
-  return scope[boundScopeBrand];
+  const binding = scope[boundScopeBrand];
+  if (!binding.live) {
+    throw new Error(
+      `the transaction that declared tenant ${scope.tenantId} has ended; ` +
+        "re-enter withTenantScope before using this scope again",
+    );
+  }
+  return binding.executor;
+}
+
+/**
+ * Marks a declaration spent, once the transaction that made it has ended.
+ *
+ * Called by `withTenantScope` in `../rls.ts`, which owns the transaction and is
+ * therefore the only thing that knows when it is over. Exported for that reason
+ * alone.
+ *
+ * @param scope - The scope the declaration was made on.
+ */
+export function closeBinding(scope: BoundTenantScope): void {
+  scope[boundScopeBrand].live = false;
 }
 
 /**
@@ -201,10 +250,12 @@ function carryBinding<S extends TenantScope>(
   narrowed: S,
   from: TenantScope,
 ): S {
-  const executor = from[boundScopeBrand];
-  return executor === undefined
+  const binding = from[boundScopeBrand];
+  // The same {@link Binding} object, not a copy, so that closing the declaration
+  // closes it for every scope narrowed from it.
+  return binding === undefined
     ? narrowed
-    : { ...narrowed, [boundScopeBrand]: executor };
+    : { ...narrowed, [boundScopeBrand]: binding };
 }
 
 /**
@@ -237,7 +288,7 @@ export async function declareTenantScope<S extends TenantScope>(
   scope: S,
 ): Promise<S & BoundTenantScope> {
   await declareTenant(tx, scope.tenantId);
-  return { ...scope, [boundScopeBrand]: tx };
+  return { ...scope, [boundScopeBrand]: { executor: tx, live: true } };
 }
 
 /**
@@ -254,6 +305,33 @@ async function declareTenant(tx: Executor, tenantId: string): Promise<void> {
   await tx.execute(
     sql`select set_config(${TENANT_SETTING}, ${tenantId}, true)`,
   );
+}
+
+/**
+ * Resolves the `/t/{slug}` segment and runs a read in a transaction declared for it.
+ *
+ * The three resolvers that start from a slug - a tenant scope, an issuer, and a
+ * console member's tenant - share this, so the two steps are written once: the
+ * routine turns the slug into a tenant identifier, and the read runs with that
+ * identifier declared. A resolver that did its own preamble would be a second
+ * place for the declaration to be forgotten from.
+ *
+ * @param db - The connection to resolve on. No tenant need be declared.
+ * @param tenantSlug - The `/t/{slug}` path segment.
+ * @param read - The read to perform, given the declaring transaction and the
+ *   tenant identifier the slug resolved to.
+ * @returns Whatever the read returns, or undefined when the slug resolves to no
+ *   tenant - deliberately indistinguishable from a tenant somebody else owns.
+ */
+export async function withTenantForSlug<T>(
+  db: Executor,
+  tenantSlug: string,
+  read: (tx: Executor, tenantId: string) => Promise<T | undefined>,
+): Promise<T | undefined> {
+  const tenantId = await tenantIdForSlug(db, tenantSlug);
+  return tenantId === undefined
+    ? undefined
+    : await withDeclaredTenant(db, tenantId, (tx) => read(tx, tenantId));
 }
 
 /**
@@ -422,12 +500,7 @@ export async function resolveTenantScope(
   db: Executor,
   tenantSlug: string,
 ): Promise<TenantScope | undefined> {
-  const tenantId = await tenantIdForSlug(db, tenantSlug);
-  if (tenantId === undefined) {
-    return undefined;
-  }
-
-  return await withDeclaredTenant(db, tenantId, async (tx) => {
+  return await withTenantForSlug(db, tenantSlug, async (tx, tenantId) => {
     const [tenant] = await tx
       .select()
       .from(tenants)
@@ -466,44 +539,6 @@ export async function resolveEndpointScope(
     : endpointScopeFromRow(scope, endpoint);
 }
 
-/** A client resolved by its OAuth identifier, with its scope. */
-export interface ResolvedClient {
-  readonly scope: ClientScope;
-  readonly client: Client;
-}
-
-/**
- * Resolves the `client_id` presented at `/authorize` or `/token`.
- *
- * The endpoint predicate is applied in SQL as well as being re-checked by
- * {@link clientScopeFromRow}: a client identifier registered on another
- * endpoint must read as unknown here, not as a client that then fails a later
- * check - the two are different error responses and different audit events.
- *
- * The client's status is deliberately not filtered. A suspended client
- * presenting a valid secret must be told it is suspended, and that decision is
- * the grant handler's to make and audit.
- */
-export async function resolveClientScope(
-  scope: BoundEndpointScope,
-  clientId: string,
-): Promise<ResolvedClient | undefined> {
-  const [client] = await executorFor(scope)
-    .select()
-    .from(clients)
-    .where(
-      and(
-        eq(clients.endpointId, scope.endpointId),
-        eq(clients.clientId, clientId),
-      ),
-    )
-    .limit(1);
-
-  return client === undefined
-    ? undefined
-    : { scope: clientScopeFromRow(scope, client), client };
-}
-
 /** An issuer resolved from its URL, with the rows the OAuth handlers need. */
 export interface ResolvedIssuer {
   readonly scope: EndpointScope;
@@ -540,12 +575,7 @@ export async function resolveIssuer(
   tenantSlug: string,
   endpointSlug: string,
 ): Promise<ResolvedIssuer | undefined> {
-  const tenantId = await tenantIdForSlug(db, tenantSlug);
-  if (tenantId === undefined) {
-    return undefined;
-  }
-
-  return await withDeclaredTenant(db, tenantId, async (tx) => {
+  return await withTenantForSlug(db, tenantSlug, async (tx, tenantId) => {
     const [row] = await tx
       .select({ tenant: tenants, endpoint: endpoints })
       .from(endpoints)

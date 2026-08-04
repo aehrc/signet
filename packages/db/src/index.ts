@@ -23,6 +23,15 @@ export {
   TEST_SCHEMA_READY_VARIABLE,
 } from "./test/schemaReady.js";
 
+// The role every suite connects as, and how its connection is derived. Exported
+// because `apps/server`'s harness needs both and cannot reach into this package's
+// source: only this package depends on Drizzle. See `./test/servingRole.ts`.
+export {
+  prepareServingRole,
+  servingRoleUrl,
+  SERVING_TEST_ROLE,
+} from "./test/servingRole.js";
+
 // Privilege observation, exported for the same reason `schemaReady` is: a suite
 // in `apps/server` needs it and cannot write raw SQL, because only this package
 // depends on Drizzle. See `./test/privilegeProbe.ts`.

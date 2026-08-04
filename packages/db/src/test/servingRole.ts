@@ -1,17 +1,15 @@
 /**
  * The role the test suite connects as.
  *
- * The policies are only worth anything if the suite runs under them. Until now
- * it did not: every suite connected as the identity that owns the tables, which
- * Postgres exempts from their policies, so the policies could have been dropped
- * entirely without a single test noticing. `rlsRole.ts` made one file able to
- * observe them by assuming a restricted role inside a transaction, which proved
- * the policies work and said nothing about whether Signet is bound by them.
+ * The policies are only worth anything if the suite runs under them. Once they did
+ * not: every suite connected as the identity that owns the tables, which Postgres
+ * exempts from their policies, so the policies could have been dropped entirely
+ * without a single test noticing.
  *
- * This module makes the serving role the ordinary path instead of a fixture one
+ * This module makes the serving role the ordinary path rather than a fixture one
  * file opts into. A developer still configures one variable: `globalSetup` uses
  * `SIGNET_TEST_DATABASE_URL` - the owning identity - to migrate, create this
- * role and grant it, and the suites connect on a URL derived from that one by
+ * role and grant it, and every suite connects on a URL derived from that one by
  * swapping the credential.
  *
  * The role is created with a login and a fixed password. That is not a secret

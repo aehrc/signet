@@ -231,15 +231,15 @@ describe("withTenantScope", () => {
     const fake = createFakeExecutor();
     const scope = tenantScopeFromRow(tenant);
 
-    const bound = await withTenantScope(fake.db, scope, (inner) =>
-      Promise.resolve(inner),
-    );
+    await withTenantScope(fake.db, scope, (inner) => {
+      expect(isBoundScope(inner)).toBe(true);
+      expect(inner.tenantId).toBe(tenant.id);
+      // The transaction, not the connection: a bound scope that carried the pool
+      // would issue its reads outside the transaction that declared the tenant.
+      expect(executorFor(inner)).toBe(fake.transactions[0]);
+      return Promise.resolve(undefined);
+    });
 
-    expect(isBoundScope(bound)).toBe(true);
-    expect(bound.tenantId).toBe(tenant.id);
-    // The transaction, not the connection: a bound scope that carried the pool
-    // would issue its reads outside the transaction that declared the tenant.
-    expect(executorFor(bound)).toBe(fake.transactions[0]);
     expect(fake.transactions).toHaveLength(1);
   });
 
@@ -281,30 +281,92 @@ describe("withTenantScope", () => {
       endpoint,
     );
 
-    const bound = await withTenantScope(fake.db, endpointScope, (inner) =>
-      Promise.resolve(inner),
-    );
-
-    expect(bound.endpointId).toBe(endpoint.id);
-    expect(isBoundScope(bound)).toBe(true);
+    await withTenantScope(fake.db, endpointScope, (inner) => {
+      expect(inner.endpointId).toBe(endpoint.id);
+      expect(isBoundScope(inner)).toBe(true);
+      return Promise.resolve(undefined);
+    });
   });
 
   it("reuses an existing binding rather than declaring a second time", async () => {
     const fake = createFakeExecutor();
-    const outer = await withTenantScope(
+
+    await withTenantScope(
+      fake.db,
+      tenantScopeFromRow(tenant),
+      async (outer) => {
+        const inner = await withTenantScope(fake.db, outer, (nested) =>
+          Promise.resolve(nested),
+        );
+
+        // The property FR-006 names: a data-layer function calling another must
+        // reuse the tenant already declared rather than opening a second
+        // transaction.
+        expect(inner).toBe(outer);
+      },
+    );
+
+    expect(fake.transactions).toHaveLength(1);
+    expect(fake.statements).toHaveLength(1);
+  });
+
+  it("stops the scope claiming a declaration once the transaction ends", async () => {
+    const fake = createFakeExecutor();
+
+    const spent = await withTenantScope(
       fake.db,
       tenantScopeFromRow(tenant),
       (inner) => Promise.resolve(inner),
     );
 
-    const inner = await withTenantScope(fake.db, outer, (nested) =>
-      Promise.resolve(nested),
+    // `set_config(..., true)` dies with the transaction, so a scope that still
+    // claimed to carry one would issue its statements on the pooled connection
+    // with no tenant declared - an empty read and a refused write, silently.
+    expect(isBoundScope(spent)).toBe(false);
+    expect(() => executorFor(spent)).toThrow(/has ended/);
+  });
+
+  it("declares again for a scope resolved in an earlier transaction", async () => {
+    const fake = createFakeExecutor();
+
+    // The ordinary shape of the OAuth code: a client is resolved inside one
+    // transaction and used in the next. The proof the scope carries outlives the
+    // declaration made from it, so the second call declares rather than refusing.
+    const resolved = await withTenantScope(
+      fake.db,
+      tenantScopeFromRow(tenant),
+      (inner) => Promise.resolve(inner),
     );
 
-    // The property FR-006 names: a data-layer function calling another must reuse
-    // the tenant already declared rather than opening a second transaction.
-    expect(inner).toBe(outer);
-    expect(fake.transactions).toHaveLength(1);
-    expect(fake.statements).toHaveLength(1);
+    await withTenantScope(fake.db, resolved, (inner) => {
+      expect(isBoundScope(inner)).toBe(true);
+      expect(executorFor(inner)).toBe(fake.transactions[1]);
+      return Promise.resolve(undefined);
+    });
+
+    expect(fake.transactions).toHaveLength(2);
+    expect(fake.statements).toHaveLength(2);
+  });
+
+  it("closes the declaration even when the work throws", async () => {
+    const fake = createFakeExecutor();
+    let captured: Awaited<ReturnType<typeof declareCapture>> | undefined;
+
+    /** Hands the bound scope out through a closure, since the call will reject. */
+    function declareCapture(scope: Parameters<typeof isBoundScope>[0]) {
+      return Promise.resolve(scope);
+    }
+
+    await expect(
+      withTenantScope(fake.db, tenantScopeFromRow(tenant), async (inner) => {
+        captured = await declareCapture(inner);
+        throw new Error("the work failed");
+      }),
+    ).rejects.toThrow("the work failed");
+
+    // A rolled-back transaction releases the setting exactly as a committed one
+    // does, so a scope left behind by a failure must not claim otherwise.
+    expect(captured).toBeDefined();
+    expect(captured !== undefined && isBoundScope(captured)).toBe(false);
   });
 });

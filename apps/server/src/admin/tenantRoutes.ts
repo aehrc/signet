@@ -43,7 +43,7 @@ import { requireRole } from "./authentication.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
 import { TENANT_PATH } from "./paths.js";
 import { principalAdminUserId } from "./principal.js";
-import { parseBody } from "./requestBody.js";
+import { definedFields, parseBody } from "./requestBody.js";
 import { apiTokenView, memberView } from "./views.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
@@ -74,11 +74,7 @@ export function registerTenantRoutes(
       return body;
     }
 
-    // Only the fields actually supplied are written, so a patch naming nothing
-    // leaves the row alone rather than blanking the columns it did not mention.
-    const patch = Object.fromEntries(
-      Object.entries(body).filter(([, value]) => value !== undefined),
-    );
+    const patch = definedFields(body);
     const updated = await withTenantScope(context.db, scope, (bound) =>
       updateTenant(bound, patch, context.clock()),
     );

@@ -10,7 +10,6 @@
 
 import { createDatabase } from "../client.js";
 import { applyMigrationsWithLock } from "../migrations.js";
-import { prepareRowLevelSecurityFixtures } from "./rlsRole.js";
 import { markTestSchemaReady } from "./schemaReady.js";
 import { prepareServingRole } from "./servingRole.js";
 
@@ -27,18 +26,17 @@ export default async function setup(): Promise<void> {
     // same database are a thing a developer does, and the lock is what makes the
     // second wait rather than interleave.
     await applyMigrationsWithLock(handle.db);
-    // The row-level security suite's role and policies are DDL too, and for the
-    // same reason they must not be created while other workers are running.
-    await prepareRowLevelSecurityFixtures(handle.db);
-    // The role the suites will connect as, and its grants. Created here rather
-    // than by whichever worker got there first, for the same reason again: a
+    // The role every suite connects as, and its grants. Created here rather than
+    // by whichever worker got there first, for the same reason again: a
     // `create role` racing a `grant ... on all tables` is a catalogue write that
     // should not interleave with the suites it exists to enable.
     //
-    // Nothing connects as it yet - every suite still uses the owning identity,
-    // which the policies exempt. Switching them over is what makes the suite
-    // evidence rather than decoration, and it is deliberately a later step: the
-    // role and its grants land first, with the suite green throughout.
+    // This connection - the owning identity, which the policies exempt - is used
+    // for the schema and for nothing else. Every suite derives its own connection
+    // from the same URL by swapping the credential, so what the suites exercise is
+    // a role the policies bind. That is what makes them evidence rather than
+    // decoration: with the owning identity they would pass whether or not a single
+    // policy were installed.
     await prepareServingRole(handle.db);
     markTestSchemaReady();
   } finally {

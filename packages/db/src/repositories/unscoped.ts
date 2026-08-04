@@ -54,6 +54,8 @@ export const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
     "The function that makes a transaction's tenant known to the database. It necessarily receives the transaction before anything has been declared on it, since declaring is what it does.",
   "repositories/scope.withDeclaredTenant":
     "The resolvers' primitive: it declares a tenant identified by uuid alone, because the scope that would prove the tenant was resolved is built from the rows this read returns and so cannot exist yet. Called only by the resolvers, each of which has just been handed that uuid by a routine above or by an already-authenticated console session.",
+  "repositories/scope.withTenantForSlug":
+    "The preamble every slug-based resolver shares: it turns the /t/{slug} segment into a tenant identifier through the routine above and runs the caller's read with that identifier declared. Written once so the declaration cannot be forgotten from one resolver and present in another.",
   "repositories/scope.resolveTenantScope":
     "Turns the /t/{slug} segment into a scope, which is what establishes the tenant every later query binds to. Reads the tenant row inside a transaction declared for the identifier the slug routine returned, so the only thing it reaches unbound is that routine.",
   "repositories/scope.resolveIssuer":

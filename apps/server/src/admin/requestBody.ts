@@ -87,3 +87,33 @@ export function parseQuery<T>(
   }
   return result.data;
 }
+
+/**
+ * The fields a patch actually named.
+ *
+ * A `PATCH` body carries only what is changing, and Zod fills the rest with
+ * `undefined`. Passing that straight to a repository would blank every column the
+ * caller did not mention, so the absent keys are dropped rather than written.
+ *
+ * The return type removes `undefined` from each value as well as making each key
+ * optional, which is what `exactOptionalPropertyTypes` needs to see: "absent" and
+ * "present and undefined" are different things, and only the first is what a patch
+ * that omitted a field means.
+ *
+ * @param body - The parsed patch body.
+ * @returns The same object with every `undefined` value removed.
+ * @example
+ * ```ts
+ * const patch = definedFields(body);
+ * const updated = await withTenantScope(context.db, scope, (bound) =>
+ *   updateTenant(bound, patch, context.clock()),
+ * );
+ * ```
+ */
+export function definedFields<T extends object>(
+  body: T,
+): { [K in keyof T]?: Exclude<T[K], undefined> } {
+  return Object.fromEntries(
+    Object.entries(body).filter(([, value]) => value !== undefined),
+  ) as { [K in keyof T]?: Exclude<T[K], undefined> };
+}

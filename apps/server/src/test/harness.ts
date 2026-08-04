@@ -41,8 +41,10 @@ import {
   hashToken,
   insertEndpointKey,
   isTestSchemaReady,
+  prepareServingRole,
   promoteNextEndpointKey,
   publishPolicy,
+  servingRoleUrl,
   setTenantMemberRole,
   tenantScopeFromRow,
   withTenantScope,
@@ -172,19 +174,39 @@ let migrated = false;
 let sequence = 0;
 
 /**
- * Opens a connection, migrating only if nothing else has.
+ * Opens the serving connection, migrating only if nothing else has.
  *
- * Normally the schema is already there: the Vitest global setup migrates once
- * before any worker starts, precisely so that no DDL runs while other workers hold
- * row locks. The fallback covers running a single file outside that setup.
+ * The harness connects as the serving role - the same non-owning role a deployment
+ * uses - which is what makes every suite built on it evidence that the policies
+ * bind Signet. Connecting as the owning identity would exempt the whole suite from
+ * them, and the assertions would pass whether or not a single policy were
+ * installed.
+ *
+ * The owning identity is used for the schema and for nothing else. Normally it is
+ * not used here at all: the Vitest global setup migrates and grants once before any
+ * worker starts, precisely so that no DDL runs while other workers hold row locks.
+ * The fallback covers running a single file outside that setup, and closes the
+ * owning connection before the serving one is opened.
+ *
+ * @param ownerUrl - The owning identity's URL, as configured by the developer.
+ * @returns A handle on the same database, reached as the serving role.
  */
-async function connect(url: string) {
-  const handle = createDatabase({ url, maxConnections: 5 });
+async function connect(ownerUrl: string) {
   if (!migrated && !isTestSchemaReady()) {
-    await applyMigrationsWithLock(handle.db);
+    const owner = createDatabase({ url: ownerUrl, maxConnections: 1 });
+    try {
+      await applyMigrationsWithLock(owner.db);
+      await prepareServingRole(owner.db);
+    } finally {
+      await owner.close();
+    }
     migrated = true;
   }
-  return handle;
+
+  return createDatabase({
+    url: servingRoleUrl(ownerUrl),
+    maxConnections: 5,
+  });
 }
 
 /**
@@ -367,7 +389,9 @@ export async function createTestStack(
     config: {
       port: 3000,
       publicUrl: TEST_PUBLIC_URL,
-      databaseUrl: testDatabaseUrl,
+      // What the server under test would have been configured with, which is the
+      // serving credential rather than the developer's.
+      databaseUrl: servingRoleUrl(testDatabaseUrl),
       masterKey: TEST_MASTER_KEY,
       logLevel: "error",
       webRoot: undefined,

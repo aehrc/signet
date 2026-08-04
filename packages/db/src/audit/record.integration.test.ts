@@ -12,7 +12,6 @@
  * Author: John Grimes
  */
 
-import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { fileURLToPath } from "node:url";
@@ -21,10 +20,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { queryAuditEvents, recordAuditEvent } from "./record.js";
 import { tenantScopeFromRow } from "../repositories/scope.js";
+import { createTenant, deleteTenant } from "../repositories/tenants.js";
 import { withTenantScope } from "../rls.js";
 import { auditEvents } from "../schema/audit.js";
-import { tenants } from "../schema/tenancy.js";
 import { isTestSchemaReady } from "../test/schemaReady.js";
+import { prepareServingRole, servingRoleUrl } from "../test/servingRole.js";
 
 import type { AuditEventCursor } from "./record.js";
 import type { Executor } from "../repositories/executor.js";
@@ -56,34 +56,45 @@ describeWithDatabase("the audit log against Postgres", () => {
   let tenantScope: TenantScope | undefined;
 
   beforeAll(async () => {
-    sql = postgres(databaseUrl ?? "", { max: 2, onnotice: () => {} });
-    connection = drizzle(sql);
-
-    // Normally already migrated by the Vitest global setup, which runs before any
-    // worker starts so that no DDL takes table locks while another worker holds row
-    // locks on the same tables. The fallback covers running this file on its own.
+    // The owning identity, used for the schema and for nothing else. Normally the
+    // Vitest global setup has already done all of this, before any worker started,
+    // so that no DDL takes table locks while another worker holds row locks.
     if (!isTestSchemaReady()) {
-      await sql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
+      const ownerSql = postgres(databaseUrl ?? "", {
+        max: 1,
+        onnotice: () => {},
+      });
       try {
-        await migrate(connection, { migrationsFolder });
+        await ownerSql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
+        try {
+          await migrate(drizzle(ownerSql), { migrationsFolder });
+          await prepareServingRole(drizzle(ownerSql));
+        } finally {
+          await ownerSql`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`;
+        }
       } finally {
-        await sql`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`;
+        await ownerSql.end();
       }
     }
+
+    // Everything the suite asserts on runs as the serving role, which the policies
+    // apply to. With the owning identity these tests would pass whether or not a
+    // single policy were installed.
+    sql = postgres(servingRoleUrl(databaseUrl ?? ""), {
+      max: 2,
+      onnotice: () => {},
+    });
+    connection = drizzle(sql);
 
     // `drizzle(sql)` infers `Record<string, unknown>` for its schema type
     // parameter while `Executor` pins `Record<string, never>`, so the two differ
     // in a phantom type only. The query surface used here is identical.
     db = connection as unknown as Executor;
 
-    const inserted = await connection
-      .insert(tenants)
-      .values({ slug: `audit-${Date.now()}`, name: "Audit test tenant" })
-      .returning();
-    const [tenant] = inserted;
-    if (tenant === undefined) {
-      throw new Error("failed to create the test tenant");
-    }
+    const tenant = await createTenant(db, {
+      slug: `audit-${Date.now()}`,
+      name: "Audit test tenant",
+    });
     tenantId = tenant.id;
     tenantScope = tenantScopeFromRow(tenant);
   }, 60_000);
@@ -93,8 +104,8 @@ describeWithDatabase("the audit log against Postgres", () => {
       return;
     }
     // Cascades through audit_events, so the database is left as it was found.
-    if (tenantId !== undefined) {
-      await connection.delete(tenants).where(eq(tenants.id, tenantId));
+    if (tenantScope !== undefined) {
+      await withTenantScope(db, tenantScope, (bound) => deleteTenant(bound));
     }
     await sql.end();
   });
@@ -238,13 +249,11 @@ describeWithDatabase("the audit log against Postgres", () => {
   });
 
   it("never returns another tenant's events", async () => {
-    const [other] = await connection
-      .insert(tenants)
-      .values({ slug: `audit-other-${Date.now()}`, name: "Other tenant" })
-      .returning({ id: tenants.id });
-    if (other === undefined) {
-      throw new Error("failed to create the second tenant");
-    }
+    const other = await createTenant(db, {
+      slug: `audit-other-${Date.now()}`,
+      name: "Other tenant",
+    });
+    const otherScope = tenantScopeFromRow(other);
 
     try {
       await recordAuditEvent(db, {
@@ -260,7 +269,7 @@ describeWithDatabase("the audit log against Postgres", () => {
         mine.events.some((event) => event.action === "tenant.created"),
       ).toBe(false);
     } finally {
-      await connection.delete(tenants).where(eq(tenants.id, other.id));
+      await withTenantScope(db, otherScope, (bound) => deleteTenant(bound));
     }
   });
 

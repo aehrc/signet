@@ -1,15 +1,10 @@
 /**
  * The policies, observed from the role Signet actually serves as.
  *
- * `repositories.integration.test.ts` already proves the policies work: it assumes
- * a restricted role inside a transaction and watches another tenant's rows
- * disappear. What it cannot show is that they constrain *Signet*, because the
- * connection it makes them on is the identity that owns the tables, which Postgres
- * exempts from their policies.
- *
- * This suite connects as the serving role - the same non-owning role a deployment
- * uses - and asserts the three properties that make the guarantee real, for every
- * covered table rather than for a sample of them:
+ * Every integration suite now connects as the serving role, so all of them are
+ * evidence that the policies bind Signet. This is the one that asserts it directly,
+ * and asserts it exhaustively: the three properties that make the guarantee real,
+ * for every covered table rather than for a sample of them:
  *
  *   1. An unbound read returns no rows.
  *   2. An unbound insert is refused by the database, not by application code.
@@ -74,7 +69,6 @@ import {
 import { createTenant } from "./repositories/tenants.js";
 import { currentTenantSetting, RLS_TABLES, withTenantScope } from "./rls.js";
 import { tenants } from "./schema/tenancy.js";
-import { prepareRowLevelSecurityFixtures } from "./test/rlsRole.js";
 import { isTestSchemaReady } from "./test/schemaReady.js";
 import { prepareServingRole, servingRoleUrl } from "./test/servingRole.js";
 
@@ -143,7 +137,6 @@ describeWithDatabase("row-level security as the serving role", () => {
       await ownerSql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
       try {
         await migrate(drizzle(ownerSql), { migrationsFolder });
-        await prepareRowLevelSecurityFixtures(owner);
         await prepareServingRole(owner);
       } finally {
         await ownerSql`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`;

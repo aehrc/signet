@@ -84,6 +84,7 @@
 import { sql } from "drizzle-orm";
 
 import {
+  closeBinding,
   declareTenantScope,
   isBoundScope,
   TENANT_SETTING,
@@ -299,6 +300,11 @@ export async function applyRowLevelSecurity(
  * "a transaction is open" - a transaction bound to another tenant is exactly the
  * bug this exists to prevent, so it cannot be a safe thing to reuse blindly.
  *
+ * Handed a scope whose declaring transaction has *ended*, it declares again. That is
+ * the common case rather than an edge: a scope resolved inside one transaction is a
+ * value handlers keep and use in the next, and the proof it carries - that this
+ * tenant was resolved - outlives the declaration that was made from it.
+ *
  * The declaration is transaction-local, so it is gone when this returns and cannot
  * follow the pooled connection into the next request.
  *
@@ -320,9 +326,19 @@ export async function withTenantScope<S extends TenantScope, T>(
     return await work(scope);
   }
 
-  return await db.transaction(
-    async (tx) => await work(await declareTenantScope(tx, scope)),
-  );
+  return await db.transaction(async (tx) => {
+    const bound = await declareTenantScope(tx, scope);
+    try {
+      return await work(bound);
+    } finally {
+      // The declaration dies with the transaction, so the scope must stop claiming
+      // to carry one. A handler that resolved a client here and uses it in the next
+      // transaction is the ordinary shape of the OAuth code, and this is what makes
+      // that safe: the next call sees an unbound scope and declares again, rather
+      // than issuing statements against a transaction that has committed.
+      closeBinding(bound);
+    }
+  });
 }
 
 /**
