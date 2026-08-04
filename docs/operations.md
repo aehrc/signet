@@ -6,15 +6,16 @@ something is wrong.
 
 ## Configuration
 
-| Variable                                | Required | What it does                                                                                                                                                                                                                                            |
-| --------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                                  | no       | Listen port. Defaults to 3000.                                                                                                                                                                                                                          |
-| `SIGNET_PUBLIC_URL`                     | yes      | The origin Signet is reached on. **Every issuer identifier is derived from it**, so changing it invalidates every issuer already published to FHIR servers and registered with apps.                                                                    |
-| `SIGNET_DATABASE_URL`                   | yes      | Postgres connection string. `SIGNET_DATABASE_HOST`/`_PORT`/`_NAME`/`_USER`/`_PASSWORD` are accepted instead, which is what the Helm chart uses when it wires up the bundled subchart.                                                                   |
-| `SIGNET_MASTER_KEY`                     | yes      | Encrypts endpoint signing keys and upstream client secrets at rest. At least 32 characters. See below.                                                                                                                                                  |
-| `SIGNET_LOG_LEVEL`                      | no       | `debug`, `info`, `warn` or `error`. Defaults to `info`.                                                                                                                                                                                                 |
-| `SIGNET_WEB_ROOT`                       | no       | Directory of the built console. Set in the image; unset in development, where Vite serves it.                                                                                                                                                           |
-| `SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES` | no       | Turns off the SSRF guard on outbound fetches. For a development or connectathon stack whose identity provider is on a private address. **Never set this in production** - see `apps/server/src/security/outboundFetch.ts` for exactly what it disables. |
+| Variable                                | Required  | What it does                                                                                                                                                                                                                                                |
+| --------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                  | no        | Listen port. Defaults to 3000.                                                                                                                                                                                                                              |
+| `SIGNET_PUBLIC_URL`                     | yes       | The origin Signet is reached on. **Every issuer identifier is derived from it**, so changing it invalidates every issuer already published to FHIR servers and registered with apps.                                                                        |
+| `SIGNET_DATABASE_URL`                   | yes       | Postgres connection string, naming the **serving role** - which must own none of Signet's tables. `SIGNET_DATABASE_HOST`/`_PORT`/`_NAME`/`_USER`/`_PASSWORD` are accepted instead, which is what the Helm chart uses when it wires up the bundled subchart. |
+| `SIGNET_DATABASE_OWNER_URL`             | `migrate` | The **owning identity**, read by `migrate` and by nothing else. See [the two database identities](#the-two-database-identities).                                                                                                                            |
+| `SIGNET_MASTER_KEY`                     | yes       | Encrypts endpoint signing keys and upstream client secrets at rest. At least 32 characters. See below.                                                                                                                                                      |
+| `SIGNET_LOG_LEVEL`                      | no        | `debug`, `info`, `warn` or `error`. Defaults to `info`.                                                                                                                                                                                                     |
+| `SIGNET_WEB_ROOT`                       | no        | Directory of the built console. Set in the image; unset in development, where Vite serves it.                                                                                                                                                               |
+| `SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES` | no        | Turns off the SSRF guard on outbound fetches. For a development or connectathon stack whose identity provider is on a private address. **Never set this in production** - see `apps/server/src/security/outboundFetch.ts` for exactly what it disables.     |
 
 Commands, all on the same image:
 
@@ -25,7 +26,10 @@ node dist/index.js bootstrap  # create the first tenant and administrator, then 
 ```
 
 `migrate` and `bootstrap` need only a database connection - not the public URL or
-the master key - so a migration job's manifest stays minimal.
+the master key - so a migration job's manifest stays minimal. They do not need the
+same identity, though: `migrate` is the only command that needs the one owning the
+schema, and `bootstrap` runs as the serving role like the server does. See [the two
+database identities](#the-two-database-identities).
 
 ## Tenant isolation in the database
 
@@ -60,23 +64,137 @@ Verify them on any database you are unsure about:
 select tablename from pg_policies where policyname = 'signet_tenant_isolation';
 ```
 
-### Which connections the policies bite
+### The two database identities
 
-This is the part to understand before relying on them, because Postgres exempts
-a table's owner from its policies.
+This is the part to get right before relying on the policies, because **Postgres
+exempts a table's owner from that table's policies**. A Signet connecting as the
+owner of its tables would have the policies installed and be unconstrained by
+them. So a deployment runs two identities:
 
-The Signet process connects as the owner, and that is deliberate rather than an
-oversight. Signet is not a single-tenant application holding one tenant for the
-lifetime of a connection: the admin API resolves _which_ tenants a session may
-see before any tenant is known, the expiry sweep is cross-tenant by design, and
-migrations must be able to alter every table. A process pinned to one tenant per
-connection could not serve those paths.
+| Identity            | Owns the schema | Policies apply | Used by                            |
+| ------------------- | --------------- | -------------- | ---------------------------------- |
+| **Owning identity** | yes             | no             | `migrate`, and the expiry sweep    |
+| **Serving role**    | no              | yes            | the server, `bootstrap`, the suite |
 
-So the policies constrain every connection that is **not** the owner - a `psql`
+`SIGNET_DATABASE_URL` names the serving role - it keeps the meaning it always
+had, and what changed is that the role it names must be non-owning.
+`SIGNET_DATABASE_OWNER_URL` names the owning identity and is read by `migrate`
+alone, so the owner credential exists at one point in a deployment's life rather
+than sitting in the running pod. `migrate` reads both: it connects as the owner,
+and it takes the serving role's _name_ from `SIGNET_DATABASE_URL` in order to
+grant it - it never uses that role's password. Two URLs naming the same role are
+refused, because that deployment could not enforce isolation.
+
+Creating the serving role, if you are not using the bundled compose stack or the
+Helm chart. Nothing is granted here - `migrate` issues the grants, as the owning
+identity, immediately after applying the migrations, so a table added by a later
+migration cannot ship ungranted:
+
+```sql
+create role signet_app login password '...';
+```
+
+Then, once per deployment and on every upgrade:
+
+```bash
+SIGNET_DATABASE_OWNER_URL=postgres://owner:...@host/signet \
+SIGNET_DATABASE_URL=postgres://signet_app:...@host/signet \
+  node dist/index.js migrate
+```
+
+The bundled compose stack does this itself: `deploy/compose/initdb` creates the
+role on first initialisation and the `migrate` service applies the migrations as
+the owner. The Helm chart needs no role created at all - the bundled PostgreSQL
+subchart's superuser owns the schema and its custom user, which the server
+connects as, owns nothing.
+
+### The server refuses to serve when it cannot enforce
+
+Which identity a server holds is configuration, so it is something a deployment
+can get wrong without any code being wrong. The server therefore checks, on the
+connection it is about to serve on, before it begins listening, and reports the
+outcome either way:
+
+```
+{"level":"info","message":"signet.enforcement.verified","role":"signet_app","tablesVerified":21}
+```
+
+Three outcomes are refusals, and they exit 1 with different remedies because they
+have different causes:
+
+| Refusal                   | What it means                                                                  | What to do                                      |
+| ------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------- |
+| **Schema absent**         | The covered tables do not exist, or row-level security is off on one           | Run `migrate` with the owning identity          |
+| **Role exempt**           | The role owns a covered table, belongs to a role that does, or has `BYPASSRLS` | Point `SIGNET_DATABASE_URL` at the serving role |
+| **Role under-privileged** | The role is bound by the policies but cannot reach a table it needs            | Re-run `migrate`, which issues the grants       |
+
+The middle one is the one worth reading closely: it names the exemption it found,
+and it is what a deployment given the owner credential by mistake gets instead of
+months of appearing to work.
+
+### Verifying enforcement on a running deployment
+
+From outside the process, which is the point - the server's own report is only
+worth as much as the process making it. Both questions, as the owning identity:
+
+```sql
+-- 1. The role the server connects as must hold no bypass and own nothing.
+select rolname, rolbypassrls, rolsuper from pg_roles where rolname = 'signet_app';
+
+select count(*) as covered_tables_owned
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+ where n.nspname = 'public'
+   and c.relkind = 'r'
+   and pg_has_role('signet_app', c.relowner, 'usage');
+
+-- 2. Every covered table must have row-level security enabled and the policy on it.
+select count(*) as policies from pg_policies
+ where policyname = 'signet_tenant_isolation';
+```
+
+Enforcement holds when the first returns `f`/`f`, the second returns 0, and the
+third returns 21. The membership test in the second is not a formality: a role
+added to the owning role inherits the owner's exemption while looking correct in
+every other respect, which is why it asks `pg_has_role` rather than comparing
+names.
+
+You can also see it directly. As the serving role, a query that has named no
+tenant returns nothing, and naming one returns only that tenant's rows:
+
+```sql
+select count(*) from endpoints;                                  -- 0
+select set_config('signet.tenant_id', '<tenant uuid>', false);
+select count(*) from endpoints;                                  -- that tenant's
+```
+
+### What the process can still do without a tenant
+
+The exemption is not zero, and it is a list rather than a capability. Three
+`security definer` routines, created by migration `0007_serving_role_privileges`
+and declared with a justification each in `packages/db/src/privileges.ts`, turn an
+identifier a request already carried into a tenant - which necessarily precedes
+knowing one:
+
+```sql
+select routine_name from information_schema.routines
+ where routine_schema = 'public' and routine_name like 'signet\_%';
+```
+
+Each takes an identifier and returns identifiers only. None returns
+configuration, so a tenant's FHIR base URL, TTLs and capability flags stay out of
+reach of an unbound caller. The suite asserts that what the serving role may
+execute equals that declared set exactly, so a fourth routine fails a test rather
+than widening the exemption quietly.
+
+### Other connections to the database
+
+The policies bind every connection whose role is not exempt, which now includes
+Signet's own. That leaves the connections a mistake is most likely to reach the
+data through and least likely to have gone through the repositories: a `psql`
 session, a reporting job, an analytics tool, a backup verification script, a
-future service that reads the database directly. Those are the connections a
-mistake is most likely to reach the data through, and the ones least likely to
-have gone through the repositories. Give each of them a non-owning role:
+service added later. **Give each of them a non-owning role**, because connecting
+as the owner is a way past the isolation that no code review will catch:
 
 ```sql
 create role signet_reader login password '...';
@@ -94,10 +212,22 @@ select set_config('signet.tenant_id', '<tenant uuid>', false);
 select slug from endpoints;
 ```
 
-What this does **not** do is constrain the Signet process itself. Inside the
-application the compiler is the enforcement, and it is not optional: the scope
-types make an unscoped query fail to build. Row-level security is the backstop
-for everything reaching the database from outside that build.
+### The expiry sweep
+
+`sweepExpiredRuntimeRows` in `packages/db/src/repositories/sweep.ts` deletes
+expired authorization codes, sessions, tokens, consents and `jti` records. It
+operates on rows from every tenant, which is what a maintenance job is for, and is
+therefore the one path besides `migrate` that **needs the owning identity**.
+Attempted with the serving role it deletes nothing at all rather than partially
+succeeding - the policies hide every row from a connection that has declared no
+tenant - so its existence gives the server no cross-tenant capability. Both
+directions are asserted in
+`packages/db/src/repositories/repositories.integration.test.ts`.
+
+It has no scheduler and no wired caller in this release. Every row it removes is
+already expired and unusable, so nothing depends on it running; it reclaims space.
+Deployments that want it run it out of band, as the owning identity, until it gets
+a command of its own.
 
 ## The master key
 
