@@ -182,6 +182,31 @@ let migrated = false;
 let sequence = 0;
 
 /**
+ * Migrates and grants the serving role, if nothing else has.
+ *
+ * Normally a no-op: the Vitest global setup does both once before any worker
+ * starts, precisely so that no DDL runs while other workers hold row locks. This
+ * is the fallback for running a single file outside that setup, and it closes the
+ * owning connection before returning so nothing keeps a privileged handle open.
+ *
+ * @param ownerUrl - The owning identity's URL, as configured by the developer.
+ */
+export async function ensureTestSchema(ownerUrl: string): Promise<void> {
+  if (migrated || isTestSchemaReady()) {
+    return;
+  }
+
+  const owner = createDatabase({ url: ownerUrl, maxConnections: 1 });
+  try {
+    await applyMigrationsWithLock(owner.db);
+    await prepareServingRole(owner.db);
+  } finally {
+    await owner.close();
+  }
+  migrated = true;
+}
+
+/**
  * Opens the serving connection, migrating only if nothing else has.
  *
  * The harness connects as the serving role - the same non-owning role a deployment
@@ -190,26 +215,13 @@ let sequence = 0;
  * them, and the assertions would pass whether or not a single policy were
  * installed.
  *
- * The owning identity is used for the schema and for nothing else. Normally it is
- * not used here at all: the Vitest global setup migrates and grants once before any
- * worker starts, precisely so that no DDL runs while other workers hold row locks.
- * The fallback covers running a single file outside that setup, and closes the
- * owning connection before the serving one is opened.
+ * The owning identity is used for the schema and for nothing else.
  *
  * @param ownerUrl - The owning identity's URL, as configured by the developer.
  * @returns A handle on the same database, reached as the serving role.
  */
 async function connect(ownerUrl: string, applicationName: string) {
-  if (!migrated && !isTestSchemaReady()) {
-    const owner = createDatabase({ url: ownerUrl, maxConnections: 1 });
-    try {
-      await applyMigrationsWithLock(owner.db);
-      await prepareServingRole(owner.db);
-    } finally {
-      await owner.close();
-    }
-    migrated = true;
-  }
+  await ensureTestSchema(ownerUrl);
 
   return createDatabase({
     url: servingRoleUrl(ownerUrl),

@@ -13,6 +13,7 @@ import {
   resolveDatabaseUrl,
   resolveMigrationIdentities,
 } from "./config.js";
+import { verifyEnforcement } from "./enforcement.js";
 import { createRateLimitStore } from "./http/rateLimit.js";
 import { runMigrateCommand } from "./migrate.js";
 
@@ -81,6 +82,27 @@ try {
 }
 
 const { db, close } = createDatabase({ url: config.databaseUrl });
+
+// Before anything is served, and on the connection that will serve it: the policies
+// constrain Signet only if the configured role is subject to them, and a deployment
+// where it is not would run for months appearing correct. Reports the role it
+// verified on success as well, so an operator can read the answer out of a log
+// rather than having to ask the database.
+try {
+  await verifyEnforcement(db, config.logLevel);
+} catch (error) {
+  await close();
+  if (error instanceof ConfigError) {
+    reportConfigError(error);
+  }
+  // The check itself could not be performed - an unreachable database, most
+  // likely. Refuse anyway: an unverified deployment is exactly the state this
+  // exists to prevent serving in.
+  console.error(
+    `Signet could not verify tenant isolation enforcement: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exit(1);
+}
 
 /**
  * Reports an audit event that could not be written.

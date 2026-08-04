@@ -142,23 +142,54 @@ export async function listSignetRoutines(
   return rows.map((row) => row.signature).toSorted();
 }
 
+/** How a probe role should differ from the login-less default. */
+export interface ProbeRoleOptions {
+  /**
+   * Gives the role a login with this password.
+   *
+   * Only for a suite that must actually connect as it - the startup check asks
+   * about `current_user`, so a role it is to refuse has to be connected as. Not a
+   * secret: it names a login on a throwaway database, in step with
+   * `./servingRole.ts`.
+   */
+  readonly password?: string;
+  /**
+   * Grants `BYPASSRLS`.
+   *
+   * One of the two exemptions the startup check exists to refuse, and the one that
+   * cannot be arranged any other way: ownership comes with creating a table, but a
+   * bypass is an attribute somebody granted. Requires the connected role to hold
+   * it too, which for a throwaway test database means a superuser.
+   */
+  readonly bypassesPolicies?: boolean;
+}
+
 /**
- * Creates a login-less role for a suite to make privilege assertions about.
+ * Creates a role for a suite to make assertions about.
  *
- * Login-less because nothing connects as it: what a role is permitted to do is a
- * question `has_*_privilege` answers without a session, so a password would be a
- * credential invented for no reason.
+ * Login-less by default, because what a role is permitted to do is a question
+ * `has_*_privilege` answers without a session, so a password would be a credential
+ * invented for no reason. {@link ProbeRoleOptions} covers the suite that needs the
+ * opposite.
  *
  * @param db - A connection with authority to create roles.
  * @param role - The name to create. Unique per worker, since Vitest runs files
  *   in parallel against one database.
+ * @param options - Deviations from the login-less default.
  */
 export async function createProbeRole(
   db: Executor,
   role: string,
+  options: ProbeRoleOptions = {},
 ): Promise<void> {
+  const login =
+    options.password === undefined
+      ? "nologin"
+      : `login password '${options.password.replaceAll("'", "''")}'`;
+  const bypass = options.bypassesPolicies === true ? " bypassrls" : "";
+
   await db.execute(
-    sql.raw(`create role "${role.replaceAll('"', '""')}" nologin`),
+    sql.raw(`create role "${role.replaceAll('"', '""')}" ${login}${bypass}`),
   );
 }
 

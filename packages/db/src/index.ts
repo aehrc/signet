@@ -14,6 +14,7 @@ export * from "./schema/index.js";
 export * from "./repositories/index.js";
 export * from "./crypto/index.js";
 export * from "./audit/index.js";
+export * from "./enforcement.js";
 export * from "./migrations.js";
 export * from "./privileges.js";
 export * from "./rls.js";
@@ -49,5 +50,20 @@ export {
   roleCanExecute,
   roleHasDefaultTablePrivileges,
   roleHasTablePrivilege,
+  type ProbeRoleOptions,
   type TablePrivilege,
 } from "./test/privilegeProbe.js";
+
+// The connections and the empty database the startup check's own suite needs, for
+// the same reason again: `apps/server/src/enforcement.integration.test.ts` has to
+// connect as four different identities and observe one unmigrated database, and
+// cannot write a `create database` of its own. See `./test/connectionUrl.ts` and
+// `./test/scratchDatabase.ts`.
+export {
+  databaseUrlWith,
+  type ConnectionUrlChanges,
+} from "./test/connectionUrl.js";
+export {
+  createScratchDatabase,
+  dropScratchDatabase,
+} from "./test/scratchDatabase.js";

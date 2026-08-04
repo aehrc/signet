@@ -24,6 +24,7 @@
 import { sql } from "drizzle-orm";
 
 import { applyServingRolePrivileges } from "../privileges.js";
+import { databaseUrlWith } from "./connectionUrl.js";
 
 import type { Executor } from "../repositories/executor.js";
 
@@ -49,11 +50,8 @@ export const SERVING_TEST_PASSWORD = "signet_app_test";
  * Derives the serving connection from the owning one.
  *
  * Only the credential changes: host, port, database and every connection
- * parameter are carried across, because they are how the developer reached the
- * database in the first place. The credential is percent-encoded on the way in,
- * which is the failure `composeDatabaseUrl` in `apps/server/src/config.ts`
- * documents - a userinfo component that is not encoded can terminate early and
- * silently point the connection at a different host.
+ * parameter are carried across by {@link databaseUrlWith}, because they are how
+ * the developer reached the database in the first place.
  *
  * @param ownerUrl - `SIGNET_TEST_DATABASE_URL`, naming the owning identity.
  * @returns The same database, reached as {@link SERVING_TEST_ROLE}.
@@ -65,16 +63,10 @@ export const SERVING_TEST_PASSWORD = "signet_app_test";
  * ```
  */
 export function servingRoleUrl(ownerUrl: string): string {
-  let parsed: URL;
-  try {
-    parsed = new URL(ownerUrl);
-  } catch {
-    throw new Error("SIGNET_TEST_DATABASE_URL is not a valid connection URL");
-  }
-
-  parsed.username = encodeURIComponent(SERVING_TEST_ROLE);
-  parsed.password = encodeURIComponent(SERVING_TEST_PASSWORD);
-  return parsed.toString();
+  return databaseUrlWith(ownerUrl, {
+    user: SERVING_TEST_ROLE,
+    password: SERVING_TEST_PASSWORD,
+  });
 }
 
 /**
