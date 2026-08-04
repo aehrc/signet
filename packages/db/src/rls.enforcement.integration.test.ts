@@ -67,7 +67,13 @@ import {
   tenantScopeFromRow,
 } from "./repositories/scope.js";
 import { createTenant } from "./repositories/tenants.js";
-import { currentTenantSetting, RLS_TABLES, withTenantScope } from "./rls.js";
+import {
+  currentTenantSetting,
+  RLS_TABLES,
+  TENANT_POLICY_NAME,
+  TENANT_SETTING,
+  withTenantScope,
+} from "./rls.js";
 import { tenants } from "./schema/tenancy.js";
 import { roleHasTablePrivilege } from "./test/privilegeProbe.js";
 import { isTestSchemaReady } from "./test/schemaReady.js";
@@ -708,6 +714,93 @@ describeWithDatabase("row-level security as the serving role", () => {
           "insert",
         ),
       ).toBe(true);
+    });
+  });
+
+  describe("negative controls", () => {
+    // Everything above asserts that an unbound read comes back empty. On its own
+    // that is weak evidence: an empty result is also what a `where` clause that
+    // matches nothing produces, what a table nobody seeded produces, and what a
+    // query against the wrong database produces. These two tests remove one layer
+    // at a time and show the empty result goes away with it - which is what makes
+    // the rest of the suite evidence about the policies rather than about SQL.
+
+    it("stops emptying the read when the policy is taken away", async () => {
+      // A fixture table rather than a covered one: dropping `signet_tenant_isolation`
+      // from `tenants` would leave every other worker's suite unprotected for as
+      // long as this test held it. Created by the owning identity, carrying the same
+      // shape of policy, and dropped again in `finally`.
+      const table = `rls_control_${String(process.pid)}`;
+      const tenantId = mine.tenantScope.tenantId;
+
+      await owner.execute(
+        sql.raw(`
+          create table "${table}" (tenant_id uuid not null);
+          alter table "${table}" enable row level security;
+          create policy ${TENANT_POLICY_NAME} on "${table}"
+            for all using (tenant_id = nullif(current_setting('${TENANT_SETTING}', true), '')::uuid);
+          grant select, insert on "${table}" to ${SERVING_TEST_ROLE};
+        `),
+      );
+      await owner.execute(
+        sql.raw(`insert into "${table}" values ('${tenantId}')`),
+      );
+
+      try {
+        // The state every assertion above was made in.
+        expect(await rowsOf(serving, table)).toEqual([]);
+        expect(
+          await withTenantScope(serving, mine.tenantScope, (bound) =>
+            rowsOf(executorFor(bound), table),
+          ),
+        ).toHaveLength(1);
+
+        // Dropping the policy is not enough to open the table, and the reason is
+        // worth knowing: a table with row-level security enabled and no policy
+        // denies every row. So the empty result survives this step, which is why
+        // the control cannot stop here and call the point proved.
+        await owner.execute(
+          sql.raw(`drop policy ${TENANT_POLICY_NAME} on "${table}"`),
+        );
+        expect(await rowsOf(serving, table)).toEqual([]);
+
+        // Row-level security off. The same unbound read, on the same connection,
+        // against the same row - and now it comes back. The empty results above
+        // were produced by this layer and by nothing else.
+        await owner.execute(
+          sql.raw(`alter table "${table}" disable row level security`),
+        );
+        expect(await rowsOf(serving, table)).toHaveLength(1);
+      } finally {
+        await owner.execute(sql.raw(`drop table if exists "${table}"`));
+      }
+    });
+
+    it("shows the declaration is what makes a bound read work", async () => {
+      // The other layer. A transaction is opened on the serving connection and the
+      // declaration deliberately omitted, so the only difference from a correctly
+      // bound read is the `set_config` - not the connection, not the transaction,
+      // not the query.
+      const undeclared = await serving.transaction(async (tx) => ({
+        setting: await currentTenantSetting(tx),
+        rows: await rowsOf(tx, "tenants"),
+      }));
+
+      expect(undeclared.setting).toBeNull();
+      expect(undeclared.rows).toEqual([]);
+
+      // And with it made, in the same shape of transaction on the same connection.
+      const declared = await withTenantScope(
+        serving,
+        mine.tenantScope,
+        async (bound) => ({
+          setting: await currentTenantSetting(executorFor(bound)),
+          rows: await rowsOf(executorFor(bound), "tenants"),
+        }),
+      );
+
+      expect(declared.setting).toBe(mine.tenantScope.tenantId);
+      expect(declared.rows).toHaveLength(1);
     });
   });
 
