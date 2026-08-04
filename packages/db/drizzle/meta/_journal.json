@@ -50,6 +50,13 @@
       "when": 1785801078156,
       "tag": "0006_tenant_row_level_security",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785801078157,
+      "tag": "0007_serving_role_privileges",
+      "breakpoints": true
     }
   ]
 }
