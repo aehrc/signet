@@ -17,7 +17,11 @@
  * Author: John Grimes
  */
 
-import { accessTokenState, introspectAccessToken } from "@signet/db";
+import {
+  accessTokenState,
+  introspectAccessToken,
+  withTenantScope,
+} from "@signet/db";
 
 import { unverifiedTokenIdentifier } from "./tokenIdentifier.js";
 import { bearerToken } from "../http/bearer.js";
@@ -76,7 +80,9 @@ export function userinfoHandler(context: ServerContext) {
     const record =
       jti === undefined
         ? undefined
-        : await introspectAccessToken(context.db, issuerContext.scope, jti);
+        : await withTenantScope(context.db, issuerContext.scope, (bound) =>
+            introspectAccessToken(bound, jti),
+          );
 
     if (record === undefined) {
       return challenge(

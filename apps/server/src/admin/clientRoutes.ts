@@ -353,15 +353,11 @@ export function registerClientRoutes(
         body.status === "suspended" && existing.status !== "suspended";
       if (suspended) {
         const clientScope = clientScopeFromRow(endpointContext.scope, updated);
-        await revokeAccessTokensForClient(
-          context.db,
-          clientScope,
-          context.clock(),
+        await withTenantScope(context.db, clientScope, (bound) =>
+          revokeAccessTokensForClient(bound, context.clock()),
         );
-        await revokeRefreshTokensForClient(
-          context.db,
-          clientScope,
-          context.clock(),
+        await withTenantScope(context.db, clientScope, (bound) =>
+          revokeRefreshTokensForClient(bound, context.clock()),
         );
       }
 

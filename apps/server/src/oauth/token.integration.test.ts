@@ -17,6 +17,7 @@ import {
   introspectAccessToken,
   listRefreshTokensForSubject,
   queryAuditEvents,
+  withTenantScope,
 } from "@signet/db";
 import { createLocalJWKSet, jwtVerify } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -119,10 +120,10 @@ describeWithDatabase("the authorization_code grant", () => {
     expect(claims["scope"]).toBe(body.scope);
 
     // The token's metadata is recorded, or introspection and revocation could not work.
-    const recorded = await findAccessToken(
+    const recorded = await withTenantScope(
       stack.context.db,
       stack.scope,
-      claims["jti"] as string,
+      (bound) => findAccessToken(bound, claims["jti"] as string),
     );
     expect(recorded).toMatchObject({
       subject: stack.user.id,
@@ -335,10 +336,10 @@ describeWithDatabase("the authorization_code grant", () => {
 
     // RFC 6749 §10.5: a replayed code means the code leaked, so the token it produced
     // must not stay live.
-    const record = await introspectAccessToken(
+    const record = await withTenantScope(
       stack.context.db,
       stack.scope,
-      jti,
+      (bound) => introspectAccessToken(bound, jti),
     );
     expect(record?.revokedAt).not.toBeNull();
   });
@@ -556,10 +557,8 @@ describeWithDatabase("the client_credentials grant", () => {
     ).json()) as TokenResponseBody;
     expect(body.refresh_token).toBeUndefined();
     expect(
-      await listRefreshTokensForSubject(
-        stack.context.db,
-        stack.scope,
-        stack.backendClient.client.clientId,
+      await withTenantScope(stack.context.db, stack.scope, (bound) =>
+        listRefreshTokensForSubject(bound, stack.backendClient.client.clientId),
       ),
     ).toHaveLength(0);
   });

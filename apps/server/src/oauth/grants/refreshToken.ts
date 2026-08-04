@@ -42,6 +42,7 @@ import {
   revokeAccessTokensForClient,
   toEvaluationClient,
   toEvaluationUser,
+  withTenantScope,
 } from "@signet/db";
 
 import { recordReplayRevocation, recordTokenIssued } from "./audit.js";
@@ -101,10 +102,8 @@ export async function refreshTokenGrant(
 
   // Read without claiming. Everything below this point up to the issuance is a
   // check that must not spend the token if it fails.
-  const held = await findRefreshToken(
-    context.db,
-    issuerContext.scope,
-    tokenHash,
+  const held = await withTenantScope(context.db, issuerContext.scope, (bound) =>
+    findRefreshToken(bound, tokenHash),
   );
   if (held === undefined) {
     return grantRefusal(
@@ -191,10 +190,8 @@ export async function refreshTokenGrant(
       // client's live access tokens as well is this handler's decision: they are
       // short-lived, but a replayed refresh token means one of them may be in the
       // wrong hands right now.
-      const accessRevoked = await revokeAccessTokensForClient(
-        context.db,
-        scope,
-        context.clock(),
+      const accessRevoked = await withTenantScope(context.db, scope, (bound) =>
+        revokeAccessTokensForClient(bound, context.clock()),
       );
       await recordReplayRevocation(context, request, {
         action: "token.refresh-reuse-detected",

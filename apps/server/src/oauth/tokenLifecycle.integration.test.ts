@@ -15,6 +15,7 @@ import {
   introspectAccessToken,
   listRefreshTokensForSubject,
   queryAuditEvents,
+  withTenantScope,
 } from "@signet/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -107,10 +108,10 @@ describeWithDatabase("the refresh_token grant", () => {
     const presented = first.refresh_token as string;
     await refresh(presented);
 
-    const row = await findRefreshToken(
+    const row = await withTenantScope(
       stack.context.db,
       stack.scope,
-      await hashToken(presented),
+      async (bound) => findRefreshToken(bound, await hashToken(presented)),
     );
     expect(row?.revokedAt).not.toBeNull();
     expect(row?.replacedById).not.toBeNull();
@@ -152,10 +153,14 @@ describeWithDatabase("the refresh_token grant", () => {
     );
 
     // The successor goes too, so the thief and the victim are both cut off.
-    const successor = await findRefreshToken(
+    const successor = await withTenantScope(
       stack.context.db,
       stack.scope,
-      await hashToken(second.refresh_token as string),
+      async (bound) =>
+        findRefreshToken(
+          bound,
+          await hashToken(second.refresh_token as string),
+        ),
     );
     expect(successor?.revokedAt).not.toBeNull();
     expect((await refresh(second.refresh_token as string)).status).toBe(400);
@@ -358,16 +363,18 @@ describeWithDatabase("introspection, revocation and UserInfo", () => {
     );
     expect(response.status).toBe(200);
 
-    const leaf = await findRefreshToken(
+    const leaf = await withTenantScope(
       stack.context.db,
       stack.scope,
-      await hashToken(second.refresh_token as string),
+      async (bound) =>
+        findRefreshToken(
+          bound,
+          await hashToken(second.refresh_token as string),
+        ),
     );
     const family = (
-      await listRefreshTokensForSubject(
-        stack.context.db,
-        stack.scope,
-        stack.user.id,
+      await withTenantScope(stack.context.db, stack.scope, (bound) =>
+        listRefreshTokensForSubject(bound, stack.user.id),
       )
     ).filter((row) => row.familyId === leaf?.familyId);
 
@@ -387,10 +394,14 @@ describeWithDatabase("introspection, revocation and UserInfo", () => {
       { authorization: basicAuth(stack.symmetricClient.clientId) },
     );
 
-    const row = await findRefreshToken(
+    const row = await withTenantScope(
       stack.context.db,
       stack.scope,
-      await hashToken(tokens.refresh_token as string),
+      async (bound) =>
+        findRefreshToken(
+          bound,
+          await hashToken(tokens.refresh_token as string),
+        ),
     );
     expect(row?.revokedAt).not.toBeNull();
   });
@@ -413,10 +424,14 @@ describeWithDatabase("introspection, revocation and UserInfo", () => {
       client_id: stack.publicClient.clientId,
     });
 
-    const row = await findRefreshToken(
+    const row = await withTenantScope(
       stack.context.db,
       stack.scope,
-      await hashToken(tokens.refresh_token as string),
+      async (bound) =>
+        findRefreshToken(
+          bound,
+          await hashToken(tokens.refresh_token as string),
+        ),
     );
     expect(row?.revokedAt).toBeNull();
   });
@@ -466,8 +481,11 @@ describeWithDatabase("introspection, revocation and UserInfo", () => {
     });
     expect(response.status).toBe(401);
     expect(
-      (await introspectAccessToken(stack.context.db, stack.scope, jti))
-        ?.revokedAt,
+      (
+        await withTenantScope(stack.context.db, stack.scope, (bound) =>
+          introspectAccessToken(bound, jti),
+        )
+      )?.revokedAt,
     ).not.toBeNull();
   });
 });

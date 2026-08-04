@@ -247,11 +247,8 @@ async function verifyAssertion(
 
   // Only now, with a verified signature, is the `jti` booked. See the module
   // header for why the order matters.
-  const booked = await recordJti(
-    context.db,
-    scope,
-    validation.assertion.jti,
-    validation.assertion.expiresAt,
+  const booked = await withTenantScope(context.db, scope, (bound) =>
+    recordJti(bound, validation.assertion.jti, validation.assertion.expiresAt),
   );
   if (booked.status === "already-seen") {
     return {

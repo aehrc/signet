@@ -20,7 +20,7 @@
  */
 
 import { buildIntrospectionResponse } from "@signet/core";
-import { introspectAccessToken } from "@signet/db";
+import { introspectAccessToken, withTenantScope } from "@signet/db";
 
 import { readTokenRequest } from "./authenticatedEndpoint.js";
 import { unverifiedTokenIdentifier } from "./tokenIdentifier.js";
@@ -59,10 +59,10 @@ export function introspectHandler(context: ServerContext) {
       return c.json(INACTIVE);
     }
 
-    const record = await introspectAccessToken(
+    const record = await withTenantScope(
       context.db,
       issuerContext.scope,
-      jti,
+      (bound) => introspectAccessToken(bound, jti),
     );
     if (record === undefined) {
       return c.json(INACTIVE);

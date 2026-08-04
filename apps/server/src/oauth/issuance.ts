@@ -256,29 +256,28 @@ export async function issueTokens(
           expiresAt: new Date((issuedAt + evaluation.refreshTokenTtl) * 1000),
         };
 
-  if (request.rotate !== undefined) {
+  const rotate = request.rotate;
+  if (rotate !== undefined) {
     // The presented token is spent whether or not a successor is issued. A policy
     // that stopped granting `offline_access` since the last refresh must end the
     // chain, not leave the old token live indefinitely.
     const rotation =
       replacement === undefined
-        ? await redeemRefreshToken(
-            context.db,
-            clientScope,
-            request.rotate.tokenHash,
-            now,
+        ? await withTenantScope(context.db, clientScope, (bound) =>
+            redeemRefreshToken(bound, rotate.tokenHash, now),
           )
-        : await redeemAndRotateRefreshToken(
-            context.db,
-            clientScope,
-            request.rotate.tokenHash,
-            {
-              tokenHash: replacement.tokenHash,
-              scope: replacement.scope,
-              launchContext: replacement.launchContext,
-              expiresAt: replacement.expiresAt,
-            },
-            now,
+        : await withTenantScope(context.db, clientScope, (bound) =>
+            redeemAndRotateRefreshToken(
+              bound,
+              rotate.tokenHash,
+              {
+                tokenHash: replacement.tokenHash,
+                scope: replacement.scope,
+                launchContext: replacement.launchContext,
+                expiresAt: replacement.expiresAt,
+              },
+              now,
+            ),
           );
     if (!rotation.ok) {
       return {
@@ -289,19 +288,23 @@ export async function issueTokens(
       };
     }
   } else if (replacement !== undefined) {
-    await issueRefreshToken(context.db, clientScope, replacement);
+    await withTenantScope(context.db, clientScope, (bound) =>
+      issueRefreshToken(bound, replacement),
+    );
   }
 
-  await recordAccessToken(context.db, clientScope, {
-    jti,
-    subject: request.subject,
-    scope: grantedScopes,
-    issuer: issuerContext.issuer,
-    audience: issuerContext.endpoint.fhirBaseUrl,
-    launchContext: request.launchContext,
-    idTokenClaims: idTokenClaims ?? null,
-    expiresAt,
-  });
+  await withTenantScope(context.db, clientScope, (bound) =>
+    recordAccessToken(bound, {
+      jti,
+      subject: request.subject,
+      scope: grantedScopes,
+      issuer: issuerContext.issuer,
+      audience: issuerContext.endpoint.fhirBaseUrl,
+      launchContext: request.launchContext,
+      idTokenClaims: idTokenClaims ?? null,
+      expiresAt,
+    }),
+  );
 
   return {
     ok: true,

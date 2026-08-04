@@ -104,15 +104,11 @@ export async function authorizationCodeGrant(
       // everything the client holds is the only response that limits the damage,
       // and it is preferable to leaving a possibly-stolen token live for its full
       // lifetime.
-      const accessRevoked = await revokeAccessTokensForClient(
-        context.db,
-        scope,
-        context.clock(),
+      const accessRevoked = await withTenantScope(context.db, scope, (bound) =>
+        revokeAccessTokensForClient(bound, context.clock()),
       );
-      const refreshRevoked = await revokeRefreshTokensForClient(
-        context.db,
-        scope,
-        context.clock(),
+      const refreshRevoked = await withTenantScope(context.db, scope, (bound) =>
+        revokeRefreshTokensForClient(bound, context.clock()),
       );
       await recordReplayRevocation(context, request, {
         action: "token.revoked",

@@ -33,13 +33,21 @@ import {
   shouldRevokeFamily,
 } from "./predicates.js";
 import { firstRow, requireRow } from "./rows.js";
-import { databaseNow, TenantScopeViolationError } from "./scope.js";
+import {
+  executorFor,
+  databaseNow,
+  TenantScopeViolationError,
+} from "./scope.js";
 import { nowValue } from "./time.js";
 import { refreshTokens } from "../schema/runtime.js";
 
 import type { Executor } from "./executor.js";
 import type { RefreshTokenRefusal } from "./predicates.js";
-import type { ClientScope, EndpointScope } from "./scope.js";
+import type {
+  BoundClientScope,
+  BoundEndpointScope,
+  BoundTenantScope,
+} from "./scope.js";
 import type { NewRefreshToken, RefreshToken } from "../schema/runtime.js";
 import type { SQL } from "drizzle-orm";
 
@@ -69,11 +77,10 @@ export type RefreshTokenInput = Omit<
  * {@link rotateRefreshToken}.
  */
 export async function issueRefreshToken(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   input: RefreshTokenInput,
 ): Promise<RefreshToken> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(refreshTokens)
     .values({
       ...input,
@@ -111,44 +118,41 @@ export type RefreshTokenRedemption =
  * On reuse, the whole family is revoked before returning.
  */
 export async function redeemRefreshToken(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   tokenHash: string,
   now?: Date,
 ): Promise<RefreshTokenRedemption> {
-  return await db.transaction(async (tx) => {
-    const claimed = await tx
-      .update(refreshTokens)
-      .set({ revokedAt: nowValue(now) })
-      .where(
-        and(
-          eq(refreshTokens.tokenHash, tokenHash),
-          eq(refreshTokens.endpointId, scope.endpointId),
-          isNull(refreshTokens.revokedAt),
-          isNull(refreshTokens.replacedById),
-          // Strictly greater than: a token expiring exactly now is expired,
-          // matching the pure predicates.
-          gt(refreshTokens.expiresAt, nowValue(now)),
-        ),
-      )
-      .returning();
+  const claimed = await executorFor(scope)
+    .update(refreshTokens)
+    .set({ revokedAt: nowValue(now) })
+    .where(
+      and(
+        eq(refreshTokens.tokenHash, tokenHash),
+        eq(refreshTokens.endpointId, scope.endpointId),
+        isNull(refreshTokens.revokedAt),
+        isNull(refreshTokens.replacedById),
+        // Strictly greater than: a token expiring exactly now is expired,
+        // matching the pure predicates.
+        gt(refreshTokens.expiresAt, nowValue(now)),
+      ),
+    )
+    .returning();
 
-    const token = firstRow(claimed);
-    if (token !== undefined) {
-      return { ok: true, token };
-    }
+  const token = firstRow(claimed);
+  if (token !== undefined) {
+    return { ok: true, token };
+  }
 
-    const existing = await findRefreshToken(tx, scope, tokenHash);
-    const at = now ?? (await databaseNow(tx));
-    const reason = classifyRefreshTokenRefusal(existing, at);
+  const existing = await findRefreshToken(scope, tokenHash);
+  const at = now ?? (await databaseNow(executorFor(scope)));
+  const reason = classifyRefreshTokenRefusal(existing, at);
 
-    const familyRevoked =
-      shouldRevokeFamily(reason) && existing !== undefined
-        ? await revokeRefreshTokenFamily(tx, scope, existing.familyId, now)
-        : 0;
+  const familyRevoked =
+    shouldRevokeFamily(reason) && existing !== undefined
+      ? await revokeRefreshTokenFamily(scope, existing.familyId, now)
+      : 0;
 
-    return { ok: false, reason, familyRevoked };
-  });
+  return { ok: false, reason, familyRevoked };
 }
 
 /**
@@ -165,8 +169,7 @@ export async function redeemRefreshToken(
  * what it is given.
  */
 export async function rotateRefreshToken(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   redeemed: RefreshToken,
   replacement: Omit<RefreshTokenInput, "familyId" | "subject"> & {
     readonly subject?: string;
@@ -181,31 +184,29 @@ export async function rotateRefreshToken(
     );
   }
 
-  return await db.transaction(async (tx) => {
-    const successor = await issueRefreshToken(tx, scope, {
-      ...replacement,
-      subject: replacement.subject ?? redeemed.subject,
-      familyId: redeemed.familyId,
-    });
-
-    const linked = await tx
-      .update(refreshTokens)
-      .set({ replacedById: successor.id })
-      .where(
-        and(
-          eq(refreshTokens.id, redeemed.id),
-          isNull(refreshTokens.replacedById),
-        ),
-      )
-      .returning({ id: refreshTokens.id });
-
-    // The predecessor was claimed by this transaction's caller, so nothing else
-    // can have linked a successor to it. If that is untrue the family's integrity
-    // is already gone, and continuing would hide it.
-    requireRow(linked, "link refresh_tokens successor");
-
-    return successor;
+  const successor = await issueRefreshToken(scope, {
+    ...replacement,
+    subject: replacement.subject ?? redeemed.subject,
+    familyId: redeemed.familyId,
   });
+
+  const linked = await executorFor(scope)
+    .update(refreshTokens)
+    .set({ replacedById: successor.id })
+    .where(
+      and(
+        eq(refreshTokens.id, redeemed.id),
+        isNull(refreshTokens.replacedById),
+      ),
+    )
+    .returning({ id: refreshTokens.id });
+
+  // The predecessor was claimed by this transaction's caller, so nothing else
+  // can have linked a successor to it. If that is untrue the family's integrity
+  // is already gone, and continuing would hide it.
+  requireRow(linked, "link refresh_tokens successor");
+
+  return successor;
 }
 
 /** The outcome of a full rotation. */
@@ -228,40 +229,41 @@ export type RefreshTokenRotation =
  * transaction means a failure between them rolls the claim back, so the client can
  * retry with the token it still holds instead of being logged out by a transient
  * database error.
+ *
+ * That transaction is the one the bound scope declared its tenant on, so the
+ * boundary is where it always was: around these two statements and nothing else.
+ * The caller must not widen it to cover minting and signing the access token -
+ * a failure there has to leave the presented token spent, which is what
+ * {@link redeemRefreshToken}\'s ordering exists to guarantee.
  */
 export async function redeemAndRotateRefreshToken(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   tokenHash: string,
   replacement: Omit<RefreshTokenInput, "familyId" | "subject"> & {
     readonly subject?: string;
   },
   now?: Date,
 ): Promise<RefreshTokenRotation> {
-  return await db.transaction(async (tx) => {
-    const redemption = await redeemRefreshToken(tx, scope, tokenHash, now);
-    if (!redemption.ok) {
-      return redemption;
-    }
+  const redemption = await redeemRefreshToken(scope, tokenHash, now);
+  if (!redemption.ok) {
+    return redemption;
+  }
 
-    const successor = await rotateRefreshToken(
-      tx,
-      scope,
-      redemption.token,
-      replacement,
-    );
+  const successor = await rotateRefreshToken(
+    scope,
+    redemption.token,
+    replacement,
+  );
 
-    return { ok: true, redeemed: redemption.token, replacement: successor };
-  });
+  return { ok: true, redeemed: redemption.token, replacement: successor };
 }
 
 /** Reads a refresh token by digest within the scoped endpoint. */
 export async function findRefreshToken(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   tokenHash: string,
 ): Promise<RefreshToken | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(refreshTokens)
     .where(
@@ -288,12 +290,11 @@ export async function findRefreshToken(
  * @returns How many tokens were revoked.
  */
 export async function revokeRefreshTokenFamily(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   familyId: string,
   now?: Date,
 ): Promise<number> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(refreshTokens)
     .set({ revokedAt: nowValue(now) })
     .where(
@@ -316,11 +317,11 @@ export async function revokeRefreshTokenFamily(
  * an audit event about a compromise.
  */
 async function revokeMatchingRefreshTokens(
-  db: Executor,
+  scope: BoundTenantScope,
   predicate: SQL | undefined,
   now?: Date,
 ): Promise<number> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(refreshTokens)
     .set({ revokedAt: nowValue(now) })
     .where(and(predicate, isNull(refreshTokens.revokedAt)))
@@ -334,12 +335,11 @@ async function revokeMatchingRefreshTokens(
  * @returns How many tokens were revoked.
  */
 export async function revokeRefreshTokensForClient(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   now?: Date,
 ): Promise<number> {
   return await revokeMatchingRefreshTokens(
-    db,
+    scope,
     and(
       eq(refreshTokens.clientId, scope.clientRowId),
       eq(refreshTokens.endpointId, scope.endpointId),
@@ -356,13 +356,12 @@ export async function revokeRefreshTokensForClient(
  * @returns How many tokens were revoked.
  */
 export async function revokeRefreshTokensForSubject(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   subject: string,
   now?: Date,
 ): Promise<number> {
   return await revokeMatchingRefreshTokens(
-    db,
+    scope,
     and(
       eq(refreshTokens.subject, subject),
       eq(refreshTokens.endpointId, scope.endpointId),
@@ -380,13 +379,12 @@ export async function revokeRefreshTokensForSubject(
  * @returns How many tokens were revoked.
  */
 export async function revokeRefreshTokensForSubjectAndClient(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   subject: string,
   now?: Date,
 ): Promise<number> {
   return await revokeMatchingRefreshTokens(
-    db,
+    scope,
     and(
       eq(refreshTokens.subject, subject),
       eq(refreshTokens.endpointId, scope.endpointId),
@@ -398,11 +396,10 @@ export async function revokeRefreshTokensForSubjectAndClient(
 
 /** Lists a subject's refresh tokens on the scoped endpoint, newest first. */
 export async function listRefreshTokensForSubject(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   subject: string,
 ): Promise<readonly RefreshToken[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(refreshTokens)
     .where(

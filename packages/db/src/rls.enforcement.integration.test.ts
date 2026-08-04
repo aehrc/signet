@@ -313,20 +313,24 @@ describeWithDatabase("row-level security as the serving role", () => {
       expiresAt: soon(),
     });
 
-    await recordAccessToken(owner, clientScope, {
-      jti: `jti-${unique()}`,
-      subject: endUser.id,
-      scope: "patient/Observation.rs",
-      issuer: "https://signet.example.org",
-      audience: "https://fhir.example.org/fhir",
-      expiresAt: soon(),
-    });
-    await issueRefreshToken(owner, clientScope, {
-      tokenHash: `refresh-${unique()}`,
-      subject: endUser.id,
-      scope: "patient/Observation.rs",
-      expiresAt: soon(),
-    });
+    await withTenantScope(owner, clientScope, (bound) =>
+      recordAccessToken(bound, {
+        jti: `jti-${unique()}`,
+        subject: endUser.id,
+        scope: "patient/Observation.rs",
+        issuer: "https://signet.example.org",
+        audience: "https://fhir.example.org/fhir",
+        expiresAt: soon(),
+      }),
+    );
+    await withTenantScope(owner, clientScope, (bound) =>
+      issueRefreshToken(bound, {
+        tokenHash: `refresh-${unique()}`,
+        subject: endUser.id,
+        scope: "patient/Observation.rs",
+        expiresAt: soon(),
+      }),
+    );
     await recordConsent(owner, clientScope, {
       endUserId: endUser.id,
       scope: "patient/Observation.rs",
@@ -341,7 +345,9 @@ describeWithDatabase("row-level security as the serving role", () => {
         userAgent: null,
       }),
     );
-    await recordJti(owner, clientScope, `assertion-${unique()}`, soon());
+    await withTenantScope(owner, clientScope, (bound) =>
+      recordJti(bound, `assertion-${unique()}`, soon()),
+    );
 
     // Non-fatal by design, so a failure here would leave `audit_events` empty
     // rather than throwing: the reachability assertion below is what catches it.

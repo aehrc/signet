@@ -25,6 +25,7 @@ import {
   hashToken,
   revokeAccessToken,
   revokeRefreshTokenFamily,
+  withTenantScope,
 } from "@signet/db";
 
 import { readTokenRequest } from "./authenticatedEndpoint.js";
@@ -65,10 +66,10 @@ export function revokeHandler(context: ServerContext) {
 
     /** Tries to revoke the value as a refresh token, family and all. */
     const tryRefresh = async (): Promise<boolean> => {
-      const held = await findRefreshToken(
+      const held = await withTenantScope(
         context.db,
         issuerContext.scope,
-        await hashToken(token),
+        async (bound) => findRefreshToken(bound, await hashToken(token)),
       );
       // A client may only revoke its own tokens. Presenting somebody else's is
       // answered as though nothing matched, which is both what RFC 7009 §2.1
@@ -76,11 +77,8 @@ export function revokeHandler(context: ServerContext) {
       if (held === undefined || held.clientId !== scope.clientRowId) {
         return false;
       }
-      await revokeRefreshTokenFamily(
-        context.db,
-        issuerContext.scope,
-        held.familyId,
-        now,
+      await withTenantScope(context.db, issuerContext.scope, (bound) =>
+        revokeRefreshTokenFamily(bound, held.familyId, now),
       );
       return true;
     };
@@ -91,7 +89,9 @@ export function revokeHandler(context: ServerContext) {
       if (jti === undefined) {
         return false;
       }
-      return await revokeAccessToken(context.db, issuerContext.scope, jti, now);
+      return await withTenantScope(context.db, issuerContext.scope, (bound) =>
+        revokeAccessToken(bound, jti, now),
+      );
     };
 
     // The hint decides which is tried first, never which is tried at all: RFC 7009

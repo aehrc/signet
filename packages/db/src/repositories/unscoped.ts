@@ -110,9 +110,6 @@ export const SWEEP_FUNCTIONS: readonly string[] = [
  */
 export const MODULES_AWAITING_BINDING: readonly string[] = [
   "audit/record",
-  "repositories/accessTokens",
   "repositories/consents",
   "repositories/federationStates",
-  "repositories/jtiReplay",
-  "repositories/refreshTokens",
 ];

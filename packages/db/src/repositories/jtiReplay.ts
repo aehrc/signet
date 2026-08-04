@@ -25,11 +25,12 @@
 
 import { and, eq, lte } from "drizzle-orm";
 
+import { executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { jtiReplay } from "../schema/runtime.js";
 
 import type { Executor } from "./executor.js";
-import type { ClientScope } from "./scope.js";
+import type { BoundClientScope } from "./scope.js";
 
 /**
  * What recording a `jti` decided.
@@ -50,7 +51,6 @@ export type JtiRecord =
  * required to be unique per issuer, so two clients may legitimately choose the same
  * one, and a global ledger would refuse the second as a replay.
  *
- * @param db - The connection or transaction to use.
  * @param scope - The client the assertion authenticates.
  * @param jti - The assertion's `jti` claim.
  * @param expiresAt - The assertion's own expiry. The row may be swept once the
@@ -60,12 +60,11 @@ export type JtiRecord =
  *   caller must pass the assertion's `exp` and not a shorter interval of its own.
  */
 export async function recordJti(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   jti: string,
   expiresAt: Date,
 ): Promise<JtiRecord> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(jtiReplay)
     .values({ clientId: scope.clientRowId, jti, expiresAt })
     .onConflictDoNothing({ target: [jtiReplay.clientId, jtiReplay.jti] })
@@ -82,11 +81,10 @@ export async function recordJti(
  * the caller acts on it.
  */
 export async function hasSeenJti(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   jti: string,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .select({ jti: jtiReplay.jti })
     .from(jtiReplay)
     .where(

@@ -289,15 +289,15 @@ export function manageAuthorizationsHandler(context: ServerContext) {
       user.id,
     );
     const now = context.clock();
-    const accessTokens = await listAccessTokensForSubject(
+    const accessTokens = await withTenantScope(
       context.db,
       issuerContext.scope,
-      user.id,
+      (bound) => listAccessTokensForSubject(bound, user.id),
     );
-    const refreshTokens = await listRefreshTokensForSubject(
+    const refreshTokens = await withTenantScope(
       context.db,
       issuerContext.scope,
-      user.id,
+      (bound) => listRefreshTokensForSubject(bound, user.id),
     );
 
     c.header("Cache-Control", "no-store");
@@ -385,17 +385,15 @@ export function manageRevokeHandler(context: ServerContext) {
     );
     // Scoped to this user *and* this client: revoking every token the user holds
     // would disconnect apps they did not ask to disconnect.
-    const accessRevoked = await revokeAccessTokensForSubjectAndClient(
+    const accessRevoked = await withTenantScope(
       context.db,
       clientScope,
-      user.id,
-      now,
+      (bound) => revokeAccessTokensForSubjectAndClient(bound, user.id, now),
     );
-    const refreshRevoked = await revokeRefreshTokensForSubjectAndClient(
+    const refreshRevoked = await withTenantScope(
       context.db,
       clientScope,
-      user.id,
-      now,
+      (bound) => revokeRefreshTokensForSubjectAndClient(bound, user.id, now),
     );
 
     await context.audit.record(context.db, {

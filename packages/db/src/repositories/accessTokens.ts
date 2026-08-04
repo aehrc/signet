@@ -18,12 +18,17 @@ import { and, desc, eq, isNull, lte } from "drizzle-orm";
 
 import { toIntrospectableToken } from "./mappers.js";
 import { firstRow, requireRow } from "./rows.js";
+import { executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { clients } from "../schema/clients.js";
 import { accessTokens } from "../schema/runtime.js";
 
 import type { Executor } from "./executor.js";
-import type { ClientScope, EndpointScope } from "./scope.js";
+import type {
+  BoundClientScope,
+  BoundEndpointScope,
+  BoundTenantScope,
+} from "./scope.js";
 import type { AccessToken, NewAccessToken } from "../schema/runtime.js";
 import type { IntrospectableToken } from "@signet/core";
 import type { SQL } from "drizzle-orm";
@@ -48,11 +53,10 @@ export type AccessTokenRecordInput = Omit<
 
 /** Records an issued access token against the scoped client. */
 export async function recordAccessToken(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   input: AccessTokenRecordInput,
 ): Promise<AccessToken> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(accessTokens)
     .values({
       ...input,
@@ -65,11 +69,10 @@ export async function recordAccessToken(
 
 /** Reads one of the scoped endpoint's token records by `jti`. */
 export async function findAccessToken(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   jti: string,
 ): Promise<AccessToken | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(accessTokens)
     .where(
@@ -94,11 +97,10 @@ export async function findAccessToken(
  * @returns Undefined only when no such token was ever issued on this endpoint.
  */
 export async function introspectAccessToken(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   jti: string,
 ): Promise<IntrospectableToken | undefined> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .select({ token: accessTokens, clientId: clients.clientId })
     .from(accessTokens)
     .innerJoin(clients, eq(clients.id, accessTokens.clientId))
@@ -123,12 +125,11 @@ export async function introspectAccessToken(
  *   idempotent" response can be given without pretending something happened.
  */
 export async function revokeAccessToken(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   jti: string,
   now?: Date,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(accessTokens)
     .set({ revokedAt: nowValue(now) })
     .where(
@@ -151,11 +152,10 @@ export async function revokeAccessToken(
  * @returns How many tokens were revoked.
  */
 export async function revokeAccessTokensForClient(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   now?: Date,
 ): Promise<number> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(accessTokens)
     .set({ revokedAt: nowValue(now) })
     .where(
@@ -177,11 +177,11 @@ export async function revokeAccessTokensForClient(
  * silently restamp an already-revoked row and report it as newly revoked.
  */
 async function revokeMatchingAccessTokens(
-  db: Executor,
+  scope: BoundTenantScope,
   predicate: SQL | undefined,
   now?: Date,
 ): Promise<number> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(accessTokens)
     .set({ revokedAt: nowValue(now) })
     .where(and(predicate, isNull(accessTokens.revokedAt)))
@@ -198,13 +198,12 @@ async function revokeMatchingAccessTokens(
  * @returns How many tokens were revoked.
  */
 export async function revokeAccessTokensForSubject(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   subject: string,
   now?: Date,
 ): Promise<number> {
   return await revokeMatchingAccessTokens(
-    db,
+    scope,
     and(
       eq(accessTokens.subject, subject),
       eq(accessTokens.endpointId, scope.endpointId),
@@ -223,13 +222,12 @@ export async function revokeAccessTokensForSubject(
  * @returns How many tokens were revoked.
  */
 export async function revokeAccessTokensForSubjectAndClient(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   subject: string,
   now?: Date,
 ): Promise<number> {
   return await revokeMatchingAccessTokens(
-    db,
+    scope,
     and(
       eq(accessTokens.subject, subject),
       eq(accessTokens.endpointId, scope.endpointId),
@@ -241,11 +239,10 @@ export async function revokeAccessTokensForSubjectAndClient(
 
 /** Lists a subject's token records on the scoped endpoint, newest first. */
 export async function listAccessTokensForSubject(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   subject: string,
 ): Promise<readonly AccessToken[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(accessTokens)
     .where(
@@ -260,7 +257,6 @@ export async function listAccessTokensForSubject(
 /**
  * Deletes records for tokens that have already expired.
  *
- * @param db - The connection or transaction to use.
  * @param before - Delete records whose token expired before this instant. A
  *   caller may pass an earlier time than "now" to keep a grace period, so that
  *   introspecting a just-expired token still reports `active: false` with its

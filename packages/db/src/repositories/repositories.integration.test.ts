@@ -155,12 +155,14 @@ async function issueRefresh(
   tokenHash: string,
   expiresAt = new Date(Date.now() + 600_000),
 ) {
-  return await issueRefreshToken(db, fixture.clientScope, {
-    tokenHash,
-    subject: "user-1",
-    scope: "patient/Observation.rs",
-    expiresAt,
-  });
+  return await withTenantScope(db, fixture.clientScope, (bound) =>
+    issueRefreshToken(bound, {
+      tokenHash,
+      subject: "user-1",
+      scope: "patient/Observation.rs",
+      expiresAt,
+    }),
+  );
 }
 
 /** Creates a console identity, which belongs to no tenant. */
@@ -579,15 +581,12 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const fixture = await newFixture();
       const original = await issueRefresh(db, fixture, "refresh-a");
 
-      const rotation = await redeemAndRotateRefreshToken(
-        db,
-        fixture.clientScope,
-        "refresh-a",
-        {
+      const rotation = await withTenantScope(db, fixture.clientScope, (bound) =>
+        redeemAndRotateRefreshToken(bound, "refresh-a", {
           tokenHash: "refresh-b",
           scope: "patient/Observation.rs",
           expiresAt: new Date(Date.now() + 600_000),
-        },
+        }),
       );
 
       expect(rotation.ok).toBe(true);
@@ -597,10 +596,10 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       expect(rotation.replacement.familyId).toBe(original.familyId);
       expect(rotation.replacement.subject).toBe("user-1");
 
-      const predecessor = await findRefreshToken(
+      const predecessor = await withTenantScope(
         db,
         fixture.endpointScope,
-        "refresh-a",
+        (bound) => findRefreshToken(bound, "refresh-a"),
       );
       expect(predecessor?.revokedAt).not.toBeNull();
       expect(predecessor?.replacedById).toBe(rotation.replacement.id);
@@ -609,22 +608,17 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     it("revokes the whole family when a rotated token is presented again", async () => {
       const fixture = await newFixture();
       await issueRefresh(db, fixture, "refresh-1");
-      const rotation = await redeemAndRotateRefreshToken(
-        db,
-        fixture.clientScope,
-        "refresh-1",
-        {
+      const rotation = await withTenantScope(db, fixture.clientScope, (bound) =>
+        redeemAndRotateRefreshToken(bound, "refresh-1", {
           tokenHash: "refresh-2",
           scope: "patient/Observation.rs",
           expiresAt: new Date(Date.now() + 600_000),
-        },
+        }),
       );
       expect(rotation.ok).toBe(true);
 
-      const reuse = await redeemRefreshToken(
-        db,
-        fixture.endpointScope,
-        "refresh-1",
+      const reuse = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        redeemRefreshToken(bound, "refresh-1"),
       );
       expect(reuse.ok).toBe(false);
       if (reuse.ok) {
@@ -634,19 +628,19 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       // The successor was live; detecting the theft must have killed it.
       expect(reuse.familyRevoked).toBe(1);
 
-      const successor = await findRefreshToken(
+      const successor = await withTenantScope(
         db,
         fixture.endpointScope,
-        "refresh-2",
+        (bound) => findRefreshToken(bound, "refresh-2"),
       );
       expect(successor?.revokedAt).not.toBeNull();
 
       // And the successor now reads as revoked rather than as reused: it has no
       // successor of its own, so it is not evidence of a second theft.
-      const afterwards = await redeemRefreshToken(
+      const afterwards = await withTenantScope(
         db,
         fixture.endpointScope,
-        "refresh-2",
+        (bound) => redeemRefreshToken(bound, "refresh-2"),
       );
       expect(afterwards).toEqual({
         ok: false,
@@ -660,7 +654,9 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       await issueRefresh(db, fixture, "refresh-race");
 
       const [first, second] = await raceOnOneRow((executor) =>
-        redeemRefreshToken(executor, fixture.endpointScope, "refresh-race"),
+        withTenantScope(executor, fixture.endpointScope, (bound) =>
+          redeemRefreshToken(bound, "refresh-race"),
+        ),
       );
 
       expect(first.ok).toBe(true);
@@ -676,15 +672,19 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
     it("refuses an expired token, and does not touch its family", async () => {
       const fixture = await newFixture();
-      await issueRefreshToken(db, fixture.clientScope, {
-        tokenHash: "refresh-old",
-        subject: "user-1",
-        scope: "patient/Observation.rs",
-        expiresAt: new Date(Date.now() - 1000),
-      });
+      await withTenantScope(db, fixture.clientScope, (bound) =>
+        issueRefreshToken(bound, {
+          tokenHash: "refresh-old",
+          subject: "user-1",
+          scope: "patient/Observation.rs",
+          expiresAt: new Date(Date.now() - 1000),
+        }),
+      );
 
       expect(
-        await redeemRefreshToken(db, fixture.endpointScope, "refresh-old"),
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          redeemRefreshToken(bound, "refresh-old"),
+        ),
       ).toEqual({ ok: false, reason: "expired", familyRevoked: 0 });
     });
 
@@ -694,11 +694,13 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const foreign = await issueRefresh(db, theirs, "refresh-foreign");
 
       await expect(
-        rotateRefreshToken(db, mine.clientScope, foreign, {
-          tokenHash: "refresh-stolen",
-          scope: "patient/Observation.rs",
-          expiresAt: new Date(Date.now() + 600_000),
-        }),
+        withTenantScope(db, mine.clientScope, (bound) =>
+          rotateRefreshToken(bound, foreign, {
+            tokenHash: "refresh-stolen",
+            scope: "patient/Observation.rs",
+            expiresAt: new Date(Date.now() + 600_000),
+          }),
+        ),
       ).rejects.toThrow(TenantScopeViolationError);
     });
 
@@ -708,13 +710,15 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       await issueRefresh(db, theirs, "refresh-elsewhere");
 
       expect(
-        await redeemRefreshToken(db, mine.endpointScope, "refresh-elsewhere"),
+        await withTenantScope(db, mine.endpointScope, (bound) =>
+          redeemRefreshToken(bound, "refresh-elsewhere"),
+        ),
       ).toEqual({ ok: false, reason: "not-found", familyRevoked: 0 });
 
-      const untouched = await findRefreshToken(
+      const untouched = await withTenantScope(
         db,
         theirs.endpointScope,
-        "refresh-elsewhere",
+        (bound) => findRefreshToken(bound, "refresh-elsewhere"),
       );
       expect(untouched?.revokedAt).toBeNull();
     });
@@ -726,12 +730,20 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const expiresAt = new Date(Date.now() + 300_000);
 
       expect(
-        await recordJti(db, fixture.clientScope, "jti-1", expiresAt),
+        await withTenantScope(db, fixture.clientScope, (bound) =>
+          recordJti(bound, "jti-1", expiresAt),
+        ),
       ).toEqual({ status: "recorded" });
       expect(
-        await recordJti(db, fixture.clientScope, "jti-1", expiresAt),
+        await withTenantScope(db, fixture.clientScope, (bound) =>
+          recordJti(bound, "jti-1", expiresAt),
+        ),
       ).toEqual({ status: "already-seen" });
-      expect(await hasSeenJti(db, fixture.clientScope, "jti-1")).toBe(true);
+      expect(
+        await withTenantScope(db, fixture.clientScope, (bound) =>
+          hasSeenJti(bound, "jti-1"),
+        ),
+      ).toBe(true);
     });
 
     it("keeps a separate ledger per client", async () => {
@@ -747,11 +759,17 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const otherScope = clientScopeFromRow(fixture.endpointScope, other);
       const expiresAt = new Date(Date.now() + 300_000);
 
-      await recordJti(db, fixture.clientScope, "shared-jti", expiresAt);
+      await withTenantScope(db, fixture.clientScope, (bound) =>
+        recordJti(bound, "shared-jti", expiresAt),
+      );
 
       // jti values are only unique per issuer, so a second client may legitimately
       // choose the same one.
-      expect(await recordJti(db, otherScope, "shared-jti", expiresAt)).toEqual({
+      expect(
+        await withTenantScope(db, otherScope, (bound) =>
+          recordJti(bound, "shared-jti", expiresAt),
+        ),
+      ).toEqual({
         status: "recorded",
       });
     });
@@ -759,13 +777,17 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     it("leaves the transaction usable after a replay", async () => {
       const fixture = await newFixture();
       const expiresAt = new Date(Date.now() + 300_000);
-      await recordJti(db, fixture.clientScope, "jti-tx", expiresAt);
+      await withTenantScope(db, fixture.clientScope, (bound) =>
+        recordJti(bound, "jti-tx", expiresAt),
+      );
 
       // A raised unique violation would abort the surrounding transaction and take
       // the rest of the token exchange with it.
       await db.transaction(async (tx) => {
         expect(
-          await recordJti(tx, fixture.clientScope, "jti-tx", expiresAt),
+          await withTenantScope(tx, fixture.clientScope, (bound) =>
+            recordJti(bound, "jti-tx", expiresAt),
+          ),
         ).toEqual({ status: "already-seen" });
         const rows = await tx.select().from(clients).limit(1);
         expect(rows.length).toBeGreaterThan(0);
@@ -1090,20 +1112,22 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const fixture = await newFixture();
       const jti = `jti-${unique()}`;
       const expiresAt = new Date(Date.now() + 300_000);
-      await recordAccessToken(db, fixture.clientScope, {
-        jti,
-        subject: "user-1",
-        scope: "patient/Observation.rs",
-        issuer: "https://signet.example.org/t/x/e/y",
-        audience: "https://fhir.example.org/fhir",
-        launchContext: { patient: "Patient/1" },
-        expiresAt,
-      });
+      await withTenantScope(db, fixture.clientScope, (bound) =>
+        recordAccessToken(bound, {
+          jti,
+          subject: "user-1",
+          scope: "patient/Observation.rs",
+          issuer: "https://signet.example.org/t/x/e/y",
+          audience: "https://fhir.example.org/fhir",
+          launchContext: { patient: "Patient/1" },
+          expiresAt,
+        }),
+      );
 
-      const introspected = await introspectAccessToken(
+      const introspected = await withTenantScope(
         db,
         fixture.endpointScope,
-        jti,
+        (bound) => introspectAccessToken(bound, jti),
       );
       expect(introspected?.clientId).toBe(fixture.clientScope.clientId);
       expect(introspected?.launchContext).toEqual({ patient: "Patient/1" });
@@ -1112,20 +1136,24 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         Math.floor(expiresAt.getTime() / 1000),
       );
 
-      expect(await revokeAccessToken(db, fixture.endpointScope, jti)).toBe(
-        true,
-      );
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          revokeAccessToken(bound, jti),
+        ),
+      ).toBe(true);
       // Idempotent: the second call reports that nothing live was revoked.
-      expect(await revokeAccessToken(db, fixture.endpointScope, jti)).toBe(
-        false,
-      );
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          revokeAccessToken(bound, jti),
+        ),
+      ).toBe(false);
 
       // Still introspectable - a revoked token has to be answerable, or a resource
       // server could not tell it from a token that was never issued.
-      const afterwards = await introspectAccessToken(
+      const afterwards = await withTenantScope(
         db,
         fixture.endpointScope,
-        jti,
+        (bound) => introspectAccessToken(bound, jti),
       );
       expect(afterwards?.revokedAt).not.toBeNull();
     });
@@ -1134,19 +1162,27 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const mine = await newFixture();
       const theirs = await newFixture();
       const jti = `jti-${unique()}`;
-      await recordAccessToken(db, theirs.clientScope, {
-        jti,
-        subject: "user-1",
-        scope: "patient/Observation.rs",
-        issuer: "https://signet.example.org/t/other/e/y",
-        audience: "https://fhir.example.org/fhir",
-        expiresAt: new Date(Date.now() + 300_000),
-      });
+      await withTenantScope(db, theirs.clientScope, (bound) =>
+        recordAccessToken(bound, {
+          jti,
+          subject: "user-1",
+          scope: "patient/Observation.rs",
+          issuer: "https://signet.example.org/t/other/e/y",
+          audience: "https://fhir.example.org/fhir",
+          expiresAt: new Date(Date.now() + 300_000),
+        }),
+      );
 
       expect(
-        await introspectAccessToken(db, mine.endpointScope, jti),
+        await withTenantScope(db, mine.endpointScope, (bound) =>
+          introspectAccessToken(bound, jti),
+        ),
       ).toBeUndefined();
-      expect(await revokeAccessToken(db, mine.endpointScope, jti)).toBe(false);
+      expect(
+        await withTenantScope(db, mine.endpointScope, (bound) =>
+          revokeAccessToken(bound, jti),
+        ),
+      ).toBe(false);
     });
   });
 
@@ -1246,12 +1282,14 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
           expiresAt: new Date(Date.now() + 600_000),
         }),
       );
-      await issueRefreshToken(db, fixture.clientScope, {
-        tokenHash: `sweep-refresh-${unique()}`,
-        subject: "user-1",
-        scope: "patient/Observation.rs",
-        expiresAt: new Date(Date.now() - 1000),
-      });
+      await withTenantScope(db, fixture.clientScope, (bound) =>
+        issueRefreshToken(bound, {
+          tokenHash: `sweep-refresh-${unique()}`,
+          subject: "user-1",
+          scope: "patient/Observation.rs",
+          expiresAt: new Date(Date.now() - 1000),
+        }),
+      );
 
       const counts = await sweepExpiredRuntimeRows(db);
       expect(counts.launchContexts).toBeGreaterThanOrEqual(1);
@@ -1332,12 +1370,14 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
           expiresAt: new Date(Date.now() + 600_000),
         }),
       );
-      await issueRefreshToken(db, theirs.clientScope, {
-        tokenHash: `rls-refresh-${unique()}`,
-        subject: "user-1",
-        scope: "patient/Observation.rs",
-        expiresAt: new Date(Date.now() + 600_000),
-      });
+      await withTenantScope(db, theirs.clientScope, (bound) =>
+        issueRefreshToken(bound, {
+          tokenHash: `rls-refresh-${unique()}`,
+          subject: "user-1",
+          scope: "patient/Observation.rs",
+          expiresAt: new Date(Date.now() + 600_000),
+        }),
+      );
 
       const counts = await asTenant(mine.tenantScope, async (tx) => ({
         handles: await tx
