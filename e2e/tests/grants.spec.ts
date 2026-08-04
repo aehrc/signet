@@ -185,7 +185,9 @@ test.describe("an EHR launch", () => {
     );
   });
 
-  test("refuses a launch handle a second time", async ({ request }) => {
+  test("consumes a launch handle, and refuses it the second time", async ({
+    request,
+  }) => {
     const minted = await request.post(`${ISSUER}/launch-context`, {
       headers: {
         authorization: basic(
@@ -197,18 +199,45 @@ test.describe("an EHR launch", () => {
       data: { patient: "pat-9", forClientId: SEED.publicClientId },
     });
     const { launch } = (await minted.json()) as { launch: string };
-
-    // Redeeming is what consumes it, and the browser flow above proves the happy
-    // path. Here the handle is simply presented twice to `/authorize`: the first
-    // attempt reaches a sign-in page, the second must not.
-    const first = await request.get(
-      `${ISSUER}/authorize?response_type=code&client_id=${SEED.publicClientId}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent("openid launch patient/*.rs")}&state=x&aud=${encodeURIComponent(FHIR)}&code_challenge=${CHALLENGE}&code_challenge_method=S256&launch=${encodeURIComponent("not-a-real-handle")}`,
-      { maxRedirects: 0 },
-    );
-    // A handle that was never minted is refused rather than ignored. Ignoring it
-    // would silently downgrade an EHR launch to a standalone one.
-    expect([302, 303, 400]).toContain(first.status());
     expect(launch).toBeTruthy();
+
+    // The handle is consumed at `/authorize`, before anybody signs in, so both
+    // presentations are plain requests and neither spends a sign-in.
+    const present = async (handle: string) =>
+      await request.get(
+        `${ISSUER}/authorize?response_type=code&client_id=${SEED.publicClientId}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent("openid launch patient/*.rs")}&state=x&aud=${encodeURIComponent(FHIR)}&code_challenge=${CHALLENGE}&code_challenge_method=S256&launch=${encodeURIComponent(handle)}`,
+        { maxRedirects: 0 },
+      );
+
+    // The first presentation is accepted. Asserted by the *absence* of an OAuth
+    // error on the redirect rather than by its status, because a refusal is also
+    // a redirect - to the app, carrying `error` - and a status check alone could
+    // not tell the two apart.
+    const first = await present(launch);
+    expect(
+      new URL(first.headers()["location"] ?? "", ISSUER).searchParams.get(
+        "error",
+      ),
+    ).toBeNull();
+
+    // The second is refused, and says why. A handle that could be redeemed twice
+    // would let anybody who saw it in an EHR's logs open the app as that patient.
+    const second = await present(launch);
+    const refusal = new URL(second.headers()["location"] ?? "", ISSUER);
+    expect(refusal.searchParams.get("error")).toBe("invalid_request");
+    expect(refusal.searchParams.get("error_description")).toContain(
+      "already been used",
+    );
+
+    // A handle that was never minted is refused the same way, rather than being
+    // ignored - ignoring it would silently downgrade an EHR launch to a
+    // standalone one, with no patient in context and nobody any the wiser.
+    const bogus = await present("not-a-real-handle");
+    expect(
+      new URL(bogus.headers()["location"] ?? "", ISSUER).searchParams.get(
+        "error",
+      ),
+    ).toBe("invalid_request");
   });
 });
 
