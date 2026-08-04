@@ -31,11 +31,13 @@ const OWNER_VARIABLE = "SIGNET_DATABASE_OWNER_URL";
  * Secret keys that would give a pod the owning identity.
  *
  * `postgres-password` is the bundled subchart's superuser, which is the owning
- * identity when the subchart is enabled. Present in the Job's spec, and its
- * appearance in the server's would hand the server owner authority by another
- * name - which is why the check looks for the key and not only for the variable.
+ * identity when the subchart is enabled. `ownerUrl` is the key of the secret the
+ * chart creates for an external database. Either present in the Job's spec, and
+ * either appearing in the server's would hand the server owner authority by
+ * another name - which is why the check looks for the keys and not only for the
+ * variable.
  */
-const OWNER_SECRET_KEYS = ["postgres-password"];
+const OWNER_SECRET_KEYS = ["postgres-password", "ownerUrl"];
 
 /**
  * The configurations to render.
@@ -55,6 +57,22 @@ const CONFIGURATIONS = [
       "database.existingSecret=external-db",
       "--set",
       "database.ownerExistingSecret=external-db-owner",
+      "--set",
+      "masterKey.existingSecret=external-key",
+    ],
+  },
+  {
+    // A separate branch of the templates, not a variation on the one above: here
+    // the chart creates both secrets itself, so it is the chart rather than the
+    // operator that decides which pod spec each is mounted into.
+    name: "external database with chart-created secrets",
+    flags: [
+      "--set",
+      "postgresql.enabled=false",
+      "--set",
+      "database.url=postgres://app:pw@db:5432/signet",
+      "--set",
+      "database.ownerUrl=postgres://owner:pw@db:5432/signet",
       "--set",
       "masterKey.existingSecret=external-key",
     ],
