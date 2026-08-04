@@ -9,6 +9,11 @@ test-results
 # does not read .gitignore, so without this `format:check` goes red on any machine
 # that has run the suite.
 e2e/playwright/.auth
+# Feature specifications, written by the spec skill. Git ignores them, so CI
+# never sees them and only a local `format:check` goes red - which is the worst
+# shape for a gate to fail in, because it fails only for the person who has the
+# files.
+.local
 packages/db/drizzle
 bun.lock
 
