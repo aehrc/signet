@@ -4,7 +4,7 @@
  * {@link consumeAuthorizationCode} is the most safety-critical statement in this
  * package. An authorization code is a bearer credential that converts into an
  * access token, and a code that can be redeemed twice is two tokens from one
- * consent — the classic replay against which RFC 6749 section 10.5 requires
+ * consent - the classic replay against which RFC 6749 section 10.5 requires
  * single use.
  *
  * It is therefore a conditional `UPDATE ... WHERE consumed_at IS NULL RETURNING`,
@@ -14,9 +14,11 @@
  * nothing, and returns no rows. Only the caller holding a returned row may
  * proceed, and there is no instant at which both do.
  *
- * A read-then-write would fail in exactly the way that is hardest to notice —
+ * A read-then-write would fail in exactly the way that is hardest to notice -
  * correct in every test, wrong under load, and wrong in the direction of issuing
  * an extra token.
+ *
+ * Author: John Grimes
  */
 
 import { and, eq, exists, gt, isNull, lte, sql } from "drizzle-orm";
@@ -89,8 +91,8 @@ export type AuthorizationCodeRedemption =
 /**
  * Correlated `EXISTS` restricting a code to the scoped endpoint.
  *
- * `authorization_codes` has no `endpoint_id` of its own — it hangs off the
- * session — so the tenant predicate has to be a subquery. Putting it inside the
+ * `authorization_codes` has no `endpoint_id` of its own - it hangs off the
+ * session - so the tenant predicate has to be a subquery. Putting it inside the
  * conditional `UPDATE` rather than checking it afterwards keeps the claim atomic:
  * a code belonging to another endpoint is never consumed at all, not consumed and
  * then rejected.
@@ -114,7 +116,7 @@ function belongsToEndpoint(tx: Executor, scope: EndpointScope) {
  *
  * @returns The claimed code and the session it authorises, or why it could not be
  *   claimed. `already-consumed` is the replay case, and the token endpoint should
- *   treat it as an attack on the client — the spec permits revoking the tokens
+ *   treat it as an attack on the client - the spec permits revoking the tokens
  *   previously issued from that code.
  */
 export async function consumeAuthorizationCode(
@@ -189,7 +191,7 @@ export async function findAuthorizationCode(
  *
  * Consumed codes are deleted too, once expired. Retaining them would only be
  * useful for detecting a replay after the fact, and the audit event written at
- * redemption already records that — an audit log is the right place for history,
+ * redemption already records that - an audit log is the right place for history,
  * and a runtime table is not.
  *
  * @returns How many rows were deleted.

@@ -4,9 +4,9 @@
  * Creating an endpoint does three things, and it matters that it does all three:
  * it writes the row, generates a signing key and promotes it, and publishes a
  * starting policy. An endpoint missing any one of those exists but cannot issue a
- * token — the token endpoint answers `server_error` for a missing key or a missing
+ * token - the token endpoint answers `server_error` for a missing key or a missing
  * policy, deliberately, because both are misconfigurations rather than client
- * mistakes — and an operator who created an endpoint through the console and found
+ * mistakes - and an operator who created an endpoint through the console and found
  * it non-functional would reasonably call that a bug.
  *
  * Key rotation is exposed as the three states the data layer models rather than as a
@@ -15,6 +15,8 @@
  * makes it active; retirement is separate again, and should wait until the tokens the
  * old key signed have expired. Collapsing those into one action is how a rotation
  * breaks every client that caches a JWKS for five minutes.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -333,7 +335,7 @@ export function registerEndpointRoutes(
     } catch (error) {
       if (isUniqueViolation(error)) {
         // `kid` is the key's own thumbprint, so a collision means this exact key is
-        // already published — which is a different statement from bad luck.
+        // already published - which is a different statement from bad luck.
         return c.json(
           adminErrorBody("conflict", "That key is already published"),
           statusForAdminError("conflict"),

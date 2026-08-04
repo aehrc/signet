@@ -8,7 +8,7 @@
  * issuance can never depend on row order.
  *
  * The simulator is the reason the policy editor is usable at all. It takes a policy
- * document *in the request* — not a stored version — so an unsaved edit can be
+ * document *in the request* - not a stored version - so an unsaved edit can be
  * previewed, and it runs `simulateIssuance`, which is the same composition the token
  * endpoint uses. Nothing is signed, stored or issued: a simulation is a pure function
  * of a policy and a context, which is what makes it safe to run on every keystroke.
@@ -17,6 +17,8 @@
  * rows rather than described in the request. A simulator that accepted an invented
  * user would answer a question about a person who does not exist, and would be a way
  * to probe what a policy does with roles the tenant has not defined.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -54,7 +56,7 @@ import type { Context, Hono } from "hono";
  * Reads the version from the path, or the 400 to answer with.
  *
  * A version is a small integer allocated by the database, so anything else in that
- * segment is a mistake rather than a version that does not exist — 400 rather than
+ * segment is a mistake rather than a version that does not exist - 400 rather than
  * 404, which is the difference between "that is not a version" and "there is no such
  * version".
  *
@@ -92,7 +94,7 @@ export function registerPolicyRoutes(
    * Creates a version, optionally publishing it.
    *
    * The document has already been validated by the contract, which delegates to the
-   * core validator — so a document that reaches here is one the evaluator accepts.
+   * core validator - so a document that reaches here is one the evaluator accepts.
    */
   router.post(`${ENDPOINT_PATH}/policies`, requireRole("admin"), async (c) => {
     const { scope, endpoint } = c.get("endpoint");
@@ -249,7 +251,7 @@ export function registerPolicyRoutes(
       }
 
       // A policy in the request wins, so an unsaved edit can be previewed. With none,
-      // the effective policy is used — including a client override, since that is
+      // the effective policy is used - including a client override, since that is
       // what this client would actually be issued under.
       let document = body.document;
       let simulatedVersion: number | null = null;

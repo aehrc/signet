@@ -6,6 +6,8 @@
  * `@signet/core`; `schema.test.ts` asserts the two never drift, because a
  * mismatch would only surface as a runtime cast failure deep inside a grant
  * handler.
+ *
+ * Author: John Grimes
  */
 
 import { pgEnum } from "drizzle-orm/pg-core";

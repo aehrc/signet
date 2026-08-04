@@ -17,6 +17,8 @@
  * The suite is not a substitute for the focused ones. `token.integration.test.ts`
  * asserts what the token endpoint does in a dozen ways; this asserts that the
  * document's claims are each backed by at least one of them.
+ *
+ * Author: John Grimes
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

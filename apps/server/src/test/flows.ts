@@ -3,9 +3,11 @@
  *
  * The integration suites assert on outcomes, not on plumbing, so the plumbing lives
  * here: PKCE pairs, form posts, client assertions, and the three-step interaction.
- * Each helper does exactly what a real caller does — no repository is touched to
- * shortcut a step — which is what makes a suite built from them a genuine test of the
+ * Each helper does exactly what a real caller does - no repository is touched to
+ * shortcut a step - which is what makes a suite built from them a genuine test of the
  * composition rather than of the helpers.
+ *
+ * Author: John Grimes
  */
 
 import { computeS256Challenge } from "@signet/core";

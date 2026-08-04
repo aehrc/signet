@@ -17,6 +17,8 @@
  * Every response is controllable, because the interesting tests are the ones where
  * the provider misbehaves: an ID token for another audience, a stale nonce, a
  * userinfo document about a different person.
+ *
+ * Author: John Grimes
  */
 
 import { serve } from "@hono/node-server";

@@ -4,6 +4,8 @@
  * Loads the endpoint once and shares it, so a page that needs a capability flag or
  * the issuer does not fetch it again. The tabs are the endpoint's resources, which is
  * also the shape of the API below it.
+ *
+ * Author: John Grimes
  */
 
 import { NavLink, Outlet, useParams } from "react-router";

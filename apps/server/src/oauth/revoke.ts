@@ -10,12 +10,14 @@
  *
  * Revoking a refresh token revokes its whole rotation family, not just the row
  * presented. A family is one authorization, and the tokens in it are successive
- * names for the same grant — revoking only the leaf would leave a rotated
+ * names for the same grant - revoking only the leaf would leave a rotated
  * predecessor's successor live, which is not what "revoke my access" means.
  *
  * `token_type_hint` is honoured as a hint and no more. RFC 7009 §2.1 requires the
  * server to try the other type if the hint does not match, and a client that sends
  * the wrong hint should not be quietly left with a live token.
+ *
+ * Author: John Grimes
  */
 
 import {

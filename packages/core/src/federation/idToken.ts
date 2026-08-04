@@ -27,6 +27,8 @@
  * than an attack, and a generous allowance would widen every replay window.
  *
  * @see https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation
+ *
+ * Author: John Grimes
  */
 
 /**

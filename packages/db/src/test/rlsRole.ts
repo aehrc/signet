@@ -9,8 +9,10 @@
  * row level security` each take an exclusive lock, and running them while other
  * workers hold row locks on the same tables is a deadlock Postgres resolves by
  * killing one of the two. So this runs once, from the global setup, before any
- * worker starts — and the policies are then simply left in place, which is also
+ * worker starts - and the policies are then simply left in place, which is also
  * what a deployment looks like.
+ *
+ * Author: John Grimes
  */
 
 import { sql } from "drizzle-orm";
@@ -31,7 +33,7 @@ export const RLS_TEST_ROLE = "signet_rls_test";
  * Creates the test role and enables the tenant isolation policies.
  *
  * Idempotent, so a second run over the same database is a no-op rather than an
- * error — which is what lets a developer run the suite repeatedly.
+ * error - which is what lets a developer run the suite repeatedly.
  *
  * @param db - A connection with authority to create roles and alter tables.
  */

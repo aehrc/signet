@@ -7,6 +7,8 @@
  * re-checks ownership when it builds the scope. A client identifier is
  * attacker-supplied on every token request; this is the single most likely place
  * in the schema for a cross-tenant leak, which is why it is guarded twice.
+ *
+ * Author: John Grimes
  */
 
 import { and, asc, eq } from "drizzle-orm";
@@ -186,7 +188,7 @@ export async function recordClientJwksFetch(
 /**
  * Deletes the scoped client.
  *
- * Everything issued to it — codes, tokens, consents, `jti` ledger entries —
+ * Everything issued to it - codes, tokens, consents, `jti` ledger entries -
  * cascades away, which is the point: a deleted client's refresh tokens must stop
  * working. Its audit events survive, because `audit_events` does not reference
  * the client row.

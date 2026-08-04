@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import {
   narrowScopeToPattern,
   parseScopePattern,
@@ -204,8 +208,8 @@ function seedValues(existing: unknown): readonly string[] {
  *
  * A `match` or `forEachScope` expression that is not a resource pattern is
  * compared for exact equality against the scope's canonical string form. That is
- * how non-resource scopes are handled — `match: "openid"`, `match:
- * "launch/patient"`, `match: "offline_access"` — since those can never match a
+ * how non-resource scopes are handled - `match: "openid"`, `match:
+ * "launch/patient"`, `match: "offline_access"` - since those can never match a
  * `{context}/{type}.{permissions}` pattern.
  *
  * @param policy - A validated policy document.

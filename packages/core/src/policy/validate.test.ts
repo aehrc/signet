@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -60,7 +64,7 @@ function withMapping(rule: unknown): Record<string, unknown> {
   return { ...minimal(), scopeMappings: [rule] };
 }
 
-describe("validatePolicy — document shape", () => {
+describe("validatePolicy - document shape", () => {
   it("accepts a minimal document", () => {
     expect(report(minimal())).toEqual([]);
   });
@@ -115,7 +119,7 @@ describe("validatePolicy — document shape", () => {
   });
 });
 
-describe("validatePolicy — defaults", () => {
+describe("validatePolicy - defaults", () => {
   it.each([
     ["a missing block", undefined],
     ["a non-object block", 3600],
@@ -151,7 +155,7 @@ describe("validatePolicy — defaults", () => {
   });
 });
 
-describe("validatePolicy — scope grant rules", () => {
+describe("validatePolicy - scope grant rules", () => {
   it("accepts a fully specified rule", () => {
     expect(
       report(
@@ -291,7 +295,7 @@ describe("validatePolicy — scope grant rules", () => {
   });
 });
 
-describe("validatePolicy — rule ids", () => {
+describe("validatePolicy - rule ids", () => {
   it("accepts rules with no ids at all", () => {
     expect(
       report({
@@ -327,7 +331,7 @@ describe("validatePolicy — rule ids", () => {
   });
 });
 
-describe("validatePolicy — conditions", () => {
+describe("validatePolicy - conditions", () => {
   it("accepts every condition field", () => {
     expect(
       report(
@@ -387,7 +391,7 @@ describe("validatePolicy — conditions", () => {
   });
 });
 
-describe("validatePolicy — emit templates", () => {
+describe("validatePolicy - emit templates", () => {
   it("accepts literals and templates", () => {
     expect(
       report(
@@ -499,7 +503,7 @@ describe("validatePolicy — emit templates", () => {
   });
 });
 
-describe("validatePolicy — scope mapping rules", () => {
+describe("validatePolicy - scope mapping rules", () => {
   it("accepts a fully specified rule", () => {
     expect(
       report(
@@ -569,7 +573,7 @@ describe("validatePolicy — scope mapping rules", () => {
   });
 });
 
-describe("validatePolicy — reporting", () => {
+describe("validatePolicy - reporting", () => {
   it("reports every problem at once, not just the first", () => {
     const reported = issues({
       version: 2,
@@ -589,7 +593,7 @@ describe("validatePolicy — reporting", () => {
   });
 });
 
-describe("validatePolicy — presets", () => {
+describe("validatePolicy - presets", () => {
   it.each(POLICY_PRESETS.map((preset) => [preset.id, preset.policy] as const))(
     "accepts the %s preset",
     (_id, document) => {

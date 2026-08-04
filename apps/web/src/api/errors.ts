@@ -1,14 +1,16 @@
 /**
  * How the console understands a refusal.
  *
- * The admin API answers a refusal with a code, a message and — when a request
- * failed validation — one issue per offending field. All three matter to a
+ * The admin API answers a refusal with a code, a message and - when a request
+ * failed validation - one issue per offending field. All three matter to a
  * different part of the UI: the code decides whether to redirect to sign-in, the
  * message is what a person reads, and the issues belong beside the inputs that
  * produced them.
  *
  * The parsing is pure and tested, because the alternative is a form that shows
  * "something went wrong" for a mistyped URL that the server described precisely.
+ *
+ * Author: John Grimes
  */
 
 /** One field-level problem, as the API reports it. */
@@ -28,7 +30,7 @@ export class ApiError extends Error {
   /**
    * The refusal body as it arrived.
    *
-   * A few routes add a field beside the standard three — the sign-in path answers
+   * A few routes add a field beside the standard three - the sign-in path answers
    * with `totpRequired` when the password was right and a code is needed. Keeping
    * the body means those can be read as data rather than matched on in prose.
    */
@@ -124,7 +126,7 @@ export function issuesByField(error: unknown): Record<string, string> {
  * The sentence to show for a failure.
  *
  * Every path returns something readable, including the case where what was thrown
- * is not an error at all — an unhandled rejection inside a mutation should still
+ * is not an error at all - an unhandled rejection inside a mutation should still
  * produce a message rather than "undefined".
  *
  * @param error - The value that was thrown.

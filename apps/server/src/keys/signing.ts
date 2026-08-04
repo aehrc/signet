@@ -3,15 +3,17 @@
  *
  * The claims are assembled by `@signet/core` and arrive here complete: this
  * module adds a protected header and a signature and nothing else. That division
- * is deliberate — the console's policy simulator calls the same assembly
+ * is deliberate - the console's policy simulator calls the same assembly
  * functions and shows the operator exactly the payload that would be signed, and
  * it could not if any claim were added at signing time.
  *
  * A key is loaded per issuance rather than cached. An endpoint's active key can be
  * rotated or retired at any moment, and a cached key would keep signing with a
- * withdrawn one — which, for the suspected-compromise case that retirement
+ * withdrawn one - which, for the suspected-compromise case that retirement
  * exists to serve, is the only failure that matters. The cost is one indexed read
  * against a table holding a handful of rows per endpoint.
+ *
+ * Author: John Grimes
  */
 
 import { getActiveEndpointKey } from "@signet/db";

@@ -11,6 +11,8 @@
  *
  * Withdrawn entries stay on the list, marked. Removing them would look, to somebody who
  * had just withdrawn access, like the record had been lost rather than ended.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";

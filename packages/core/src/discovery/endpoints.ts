@@ -4,6 +4,8 @@
  * Every URL Signet advertises is derived from the tenant's issuer, so the
  * discovery documents, the token `iss` claim and the routes the server mounts
  * can never disagree about where something lives.
+ *
+ * Author: John Grimes
  */
 
 /** Every endpoint URL Signet derives from a tenant's issuer. */

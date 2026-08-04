@@ -16,6 +16,8 @@
  * The verifier is kept in `sessionStorage` because the redirect is a full page
  * load and there is nowhere else for it to live. It is a per-tab value that never
  * leaves the browser, which is exactly what PKCE asks for.
+ *
+ * Author: John Grimes
  */
 
 const STORAGE_KEY = "signet-stub-app";

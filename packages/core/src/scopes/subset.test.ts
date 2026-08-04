@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { parseScope, parseScopes } from "./parse.js";
@@ -36,7 +40,7 @@ function covers(permitted: string, candidate: string): boolean {
   return isScopeSubsetOf(scope(candidate), scope(permitted));
 }
 
-describe("isScopeSubsetOf — permissions", () => {
+describe("isScopeSubsetOf - permissions", () => {
   it("treats an identical scope as a subset of itself", () => {
     expect(covers("patient/Observation.rs", "patient/Observation.rs")).toBe(
       true,
@@ -68,7 +72,7 @@ describe("isScopeSubsetOf — permissions", () => {
   });
 });
 
-describe("isScopeSubsetOf — resource type", () => {
+describe("isScopeSubsetOf - resource type", () => {
   it("lets a wildcard cover a concrete resource type", () => {
     expect(covers("patient/*.rs", "patient/Observation.rs")).toBe(true);
     expect(covers("system/*.cruds", "system/Encounter.cud")).toBe(true);
@@ -90,7 +94,7 @@ describe("isScopeSubsetOf — resource type", () => {
   });
 });
 
-describe("isScopeSubsetOf — access context", () => {
+describe("isScopeSubsetOf - access context", () => {
   it("rejects a different context even when everything else matches", () => {
     expect(covers("patient/Observation.rs", "user/Observation.rs")).toBe(false);
     expect(covers("user/Observation.rs", "system/Observation.rs")).toBe(false);
@@ -98,7 +102,7 @@ describe("isScopeSubsetOf — access context", () => {
   });
 });
 
-describe("isScopeSubsetOf — search parameter restrictions", () => {
+describe("isScopeSubsetOf - search parameter restrictions", () => {
   it("lets an unrestricted scope cover a restricted one", () => {
     expect(
       covers(
@@ -145,7 +149,7 @@ describe("isScopeSubsetOf — search parameter restrictions", () => {
   });
 });
 
-describe("isScopeSubsetOf — non-resource scopes", () => {
+describe("isScopeSubsetOf - non-resource scopes", () => {
   it("compares identity scopes by name", () => {
     expect(covers("openid", "openid")).toBe(true);
     expect(covers("openid", "fhirUser")).toBe(false);

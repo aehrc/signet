@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { decodeBase64Url, encodeBase64Url } from "./encoding.js";
@@ -56,7 +60,7 @@ function flipBit(part: string, byteIndex: number): string {
  * Attempts a decryption and reports the outcome as a comparable string.
  *
  * Reporting a successful decryption as text rather than throwing means the
- * failure mode that matters most — a tampered ciphertext quietly decrypting —
+ * failure mode that matters most - a tampered ciphertext quietly decrypting -
  * shows up as a mismatched assertion naming the recovered plaintext, instead of
  * a test that passes because nothing was checked.
  */
@@ -114,7 +118,7 @@ describe("round trip", () => {
     ["an upstream client secret", "cs_9f8e7d6c5b4a39281706"],
     ["an empty string", ""],
     ["a single character", "x"],
-    ["non-ASCII text", "clé privée — ключ 🔑"],
+    ["non-ASCII text", "clé privée - ключ 🔑"],
     ["a PEM block", "-----BEGIN PRIVATE KEY-----\nMIGkAg\n-----END-----\n"],
     ["a long value", "k".repeat(10_000)],
   ])("recovers %s exactly", async (_case, plaintext) => {

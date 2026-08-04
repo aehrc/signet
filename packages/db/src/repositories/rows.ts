@@ -7,14 +7,16 @@
  * "this insert must have produced a row" and "this update may legitimately have
  * matched none" are different statements at the call site rather than the same
  * non-null assertion twice.
+ *
+ * Author: John Grimes
  */
 
 /**
  * Thrown when a statement that must produce exactly one row produced none.
  *
- * This is a broken invariant rather than a user-facing condition — an
+ * This is a broken invariant rather than a user-facing condition - an
  * unconditional `INSERT ... RETURNING` that yields nothing means the schema and
- * this code disagree — so it is deliberately not part of any repository's return
+ * this code disagree - so it is deliberately not part of any repository's return
  * union. Callers should not be tempted to handle it.
  */
 export class RepositoryInvariantError extends Error {

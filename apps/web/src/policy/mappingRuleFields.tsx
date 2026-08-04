@@ -3,7 +3,7 @@
  *
  * This is the rule type Signet exists for: it runs once per granted scope and appends
  * to an array claim, which is how SMART scopes become a resource server's own
- * vocabulary. The Pathling preset is the worked example — `patient/Observation.rs`
+ * vocabulary. The Pathling preset is the worked example - `patient/Observation.rs`
  * becomes `["pathling:read:Observation", "pathling:search"]`.
  *
  * Two things the fields say out loud, because both are easy to get wrong. The pattern
@@ -12,6 +12,8 @@
  * fires for `patient/Observation.rs`. And
  * `scope.resourceTypeSuffix` is the variable that makes one template serve both a typed
  * scope and a wildcard, which is not something an operator would guess.
+ *
+ * Author: John Grimes
  */
 
 import { PatternField } from "./patternField.js";
@@ -38,7 +40,7 @@ export function MappingRuleFields({
         label="For each granted scope matching"
         value={rule.forEachScope}
         disabled={disabled}
-        hint="Fires when the scope shares at least one permission with this pattern — unlike a grant rule, where the scope's permissions must be a subset. So */*.r fires for patient/Observation.rs."
+        hint="Fires when the scope shares at least one permission with this pattern - unlike a grant rule, where the scope's permissions must be a subset. So */*.r fires for patient/Observation.rs."
         onChange={(forEachScope) => {
           onChange({ ...rule, forEachScope });
         }}

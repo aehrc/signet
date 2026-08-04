@@ -6,6 +6,8 @@
  * patterns are the contract between the route table and the middleware: everything
  * below {@link TENANT_PATH} has a tenant scope in hand, and everything below
  * {@link ENDPOINT_PATH} has it narrowed to one endpoint.
+ *
+ * Author: John Grimes
  */
 
 /** Where the admin API is mounted within the application. */

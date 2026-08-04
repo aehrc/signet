@@ -7,9 +7,11 @@
  * endpoint]` would silently show stale data. One builder per resource means the
  * two cannot disagree.
  *
- * The hooks are deliberately thin — a key, a fetch and an invalidation list — and
+ * The hooks are deliberately thin - a key, a fetch and an invalidation list - and
  * hold no logic of their own. Everything worth testing lives in `./paths.js`,
  * `./errors.js` and the form modules, as plain functions.
+ *
+ * Author: John Grimes
  */
 
 import {

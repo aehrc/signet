@@ -16,8 +16,10 @@
  *   different. Optional fields are therefore spread conditionally.
  * - Timestamps become epoch seconds, because that is what a JWT claim is.
  * - `null` becomes `null`, not absent, where the domain type says
- *   `T | null` — `EvaluationUser.fhirUser` is required and nullable, and quietly
+ *   `T | null` - `EvaluationUser.fhirUser` is required and nullable, and quietly
  *   dropping it would make a template render `undefined` instead of failing.
+ *
+ * Author: John Grimes
  */
 
 import type { Client } from "../schema/clients.js";
@@ -125,7 +127,7 @@ export function toEvaluationUser(user: EndUser): EvaluationUser {
  * Every capability flag is copied explicitly. A spread would compile after a new
  * flag was added to the schema but not to `EndpointCapabilityConfig`, and the
  * endpoint would then advertise a capability the discovery builder knows nothing
- * about — so the tedium here is the point.
+ * about - so the tedium here is the point.
  */
 export function toCapabilityConfig(
   endpoint: Endpoint,

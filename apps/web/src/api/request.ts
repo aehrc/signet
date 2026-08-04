@@ -2,7 +2,7 @@
  * The one fetch in the browser.
  *
  * Both surfaces use it: the console's admin API and the end-user pages' issuer-scoped
- * API. They differ in one thing only — the shape of a refusal body, because the admin API
+ * API. They differ in one thing only - the shape of a refusal body, because the admin API
  * answers with `error` and `message` while the OAuth endpoints answer with `error` and
  * `error_description`, as RFC 6749 requires. That difference is a parameter rather than a
  * second copy of the request logic.
@@ -12,9 +12,11 @@
  * caller has to check `response.ok`.
  *
  * There is no bearer token here. Both surfaces authenticate with an httpOnly cookie,
- * which JavaScript cannot read — that is the point of it — so `credentials:
+ * which JavaScript cannot read - that is the point of it - so `credentials:
  * "same-origin"` is the whole of the credential handling. The one exception is the
  * developer portal's tracking token, which is not a session and is passed explicitly.
+ *
+ * Author: John Grimes
  */
 
 import { toApiError } from "./errors.js";

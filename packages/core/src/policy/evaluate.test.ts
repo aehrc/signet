@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { evaluatePolicy } from "./evaluate.js";
@@ -104,7 +108,7 @@ function granted(
   ).grantedScopes.map((scope) => formatScope(scope));
 }
 
-describe("evaluatePolicy — scope grants", () => {
+describe("evaluatePolicy - scope grants", () => {
   it("grants a scope the first matching rule allows", () => {
     expect(
       granted(
@@ -352,7 +356,7 @@ describe("evaluatePolicy — scope grants", () => {
   });
 });
 
-describe("evaluatePolicy — non-resource scopes", () => {
+describe("evaluatePolicy - non-resource scopes", () => {
   it("grants a non-resource scope only through an exact match rule", () => {
     expect(
       granted(
@@ -486,7 +490,7 @@ describe("evaluatePolicy — non-resource scopes", () => {
   });
 });
 
-describe("evaluatePolicy — claim rules", () => {
+describe("evaluatePolicy - claim rules", () => {
   it("emits a claim from a template", () => {
     const result = evaluatePolicy(
       policy({
@@ -662,7 +666,7 @@ function firedWithIdentity(requested: string): boolean {
   return result.claims["hit"] === true;
 }
 
-describe("evaluatePolicy — conditions", () => {
+describe("evaluatePolicy - conditions", () => {
   it("matches an empty condition", () => {
     expect(fired({})).toBe(true);
   });
@@ -789,7 +793,7 @@ describe("evaluatePolicy — conditions", () => {
   });
 });
 
-describe("evaluatePolicy — scope mappings", () => {
+describe("evaluatePolicy - scope mappings", () => {
   it("appends one value per matching granted scope, deduplicated in order", () => {
     const result = evaluatePolicy(
       policy({
@@ -1128,7 +1132,7 @@ describe("evaluatePolicy — scope mappings", () => {
   });
 });
 
-describe("evaluatePolicy — context rules", () => {
+describe("evaluatePolicy - context rules", () => {
   it("emits into the token response, not the token", () => {
     const result = evaluatePolicy(
       policy({
@@ -1192,7 +1196,7 @@ describe("evaluatePolicy — context rules", () => {
   });
 });
 
-describe("evaluatePolicy — lifetimes", () => {
+describe("evaluatePolicy - lifetimes", () => {
   it("returns the configured token lifetimes", () => {
     const result = evaluatePolicy(
       policy({ accessTokenTtl: 900, refreshTokenTtl: 1_209_600 }),
@@ -1203,7 +1207,7 @@ describe("evaluatePolicy — lifetimes", () => {
   });
 });
 
-describe("evaluatePolicy — purity", () => {
+describe("evaluatePolicy - purity", () => {
   it("returns the same result for the same inputs", () => {
     const document = policy({
       claimRules: [

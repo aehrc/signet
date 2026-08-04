@@ -6,9 +6,11 @@
  * a read-only policy and one that permits deletion. Five labelled boxes say that; a text
  * field says `patient/*.rs` and hopes.
  *
- * A pattern the pickers cannot represent — one carrying search parameters, or a
- * non-resource scope like `openid` — falls back to a plain text field, so the builder
+ * A pattern the pickers cannot represent - one carrying search parameters, or a
+ * non-resource scope like `openid` - falls back to a plain text field, so the builder
  * never rewrites a value it did not fully parse.
+ *
+ * Author: John Grimes
  */
 
 import { PERMISSION_ORDER } from "@signet/core";
@@ -51,7 +53,7 @@ export function PatternField({
         disabled={disabled}
         hint={
           <>
-            Matched by exact equality rather than as a pattern — `openid`,
+            Matched by exact equality rather than as a pattern - `openid`,
             `launch/patient` and `offline_access` are named, not matched. Edit
             it as text.
           </>
@@ -73,10 +75,10 @@ export function PatternField({
           value={draft.context}
           disabled={disabled}
           options={[
-            { value: "patient", label: "patient — a patient's record" },
-            { value: "user", label: "user — everything the user may see" },
-            { value: "system", label: "system — a backend service" },
-            { value: "*", label: "* — any context" },
+            { value: "patient", label: "patient - a patient's record" },
+            { value: "user", label: "user - everything the user may see" },
+            { value: "system", label: "system - a backend service" },
+            { value: "*", label: "* - any context" },
           ]}
           onChange={(context) => {
             onChange(

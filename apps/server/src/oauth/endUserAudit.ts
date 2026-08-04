@@ -10,6 +10,8 @@
  * The actor's identifier is optional because a failed sign-in has no account to
  * attribute: somebody typed a username that may not exist, and inventing an actor
  * for them would put a claim in the trail that nothing supports.
+ *
+ * Author: John Grimes
  */
 
 import type { ServerContext, ResolvedIssuerContext } from "../context.js";

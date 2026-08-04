@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 export { buildOpenIdConfiguration, buildSmartConfiguration } from "./build.js";
 export {
   DEFAULT_ENDPOINT_CAPABILITIES,

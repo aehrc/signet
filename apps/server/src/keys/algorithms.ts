@@ -20,9 +20,11 @@
  * can see it.
  *
  * Kept in its own module because both the key material and the discovery document
- * need the list, and importing the material module — which pulls in `jose` and
- * the envelope cipher — merely to name three strings would be a needless
+ * need the list, and importing the material module - which pulls in `jose` and
+ * the envelope cipher - merely to name three strings would be a needless
  * dependency in the discovery path.
+ *
+ * Author: John Grimes
  */
 
 /** An algorithm an endpoint signing key may use. */

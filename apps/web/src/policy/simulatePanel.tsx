@@ -1,19 +1,21 @@
 /**
  * The simulator, beside the editor.
  *
- * This is what makes the policy editor trustworthy: it sends the document being edited —
- * saved or not — to the server, which runs the same composition the token endpoint uses
+ * This is what makes the policy editor trustworthy: it sends the document being edited -
+ * saved or not - to the server, which runs the same composition the token endpoint uses
  * and returns the decoded claims. So what is on screen is what would be minted, not an
  * approximation of it computed in the browser.
  *
  * It simulates as a registered client and, optionally, a real end user, because a
  * simulation over an invented user would answer a question nobody asked. Scopes are
- * typed as an app would request them, including ones the policy will refuse — seeing the
+ * typed as an app would request them, including ones the policy will refuse - seeing the
  * refusals and their reasons is most of the value.
  *
  * Run explicitly rather than on every keystroke. The evaluation is pure and cheap, but
  * it is a request, and a network round trip per character typed into a claim value is
  * both wasteful and visually noisy. The button says what it will do.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -200,7 +202,7 @@ function SimulationResult({
           <ul className="flex flex-col gap-1">
             {result.denied.map((entry, index) => (
               <li key={String(index)} className="text-xs">
-                <code className="font-mono">{scopeText(entry.scope)}</code> —{" "}
+                <code className="font-mono">{scopeText(entry.scope)}</code> -{" "}
                 {entry.reason}
                 {entry.ruleId === undefined ? null : (
                   <span className="text-base-content/60">
@@ -235,7 +237,7 @@ function SimulationResult({
           <ul className="flex flex-col gap-1">
             {result.rejectedScopes.map((entry) => (
               <li key={entry.raw} className="text-xs">
-                <code className="font-mono">{entry.raw}</code> — {entry.message}
+                <code className="font-mono">{entry.raw}</code> - {entry.message}
               </li>
             ))}
           </ul>

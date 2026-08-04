@@ -9,6 +9,8 @@
  * the decision being made is whether *this* is what the endpoint should hand out.
  * The request is retained after the decision, so what was asked for stays visible
  * beside what was granted.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";

@@ -1,8 +1,8 @@
 /**
  * The interaction state machine: what the user still has to do.
  *
- * An authorization spans several browser round trips — sign in, pick a patient,
- * consent — and the state that decides which of them is next lives entirely in
+ * An authorization spans several browser round trips - sign in, pick a patient,
+ * consent - and the state that decides which of them is next lives entirely in
  * the `authorization_sessions` row. Nothing is taken from the browser between
  * steps, which is what makes it impossible for a later step to widen an earlier
  * decision: the scopes consented to are the scopes recorded at `/authorize`, not
@@ -13,6 +13,8 @@
  * endpoint's consent mode, exactly one step is next. The handlers only move the
  * session forward one step at a time and re-derive this after each move, so a user
  * who skips straight to `/consent` gets sent back to sign in.
+ *
+ * Author: John Grimes
  */
 
 import { requirementsSatisfied } from "./contextRequirements.js";
@@ -56,7 +58,7 @@ export interface InteractionInputs {
  * Whether the user must be shown a consent screen.
  *
  * `auto` skips it entirely, which is only appropriate for an endpoint whose apps
- * are all first-party — a connectathon sandbox, or a deployment where approval
+ * are all first-party - a connectathon sandbox, or a deployment where approval
  * happened out of band at registration time.
  *
  * `remember` skips it when a stored consent covers the request. A stored consent
@@ -87,7 +89,7 @@ export function consentRequired(inputs: InteractionInputs): boolean {
  * The order is not interchangeable. Authentication comes first because both later
  * steps are about a particular user: a patient picker cannot know which patients
  * to offer, and a consent record has nobody to belong to. Context comes before
- * consent because the consent screen has to name the patient being shared —
+ * consent because the consent screen has to name the patient being shared -
  * "allow this app to read your records" is not a meaningful question until it is
  * clear whose records.
  *
@@ -122,8 +124,8 @@ const INTERACTION_PATHS: Readonly<Record<InteractionPageStep, string>> = {
  * The URL to send the browser to for a step.
  *
  * The session identifier travels in the query string. It is not a bearer
- * credential — it grants nothing on its own, and every handler re-derives the
- * step from the row rather than trusting where the browser came from — so it is
+ * credential - it grants nothing on its own, and every handler re-derives the
+ * step from the row rather than trusting where the browser came from - so it is
  * safe in a URL the user can see and reload.
  *
  * @param issuer - The endpoint's issuer identifier.

@@ -5,6 +5,8 @@
  * change could quietly break: a plaintext credential column, an unindexed
  * foreign key, an accidental `ON DELETE NO ACTION`, or an enum drifting away
  * from the union in `@signet/core` that it is meant to mirror.
+ *
+ * Author: John Grimes
  */
 
 import { is } from "drizzle-orm";
@@ -148,7 +150,7 @@ describe("credential storage", () => {
   /**
    * Column name fragments that imply the value is a secret. Any such column has
    * to declare, in its own name, that it is either one-way hashed or encrypted
-   * at rest — so a future `password` or `client_secret` column fails here rather
+   * at rest - so a future `password` or `client_secret` column fails here rather
    * than shipping.
    */
   const SECRET_FRAGMENTS = ["password", "secret", "private"];

@@ -2,12 +2,14 @@
  * Turning API values into text a person can read.
  *
  * All pure, all tested. These are the functions that would otherwise be inlined
- * into JSX and quietly get the plural wrong, or format a null as "null" — and
+ * into JSX and quietly get the plural wrong, or format a null as "null" - and
  * they are the reason the components below contain almost no logic.
  *
  * Nothing here uses the current time as an ambient value: `now` is a parameter
  * everywhere it is needed, so a relative timestamp is a pure function of two
  * instants rather than of one instant and a clock.
+ *
+ * Author: John Grimes
  */
 
 /** Fixed English locale, so a screenshot means the same thing everywhere. */
@@ -152,7 +154,7 @@ const ACRONYMS: Readonly<Record<string, string>> = {
  * Names whose derived label would read badly enough to be worth stating.
  *
  * Deliberately short. Everything not here is derived, so a capability added to the
- * API appears in the console without an edit — the alternative is twenty-two labels
+ * API appears in the console without an edit - the alternative is twenty-two labels
  * to keep in step with the server.
  */
 const CAPABILITY_LABELS: Readonly<Record<string, string>> = {

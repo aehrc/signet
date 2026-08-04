@@ -4,7 +4,7 @@
  * Pure: fetching the document is the server's job, and it goes through the SSRF
  * guard because the URL comes from an operator. What is decided here is whether
  * the document that came back may be used to send a person's browser somewhere
- * and to redeem a code — which is a security decision, not a parsing one.
+ * and to redeem a code - which is a security decision, not a parsing one.
  *
  * Three rules carry the weight.
  *
@@ -23,6 +23,8 @@
  * producing an obscure failure the first time somebody tries to sign in.
  *
  * @see https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
+ *
+ * Author: John Grimes
  */
 
 /** The parts of a discovery document Signet uses. */

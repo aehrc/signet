@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -114,7 +118,7 @@ describe("isTemplateFilterName", () => {
   });
 });
 
-describe("renderTemplate — raw values", () => {
+describe("renderTemplate - raw values", () => {
   it("returns the string a lone interpolation resolves to", () => {
     expect(renderTemplate("{{ context.patient }}", SCOPE)).toBe("Patient/123");
   });
@@ -156,7 +160,7 @@ describe("renderTemplate — raw values", () => {
   });
 });
 
-describe("renderTemplate — string concatenation", () => {
+describe("renderTemplate - string concatenation", () => {
   it("concatenates literal text around an interpolation", () => {
     expect(
       renderTemplate("pathling:read{{ scope.resourceTypeSuffix }}", SCOPE),
@@ -200,7 +204,7 @@ describe("renderTemplate — string concatenation", () => {
   });
 });
 
-describe("renderTemplate — path resolution", () => {
+describe("renderTemplate - path resolution", () => {
   it("resolves a dotted path through nested objects", () => {
     expect(renderTemplate("{{ user.attributes.department }}", SCOPE)).toBe(
       "Cardiology",
@@ -271,7 +275,7 @@ describe("renderTemplate — path resolution", () => {
   });
 });
 
-describe("renderTemplate — filters", () => {
+describe("renderTemplate - filters", () => {
   it("joins with a space by default", () => {
     expect(renderTemplate("{{ granted | join }}", SCOPE)).toBe(
       "patient/Observation.rs openid",
@@ -392,7 +396,7 @@ describe("renderTemplate — filters", () => {
   });
 });
 
-describe("renderTemplate — value sanitisation", () => {
+describe("renderTemplate - value sanitisation", () => {
   it("drops values with no JSON form", () => {
     const scope: TemplateScope = {
       fn: () => "nope",

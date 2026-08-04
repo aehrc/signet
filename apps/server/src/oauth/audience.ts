@@ -4,7 +4,7 @@
  * An app must tell the authorization server which FHIR server it intends to call,
  * and Signet must refuse when that is not the FHIR server this endpoint fronts.
  * The check exists to stop a token minted for one resource server being obtained
- * through an authorization server belonging to another — the confused-deputy
+ * through an authorization server belonging to another - the confused-deputy
  * problem RFC 8707 and SMART's `aud` requirement both address.
  *
  * Comparison is exact apart from a trailing slash. `https://fhir.example.org/R4`
@@ -15,6 +15,8 @@
  * differing in them can genuinely be two servers.
  *
  * @see https://hl7.org/fhir/smart-app-launch/app-launch.html#obtain-authorization-code
+ *
+ * Author: John Grimes
  */
 
 /** Why an `aud` value was refused. */

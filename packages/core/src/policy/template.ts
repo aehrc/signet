@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import type { TemplateValue } from "./types.js";
 
 /**
@@ -120,8 +124,8 @@ function parseInterpolation(raw: string): TemplateInterpolationSegment {
 /**
  * Splits a template into its literal and interpolated segments.
  *
- * Exposed so validation can report authoring errors — unknown filters, missing
- * paths, unbalanced braces — without having to render anything.
+ * Exposed so validation can report authoring errors - unknown filters, missing
+ * paths, unbalanced braces - without having to render anything.
  *
  * @param template - The template text.
  */
@@ -166,7 +170,7 @@ export function isTemplateFilterName(name: string): boolean {
  *
  * Only own properties of plain objects and arrays are readable, and a resolved
  * `null` is reported as missing so that a policy never emits `null` by accident
- * — an author who wants a literal `null` writes one directly in `emit`.
+ * - an author who wants a literal `null` writes one directly in `emit`.
  */
 function resolvePath(path: string, scope: TemplateScope): unknown {
   let current: unknown = scope;
@@ -380,7 +384,7 @@ function toTemplateValue(value: unknown): TemplateValue | undefined {
  * Renders a template string against a scope.
  *
  * A template that is exactly one interpolation and nothing else yields the raw
- * typed value, so an array stays an array and a boolean stays a boolean — which
+ * typed value, so an array stays an array and a boolean stays a boolean - which
  * is what lets a policy emit `need_patient_banner` as a real boolean. Any
  * surrounding literal text switches to string concatenation.
  *

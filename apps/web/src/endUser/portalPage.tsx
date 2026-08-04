@@ -6,15 +6,17 @@
  * an administrator has approved it, the client identifier and where to point the app.
  *
  * The token is kept in `sessionStorage` rather than `localStorage`. It is a credential
- * that can collect a registration, and a browser tab is the right lifetime for it —
+ * that can collect a registration, and a browser tab is the right lifetime for it -
  * long enough to survive the reload after submitting, short enough not to outlive the
  * person's visit on a shared machine. It is also shown, so a developer can keep it
  * somewhere of their own.
  *
  * The client secret is deliberately not available here. It exists in exactly one
- * response — the approval, in the console — and an endpoint that could hand it out again
+ * response - the approval, in the console - and an endpoint that could hand it out again
  * would be a way to read a credential out of the database. The portal says so, and says
  * who to ask.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -226,15 +228,15 @@ function RequestForm({
           options={[
             {
               value: "public",
-              label: "Public — a browser or mobile app, PKCE only",
+              label: "Public - a browser or mobile app, PKCE only",
             },
             {
               value: "confidential-symmetric",
-              label: "Confidential — a server with a shared secret",
+              label: "Confidential - a server with a shared secret",
             },
             {
               value: "confidential-asymmetric",
-              label: "Confidential — a server signing its own assertions",
+              label: "Confidential - a server signing its own assertions",
             },
           ]}
           hint="A public client cannot keep a secret, so it does not get one."

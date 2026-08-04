@@ -5,6 +5,8 @@
  * request reaches no handler, that a session and a token both work and neither can
  * reach a tenant it was not issued for, and that a role is compared rather than
  * assumed. Everything the resource routes do is predicated on them.
+ *
+ * Author: John Grimes
  */
 
 import {

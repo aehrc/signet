@@ -10,6 +10,8 @@
  *
  * Adding an action means adding it here, which forces a description and a
  * category through the exhaustive `Record` types below.
+ *
+ * Author: John Grimes
  */
 
 import type { auditActorTypeEnum } from "../schema/enums.js";
@@ -70,7 +72,7 @@ export type AuditActionCategory =
  * Every action Signet can record.
  *
  * Names are `subject.verb-in-past-tense`, with the subject naming the thing
- * acted upon rather than the actor — the actor is a separate column, and the
+ * acted upon rather than the actor - the actor is a separate column, and the
  * same action can be taken by an admin user, an API token or the system.
  */
 export type AuditAction =
@@ -356,7 +358,7 @@ export function isAuditTargetType(value: string): value is AuditTargetType {
  * The principal responsible for an event.
  *
  * `id` is absent for `system` actors and for a failed sign-in where the
- * identifier offered did not resolve to an account — recording an attacker's
+ * identifier offered did not resolve to an account - recording an attacker's
  * guess as though it were an account identifier would be misleading.
  */
 export interface AuditActor {
@@ -398,7 +400,7 @@ export interface AuditEventInput {
    * Typed `unknown` rather than a record because call sites pass through
    * request-shaped data, and pretending it is already well formed would push a
    * cast into every one of them. It is normalised and stripped of credentials by
-   * `redactAuditDetail` on the way in — see `record.ts`.
+   * `redactAuditDetail` on the way in - see `record.ts`.
    */
   readonly detail?: unknown;
   readonly ip?: string;

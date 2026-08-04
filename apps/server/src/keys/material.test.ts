@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { decryptSecret } from "@signet/db";
 import { jwtVerify, importJWK } from "jose";
 import { describe, expect, it } from "vitest";
@@ -90,7 +94,7 @@ describe.each(ENDPOINT_KEY_ALGORITHMS)(
       // Decrypting is what proves the stored value is not the JWK. A substring check
       // for `kty` against the ciphertext looks equivalent and is not: the ciphertext
       // is base64, so it contains those three characters in sequence every few
-      // hundred runs — which made this assertion fail at random.
+      // hundred runs - which made this assertion fail at random.
       const decrypted = await decryptSecret(
         generated.privateJwkEncrypted,
         MASTER_KEY,

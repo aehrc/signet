@@ -18,8 +18,10 @@
  *
  * The route is off unless the endpoint says otherwise. An endpoint fronting production
  * data should not accept registration requests from anybody who can reach the port, and
- * the flag that permits it is the same one that permits dynamic registration — both are
+ * the flag that permits it is the same one that permits dynamic registration - both are
  * "this endpoint takes self-serve requests".
+ *
+ * Author: John Grimes
  */
 
 import { clientRequestSchema } from "@signet/contracts";
@@ -161,7 +163,7 @@ export function submitClientRequestHandler(context: ServerContext) {
  *
  * The tracking token is presented as a bearer credential. A request that has been
  * approved carries the client identifier; the secret is *not* returned here, because it
- * exists in exactly one response — the approval, in the console — and an endpoint that
+ * exists in exactly one response - the approval, in the console - and an endpoint that
  * could hand it out again would be a way to read a credential out of the database.
  *
  * @param context - The server's dependencies.

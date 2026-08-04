@@ -15,12 +15,14 @@
  * The one exception is loopback port flexibility for native applications: a
  * desktop or mobile app that listens on an ephemeral port cannot know its port
  * at registration time, so RFC 8252 §7.3 requires the server to ignore the port
- * of a loopback redirect. It is restricted to `public` clients — a web
+ * of a loopback redirect. It is restricted to `public` clients - a web
  * application with a client secret has a fixed redirect URI and has no business
  * pointing one at the user's own machine.
  *
  * @see https://datatracker.ietf.org/doc/html/rfc8252#section-7.3
  * @see https://datatracker.ietf.org/doc/html/rfc9700#section-2.1
+ *
+ * Author: John Grimes
  */
 
 import type { ClientType } from "@signet/core";
@@ -79,7 +81,7 @@ function isFlexibleLoopback(url: URL): boolean {
  * Compares two URIs for equality in every component except the port.
  *
  * Both must already be known loopback URIs. Scheme, host, path, query and
- * fragment must all agree — the port is the only latitude RFC 8252 grants.
+ * fragment must all agree - the port is the only latitude RFC 8252 grants.
  */
 function equalIgnoringPort(presented: URL, registered: URL): boolean {
   return (

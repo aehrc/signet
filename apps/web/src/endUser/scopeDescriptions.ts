@@ -3,7 +3,7 @@
  *
  * The consent screen is the one place in Signet where the audience is not a developer or
  * an operator. `patient/Observation.rs` is precise and says nothing to the person being
- * asked, so each scope is translated — the resource type into a phrase, the permission
+ * asked, so each scope is translated - the resource type into a phrase, the permission
  * letters into verbs, and the context into whose records are involved.
  *
  * Pure and tested, because a consent screen that described a scope wrongly would be
@@ -13,6 +13,8 @@
  * types and a patient-facing sentence for each would be mostly guesswork; a type that is
  * not listed falls back to its own name, which is worse than a phrase and much better
  * than a wrong phrase.
+ *
+ * Author: John Grimes
  */
 
 import { parseScope } from "@signet/core";
@@ -168,7 +170,7 @@ function capitalise(text: string): string {
 /**
  * Describes every scope an app asked for.
  *
- * Order is preserved, so the screen lists them as the app requested them — and the
+ * Order is preserved, so the screen lists them as the app requested them - and the
  * scopes that permit writing are marked rather than reordered, because moving them
  * would break the correspondence with what a developer sees in their own request.
  *

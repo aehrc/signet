@@ -14,8 +14,10 @@
  * become visible without one.
  *
  * Presence is reported instead of value where the console needs to know whether a
- * credential exists — `hasSecret` rather than the secret, `totpEnrolled` rather than
+ * credential exists - `hasSecret` rather than the secret, `totpEnrolled` rather than
  * the seed.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -40,14 +42,14 @@ import type {
 /**
  * The capability flags an endpoint advertises.
  *
- * Derived from `toCapabilityConfig` — the same value the discovery documents are
- * built from — rather than enumerated again here. That is what makes it impossible
+ * Derived from `toCapabilityConfig` - the same value the discovery documents are
+ * built from - rather than enumerated again here. That is what makes it impossible
  * for the console to show a capability set that differs from the one Signet
  * publishes: there is one list, and both readers take it from the same place.
  *
  * The booleans are what a capability is, so the non-boolean members of the config
  * (the issuer, the FHIR base URL, the scope list) are filtered out rather than
- * named — a new flag then appears in the console without an edit, while a new
+ * named - a new flag then appears in the console without an edit, while a new
  * string-valued field does not leak into the capability object.
  *
  * @param endpoint - The endpoint row.
@@ -95,7 +97,7 @@ export function endpointView(
 /**
  * A signing key.
  *
- * The public half is included verbatim — it is served from the JWKS anyway — and the
+ * The public half is included verbatim - it is served from the JWKS anyway - and the
  * private half is not representable here at all.
  */
 export function endpointKeyView(key: EndpointKey): Record<string, unknown> {
@@ -224,7 +226,7 @@ export function memberView(
  * An audit event.
  *
  * The action's description is resolved server-side so the console does not restate
- * the vocabulary — and `isAuditAction` is checked first, because during a rolling
+ * the vocabulary - and `isAuditAction` is checked first, because during a rolling
  * upgrade a row may name an action this process has never heard of and the browser
  * must still render it.
  */

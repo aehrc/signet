@@ -3,7 +3,7 @@
  *
  * Hand-written rather than inferred from a contract, and deliberately so: these are
  * response* shapes, and the contracts package describes *requests*. A response is
- * an explicit projection chosen by the server — see its `views.ts` — so a type
+ * an explicit projection chosen by the server - see its `views.ts` - so a type
  * derived from a database row would claim fields the API does not send, including
  * ones it deliberately withholds.
  *
@@ -11,6 +11,8 @@
  * typed as strings rather than dates for the same reason: pretending otherwise
  * would put a `new Date()` somewhere other than the one formatting function that
  * should own it.
+ *
+ * Author: John Grimes
  */
 
 /** The signed-in person, and the tenants they may act on. */

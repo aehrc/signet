@@ -16,6 +16,8 @@
  * @see https://datatracker.ietf.org/doc/html/rfc6749#section-2.3.1
  * @see https://datatracker.ietf.org/doc/html/rfc7523#section-2.2
  * @see https://hl7.org/fhir/smart-app-launch/backend-services.html
+ *
+ * Author: John Grimes
  */
 
 /** The `client_assertion_type` RFC 7523 defines for a JWT bearer assertion. */
@@ -100,7 +102,7 @@ function formUrlDecode(value: string): string | undefined {
  * characters outside the alphabet, so `Buffer.from("!!!!", "base64")` succeeds
  * and yields nothing. Without this, a header of pure garbage would decode to an
  * empty string and be reported as a malformed *credential* rather than as a
- * malformed header — the same response, but for the wrong reason, and one that
+ * malformed header - the same response, but for the wrong reason, and one that
  * stops being the same response the moment the code below changes.
  */
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -265,7 +267,7 @@ export function extractClientCredential(
  * The `client_id` a credential names, before any verification.
  *
  * For `private_key_jwt` the request need not carry one, in which case the
- * assertion's `sub` supplies it — so this can legitimately be undefined.
+ * assertion's `sub` supplies it - so this can legitimately be undefined.
  */
 export function credentialClientId(
   credential: PresentedCredential,

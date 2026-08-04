@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -46,7 +50,7 @@ describe("tenantScopeFromRow", () => {
 
   it("does not expose the brand as enumerable data", () => {
     // The brand is a symbol, so it survives neither JSON nor a spread of the
-    // enumerable string keys — which is what makes a scope impossible to
+    // enumerable string keys - which is what makes a scope impossible to
     // reconstruct from a request body.
     const scope = tenantScopeFromRow(tenant);
     expect(Object.keys(scope)).toEqual(["tenantId", "tenantSlug"]);

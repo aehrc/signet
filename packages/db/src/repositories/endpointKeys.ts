@@ -4,12 +4,14 @@
  * Three states, and the order they move in matters: a key is published as `next`
  * so that relying parties have fetched it before it signs anything, then promoted
  * to `active`, then `retired` once the tokens it signed have expired. Promotion is
- * therefore not "set this key active" — it is a swap, and it happens in a
+ * therefore not "set this key active" - it is a swap, and it happens in a
  * transaction so that there is never an instant with two active keys or none.
  *
  * No function here returns a private key in a form any API could serve: the
  * column holds an AES-256-GCM envelope, and decrypting it is the caller's
  * business, immediately before signing.
+ *
+ * Author: John Grimes
  */
 
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -63,8 +65,8 @@ export async function listEndpointKeys(
  * The key to sign with.
  *
  * Ordered by activation time and limited to one. The schema does not constrain an
- * endpoint to a single active key — a partial unique index would have made the
- * promotion transaction below deadlock-prone — so this query decides, rather than
+ * endpoint to a single active key - a partial unique index would have made the
+ * promotion transaction below deadlock-prone - so this query decides, rather than
  * assuming, which of them wins: the most recently activated.
  */
 export async function getActiveEndpointKey(
@@ -90,7 +92,7 @@ export async function getActiveEndpointKey(
  *
  * Retired keys are excluded. A relying party that has cached the JWKS will
  * continue to verify tokens signed by a retired key until its cache expires,
- * which is exactly why retirement is a state and not a delete — but the document
+ * which is exactly why retirement is a state and not a delete - but the document
  * should stop advertising a key the moment Signet stops signing with it.
  */
 export async function listPublishableEndpointKeys(
@@ -148,7 +150,7 @@ export type KeyPromotion =
  * Nothing is retired when there is no `next` key. Rotating to nothing would
  * leave the endpoint unable to sign, which is a worse outcome than refusing.
  *
- * If several keys are `next` — an operator can generate more than one — the
+ * If several keys are `next` - an operator can generate more than one - the
  * oldest is promoted, so that repeated rotation drains the queue in the order it
  * was filled.
  */
@@ -204,8 +206,8 @@ export async function promoteNextEndpointKey(
 /**
  * Retires one key without promoting anything.
  *
- * Used to withdraw a key that must stop signing immediately — a suspected
- * compromise — accepting that the endpoint cannot issue tokens until another key
+ * Used to withdraw a key that must stop signing immediately - a suspected
+ * compromise - accepting that the endpoint cannot issue tokens until another key
  * is activated. That is the correct trade: a compromised key must not sign, and a
  * brief outage is recoverable where a leaked signing key is not.
  */

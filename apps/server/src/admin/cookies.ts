@@ -8,6 +8,8 @@
  *
  * `Path=/` rather than `/api`: the cookie is read by the API and cleared by the console,
  * and scoping it to the API path would leave a cookie the console cannot expire.
+ *
+ * Author: John Grimes
  */
 
 import { sessionCookieHeader } from "../http/cookies.js";

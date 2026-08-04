@@ -19,6 +19,8 @@
  * between two servers, where neither party's log says anything useful, so an
  * operator can ask Signet to fetch the discovery document and report exactly what
  * it found - before a person is standing at a login page.
+ *
+ * Author: John Grimes
  */
 
 import { idpConfigWriteSchema } from "@signet/contracts";

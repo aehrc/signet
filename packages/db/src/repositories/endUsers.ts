@@ -8,6 +8,8 @@
  * row rather than a boolean the caller passes in: a boolean argument is one
  * inverted condition away from handing out unauthenticated access, whereas a row
  * can only have come from the database.
+ *
+ * Author: John Grimes
  */
 
 import { and, asc, eq, isNull, isNotNull, sql } from "drizzle-orm";
@@ -105,7 +107,7 @@ export async function findEndUserByUsername(
  * Lists the personas an endpoint may offer in its picker.
  *
  * Empty on a production endpoint, whatever else is true. The endpoint row must
- * belong to the scope — a mismatch is a programming error, not a permission
+ * belong to the scope - a mismatch is a programming error, not a permission
  * failure, and is thrown rather than returned.
  *
  * The SQL filters on `is_persona` and enabled status, and
@@ -184,7 +186,7 @@ export async function updateEndUser(
  * Replaces a user's password hash, or clears it.
  *
  * Clearing it turns the account into a persona, which is only selectable on a
- * non-production endpoint — so this cannot be used to create a password-free
+ * non-production endpoint - so this cannot be used to create a password-free
  * login on a production endpoint, only an account that cannot log in at all.
  */
 export async function setEndUserPasswordHash(
@@ -227,7 +229,7 @@ export async function setEndUserDisabled(
  * Deletes a user.
  *
  * Their in-flight authorization sessions and consents cascade away, and so do
- * their tokens' `end_user_id` references — an authorization for a deleted user
+ * their tokens' `end_user_id` references - an authorization for a deleted user
  * must not be completable.
  *
  * @returns Whether a user was deleted.

@@ -4,7 +4,7 @@
  * This is the part of federation an operator actually configures, and the part
  * that decides what a federated person can do: `fhirUser` becomes the identity a
  * policy templates into tokens, and `roles` becomes what a policy tests. Getting
- * it wrong is not a cosmetic problem, so the mapping is deliberately literal —
+ * it wrong is not a cosmetic problem, so the mapping is deliberately literal -
  * it copies named claims and does nothing clever.
  *
  * What it will not do is invent a value. A mapping naming a claim the provider
@@ -22,6 +22,8 @@
  * An upstream provider can put anything in a token, and copying the lot would
  * make every unrecognised claim available to a policy template - and from there
  * into a signed access token that a downstream FHIR server reads.
+ *
+ * Author: John Grimes
  */
 
 /** Which upstream claims populate which Signet fields. */

@@ -9,8 +9,10 @@
  * Parsing delegates to `@signet/core`, so the builder cannot accept a pattern the
  * evaluator would reject. What it adds is the inverse: building a pattern back from the
  * pickers, with the permission letters in the one order the grammar allows. `.sr` is
- * not a valid scope — the suffix must read `cruds` — and a UI that emitted the letters
+ * not a valid scope - the suffix must read `cruds` - and a UI that emitted the letters
  * in click order would produce one.
+ *
+ * Author: John Grimes
  */
 
 import { parseScopePattern, PERMISSION_ORDER } from "@signet/core";
@@ -35,7 +37,7 @@ export const DEFAULT_PATTERN: PatternDraft = {
 /**
  * Reads a pattern into the builder's controls.
  *
- * Returns undefined when the pattern is not a resource pattern at all — `openid` and
+ * Returns undefined when the pattern is not a resource pattern at all - `openid` and
  * `launch/patient` are matched by exact equality rather than by pattern, and a rule
  * whose `match` is one of those is shown as a plain value rather than as pickers.
  *

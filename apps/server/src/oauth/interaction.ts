@@ -5,9 +5,9 @@
  * These are JSON endpoints under the endpoint's issuer, and the browser-facing
  * pages at `{iss}/login`, `{iss}/picker` and `{iss}/consent` are a client of them.
  * Splitting it that way means the whole of the authorization flow is exercisable
- * without a browser, which is what makes the negative paths — resuming somebody
+ * without a browser, which is what makes the negative paths - resuming somebody
  * else's session, consenting before authenticating, choosing a patient the user
- * may not act on — testable at all.
+ * may not act on - testable at all.
  *
  * The invariant every handler upholds: nothing about the request is taken from the
  * client. Scopes, redirect URI, PKCE challenge and audience all come from the
@@ -21,6 +21,8 @@
  * asked for, which the app already knows, and advancing one requires a credential
  * the session does not contain. Guessing one gains an attacker the ability to
  * complete an authorization *they* started.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -109,7 +111,7 @@ type AuthenticatedSession = LoadedSession & {
  * Loads a live session and the client it belongs to.
  *
  * Endpoint-scoped and expiry-filtered in SQL, so an expired session and one
- * belonging to another endpoint are both simply absent — a handler that only calls
+ * belonging to another endpoint are both simply absent - a handler that only calls
  * this cannot resume either.
  */
 async function loadSession(
@@ -262,7 +264,7 @@ async function buildView(
  * The code is generated as an opaque token and stored only as a digest, so a
  * database disclosure yields nothing redeemable. It is bound to the session, and
  * the session carries the redirect URI and the PKCE challenge the token endpoint
- * will check — which is what makes a code stolen in transit useless without the
+ * will check - which is what makes a code stolen in transit useless without the
  * verifier.
  */
 async function completeAuthorization(
@@ -306,7 +308,7 @@ async function completeAuthorization(
  * Answers a step, completing the authorization when nothing is outstanding.
  *
  * Every handler ends here, so the transition from `consent` to a redirect happens
- * in one place regardless of which step turned out to be last — an endpoint in
+ * in one place regardless of which step turned out to be last - an endpoint in
  * `auto` consent mode with an EHR-supplied context completes straight from login.
  */
 async function respondWithStep(
@@ -377,7 +379,7 @@ function unknownSession(c: Context<SignetEnvironment>) {
  * Collapses the preamble every handler shares: an unknown session is a 404, and a
  * step the session is not ready for is answered with the step it *is* on rather than
  * with an error. Returning the response rather than throwing keeps the ordering rule
- * — login, then context, then consent — in one place, where it can be read.
+ * - login, then context, then consent - in one place, where it can be read.
  *
  * The `requireUser` parameter decides whether a session with nobody signed in is
  * handed back to the caller or answered with its current step. The two overloads
@@ -467,7 +469,7 @@ export function interactionStateHandler(context: ServerContext) {
  * Attaches the authenticated user, and resolves any context their record supplies.
  *
  * A persona's default context is applied here rather than in the picker, because
- * an authorization that needs no choice should not present one — the point of a
+ * an authorization that needs no choice should not present one - the point of a
  * seeded persona is that the launch simply works.
  */
 async function attachUser(

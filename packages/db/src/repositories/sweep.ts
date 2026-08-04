@@ -2,7 +2,7 @@
  * The scheduled expiry sweep.
  *
  * Every runtime table stores an `expires_at`, and every credential is refused on the
- * strength of that column rather than of its absence from the table — so a sweep
+ * strength of that column rather than of its absence from the table - so a sweep
  * removes storage, never permission. That is what makes it safe for the one job in
  * Signet that has no tenant: the predicates are properties of the rows themselves,
  * they can only match rows that are already unusable, and nothing but a count is
@@ -11,6 +11,8 @@
  * The one exception is deliberately *not* here: access token records are a
  * revocation list, and deleting one early would un-revoke a live token. Their sweep
  * takes an explicit cut-off, and the caller is expected to leave a grace period.
+ *
+ * Author: John Grimes
  */
 
 import { deleteExpiredAccessTokens } from "./accessTokens.js";

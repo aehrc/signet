@@ -14,6 +14,8 @@
  * The client secret is write-only. The form shows whether one is stored and leaves
  * the field blank; saving with it blank keeps what is there, which is what makes it
  * possible to fix a claim mapping without re-entering a credential.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";

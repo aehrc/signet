@@ -4,12 +4,14 @@
  * Creating a tenant is the one operation in this directory that cannot take a
  * {@link TenantScope}, because it is what brings a tenant into existence. It is
  * therefore a platform operation rather than a tenant operation, and the server
- * exposes it only to the signup path and the bootstrap command — never to a
+ * exposes it only to the signup path and the bootstrap command - never to a
  * request already inside a tenant.
  *
  * Every other function here takes a scope and identifies the row from it, so
  * there is no signature that accepts a tenant identifier a caller could have
  * chosen: renaming or deleting some *other* tenant is not expressible.
+ *
+ * Author: John Grimes
  */
 
 import { eq } from "drizzle-orm";

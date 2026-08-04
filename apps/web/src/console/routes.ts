@@ -5,9 +5,11 @@
  * paths are: a link built by hand is a 404 that looks like missing data. Pure and
  * tested.
  *
- * The console mirrors the API's hierarchy — tenant, then endpoint, then resource —
+ * The console mirrors the API's hierarchy - tenant, then endpoint, then resource -
  * because the navigation is that hierarchy and a URL that did not match it would
  * make a bookmark ambiguous about which endpoint it meant.
+ *
+ * Author: John Grimes
  */
 
 /** Where the console lives within the application. */

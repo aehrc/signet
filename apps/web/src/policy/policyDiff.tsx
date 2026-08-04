@@ -7,6 +7,8 @@
  *
  * Colour is not the only signal: each line carries `+` or `-`, so the diff is readable
  * without relying on the reader distinguishing red from green.
+ *
+ * Author: John Grimes
  */
 
 import { diffLines, diffSummary, withoutUnchangedRuns } from "./diff.js";

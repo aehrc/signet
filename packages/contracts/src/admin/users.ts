@@ -3,8 +3,10 @@
  *
  * A persona is an account with no password, which is why the two are described by
  * one schema with a refinement rather than two: the distinction is a property of
- * the credential, and separating them would allow a persona with a password — an
+ * the credential, and separating them would allow a persona with a password - an
  * account that is password-free in the console and not in the database.
+ *
+ * Author: John Grimes
  */
 
 import { z } from "zod";

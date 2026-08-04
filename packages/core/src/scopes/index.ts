@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 export { parseScope, parseScopes, type ParseScopesResult } from "./parse.js";
 export { formatScope, formatScopes } from "./serialise.js";
 export {

@@ -2,7 +2,7 @@
  * Reading a cookie from a request.
  *
  * Shared by the console's session and the end user's, which are different credentials
- * with different lifetimes and different path scopes — but one header syntax, and it
+ * with different lifetimes and different path scopes - but one header syntax, and it
  * ought to be parsed once. A second copy differing in whether it trimmed the value, or
  * which of two same-named cookies it took, would make one surface accept a cookie the
  * other rejected.
@@ -10,13 +10,15 @@
  * Written by hand rather than with a parser because the header comes from an untrusted
  * client: a duplicate name, a missing `=` and a value containing `=` all have to behave
  * predictably.
+ *
+ * Author: John Grimes
  */
 
 /**
  * Reads one cookie from a `Cookie` header.
  *
  * The *first* occurrence of a name wins, matching what browsers send for the most
- * specific path — which matters here, because an end user's session cookie is scoped to
+ * specific path - which matters here, because an end user's session cookie is scoped to
  * an endpoint's path and a browser holding two of them sends the narrower one first.
  *
  * @param header - The raw `Cookie` header, if the request had one.

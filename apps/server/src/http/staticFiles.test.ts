@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -67,7 +71,7 @@ describe("resolveWithinRoot", () => {
 
   it("neutralises an encoded traversal identically", () => {
     // Decoding happens before normalisation, so `..%2f` and `../` take the same
-    // path through this function — which is why the containment check is applied
+    // path through this function - which is why the containment check is applied
     // to the resolved value rather than to the requested one.
     expect(resolveWithinRoot(root, "/..%2f..%2fetc%2fpasswd")).toBe(
       path.resolve(root, "etc/passwd"),

@@ -2,9 +2,11 @@
  * Driving the admin API the way the console and a script do.
  *
  * Two credentials, one set of helpers. Every suite that exercises a route is
- * expected to run at least one case with each — a session cookie and a personal
+ * expected to run at least one case with each - a session cookie and a personal
  * access token reach their tenant scope by different routes, and a route that works
  * for one and not the other is a bug the console would never find.
+ *
+ * Author: John Grimes
  */
 
 import type { TestStack } from "./harness.js";
@@ -74,7 +76,7 @@ export async function adminRequest(
  * Makes an admin API request and returns its parsed body.
  *
  * @throws {Error} When the status is not the one expected, with the body in the
- *   message — a failed assertion on a field of `undefined` says much less.
+ *   message - a failed assertion on a field of `undefined` says much less.
  */
 export async function adminJson<T>(
   stack: TestStack,

@@ -1,16 +1,18 @@
 /**
  * The application root: providers and routes.
  *
- * One bundle serves three surfaces — the console, the end-user authorization pages
- * and the developer portal — because they share a shell, a stylesheet and a theme,
+ * One bundle serves three surfaces - the console, the end-user authorization pages
+ * and the developer portal - because they share a shell, a stylesheet and a theme,
  * and splitting them would be three deployments to keep looking alike. They are
  * separated by route rather than by build.
  *
  * The query defaults are deliberate. Nothing retries by default: an admin API
  * refusal is an answer, and retrying a 403 three times only delays showing the
  * operator what happened. Refetching on focus is off for the same reason it is
- * usually on — this is configuration rather than a live feed, and a page that
+ * usually on - this is configuration rather than a live feed, and a page that
  * silently reloaded while a form was open would discard what was being typed.
+ *
+ * Author: John Grimes
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -113,7 +115,7 @@ export function App() {
  * What the console's index renders while the layout decides where to send it.
  *
  * The layout redirects to the caller's only tenant, or shows a chooser, before this
- * is reached — so it exists to give the route an element rather than to be seen.
+ * is reached - so it exists to give the route an element rather than to be seen.
  */
 function TenantRedirectNotice() {
   return null;

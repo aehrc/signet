@@ -2,7 +2,7 @@
  * The preamble the introspection and revocation endpoints share.
  *
  * Both are authenticated with the same three client authentication methods as the
- * token endpoint — RFC 7662 §2.1 requires it for introspection, and an
+ * token endpoint - RFC 7662 §2.1 requires it for introspection, and an
  * unauthenticated one of either is a free oracle for testing whether a stolen token
  * is still live. Both then read a `token` parameter out of the same form body.
  *
@@ -10,6 +10,8 @@
  * exactly* the same credentials: an operator who can revoke a token but cannot
  * introspect it, or the reverse, has a surprise waiting, and two copies of this
  * sequence is how that happens.
+ *
+ * Author: John Grimes
  */
 
 import {

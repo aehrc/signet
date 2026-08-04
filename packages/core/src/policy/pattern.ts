@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { parseScope } from "../scopes/index.js";
 
 import type { ParsedScopePattern, ScopePattern } from "./types.js";
@@ -15,7 +19,7 @@ const PATTERN_CONTEXTS = new Set<string>(["patient", "user", "system", "*"]);
  * Parses a scope pattern of the form `{context|*}/{ResourceType|*}.{permissions}`.
  *
  * The resource type and permission grammar is delegated to {@link parseScope},
- * so a pattern can never accept a shape a real scope could not take — including
+ * so a pattern can never accept a shape a real scope could not take - including
  * the v1 suffixes, meaning `patient/*.read` is a legal pattern equivalent to
  * `patient/*.rs`.
  *
@@ -133,7 +137,7 @@ export function scopeMatchesIntersects(
  * when no reduction is possible.
  *
  * Returns `undefined` for a non-resource scope, for a context or resource type
- * that does not match, when the overlap is empty, and — deliberately — when the
+ * that does not match, when the overlap is empty, and - deliberately - when the
  * scope already satisfies the pattern under **within** matching. In that last
  * case there is nothing to narrow, and the caller should treat it as an ordinary
  * match rather than a narrowing.

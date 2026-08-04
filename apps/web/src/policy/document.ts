@@ -6,7 +6,7 @@
  * modes round-trips losslessly" a property of one function pair rather than a claim.
  *
  * Validation is not reimplemented. `@signet/contracts`'s schema delegates to
- * `@signet/core`'s validator — the same one the admin API uses — so a document the
+ * `@signet/core`'s validator - the same one the admin API uses - so a document the
  * editor accepts is one the server will accept, and a document it refuses is refused
  * for the same reason and at the same path.
  *
@@ -14,9 +14,11 @@
  * the original design. The point of YAML in an editor is comments, and comments cannot
  * survive a structural edit in the builder: the moment a rule is dragged, any comment
  * attached to it either moves wrongly or disappears. Round-tripping losslessly matters
- * more than commenting, so the code mode is JSON — the form the document takes in the
- * database and over the API — and the builder's rule descriptions carry the prose that
+ * more than commenting, so the code mode is JSON - the form the document takes in the
+ * database and over the API - and the builder's rule descriptions carry the prose that
  * comments would have.
+ *
+ * Author: John Grimes
  */
 
 import { policyDocumentSchema } from "@signet/contracts";
@@ -55,7 +57,7 @@ export function formatPolicy(document: PolicyDocument): string {
  * Parses the code editor's text into a document.
  *
  * Syntax errors and validation failures are reported the same way, because to the
- * person typing they are the same kind of problem — something about this text is
+ * person typing they are the same kind of problem - something about this text is
  * wrong, and here is where.
  *
  * @param text - The editor's contents.
@@ -94,7 +96,7 @@ export function parsePolicy(text: string): DocumentParse {
  * Whether two documents differ.
  *
  * Compared by their serialised form rather than field by field, because that is the
- * comparison that decides whether there is anything to save — and it cannot fall
+ * comparison that decides whether there is anything to save - and it cannot fall
  * behind a field added to the document type.
  *
  * @param a - One document.

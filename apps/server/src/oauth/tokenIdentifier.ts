@@ -9,9 +9,11 @@
  * this endpoint's own `access_tokens` table is the authority, not the signature.
  *
  * Hand-decoded rather than delegated to `jose`, because `decodeJwt` throws for a
- * value that is not a JWT at all — and an arbitrary string is exactly what these
+ * value that is not a JWT at all - and an arbitrary string is exactly what these
  * endpoints may be given. A malformed token is not an error at either of them; it
  * simply names no row.
+ *
+ * Author: John Grimes
  */
 
 /**

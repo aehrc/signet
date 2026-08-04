@@ -2,6 +2,8 @@
  * Launch context types.
  *
  * @see https://hl7.org/fhir/smart-app-launch/scopes-and-launch-context.html
+ *
+ * Author: John Grimes
  */
 
 /** A FHIR Identifier, as permitted inside a `fhirContext` entry. */
@@ -51,7 +53,7 @@ export interface LaunchContext {
  *
  * The distinction matters because the codebase compiles with
  * `exactOptionalPropertyTypes`: `{ patient: undefined }` is not a
- * {@link LaunchContext}, and that is deliberate — a context whose `patient` key
+ * {@link LaunchContext}, and that is deliberate - a context whose `patient` key
  * exists but holds nothing would be serialised as `"patient": null` into a token
  * response, and SMART clients test for presence. A validated request body,
  * however, naturally has exactly that shape, so {@link toLaunchContext} is the

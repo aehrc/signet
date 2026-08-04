@@ -1,7 +1,7 @@
 /**
  * Repository behaviour that only Postgres can confirm.
  *
- * The unit tests cover every pure judgement — what counts as expired, what counts
+ * The unit tests cover every pure judgement - what counts as expired, what counts
  * as reuse. What they cannot cover is the part that makes those judgements safe:
  * that the claim on a single-use row is atomic, that two concurrent redemptions
  * produce one winner, that reuse detection revokes a family, and that a tenant
@@ -14,6 +14,8 @@
  * Every test creates its own tenants and deletes them afterwards rather than
  * truncating: Vitest runs files in parallel, and a suite that emptied shared tables
  * would break whichever file happened to be running beside it.
+ *
+ * Author: John Grimes
  */
 
 import { eq, sql } from "drizzle-orm";
@@ -128,7 +130,7 @@ function delay(milliseconds: number): Promise<void> {
 /**
  * Narrows a repository result to its success branch, or fails the test.
  *
- * Asserting inside `if (result.ok)` would silently pass when the call failed —
+ * Asserting inside `if (result.ok)` would silently pass when the call failed -
  * the block simply would not run. Throwing here fails loudly and narrows the
  * type, so the assertions that follow can read the success fields directly.
  */
@@ -257,8 +259,8 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
    * `Promise.all` over two claims proves very little: whether the two statements
    * actually overlap is up to the scheduler, and if the first commits before the
    * second begins then a read-then-write implementation passes the test. So the
-   * first claim is made inside a transaction that is deliberately held open — its
-   * row lock with it — the second is started against a different connection, and
+   * first claim is made inside a transaction that is deliberately held open - its
+   * row lock with it - the second is started against a different connection, and
    * only then is the first allowed to commit.
    *
    * The second claim therefore blocks on the lock and re-evaluates its predicate
@@ -274,7 +276,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   ): Promise<readonly [T, T]> {
     const holder = db.transaction(async (tx) => {
       const result = await claim(tx);
-      // The transaction — and the row lock the claim took — stays open well past
+      // The transaction - and the row lock the claim took - stays open well past
       // the moment the contender below reaches the same row.
       await delay(600);
       return result;
@@ -628,7 +630,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
       expect(first.ok).toBe(true);
       // The loser sees a revoked token with no successor, which must not be
-      // mistaken for theft — that would revoke the family and log the legitimate
+      // mistaken for theft - that would revoke the family and log the legitimate
       // user out over a lost race.
       expect(second).toEqual({
         ok: false,
@@ -974,7 +976,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         false,
       );
 
-      // Still introspectable — a revoked token has to be answerable, or a resource
+      // Still introspectable - a revoked token has to be answerable, or a resource
       // server could not tell it from a token that was never issued.
       const afterwards = await introspectAccessToken(
         db,

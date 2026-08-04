@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { formatScopes } from "../scopes/serialise.js";
 
 import type { EndpointCapabilityConfig, SmartCapability } from "./types.js";
@@ -103,7 +107,7 @@ export const DEFAULT_SCOPES_SUPPORTED: readonly string[] =
  * The capability profile of a typical Signet endpoint: both launch modes, all
  * three client types, OpenID Connect, and read/search access.
  *
- * Dynamic registration is deliberately off — it is opt-in per tenant — and so
+ * Dynamic registration is deliberately off - it is opt-in per tenant - and so
  * is app state, which needs storage that not every deployment provides.
  */
 export const DEFAULT_ENDPOINT_CAPABILITIES: Omit<

@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { serve } from "@hono/node-server";
 import { createAuditRecorder, createDatabase } from "@signet/db";
 
@@ -39,8 +43,8 @@ if (command === "migrate") {
 }
 
 // `bootstrap` creates the first tenant and the first owner. Nothing in the console or
-// the admin API can do that — both require a membership of a tenant that does not yet
-// exist — and it is not a public route, because a deployment in front of clinical data
+// the admin API can do that - both require a membership of a tenant that does not yet
+// exist - and it is not a public route, because a deployment in front of clinical data
 // should not accept a tenant from anybody who can reach the port.
 if (command === "bootstrap") {
   try {
@@ -72,8 +76,8 @@ const { db, close } = createDatabase({ url: config.databaseUrl });
  * Reports an audit event that could not be written.
  *
  * Deliberately loud and structured. `@signet/db` accepts that an audit insert can
- * fail without failing the operation it describes — the alternative turns an audit
- * outage into an availability outage — which means this reporter is the *only*
+ * fail without failing the operation it describes - the alternative turns an audit
+ * outage into an availability outage - which means this reporter is the *only*
  * signal that the trail has a gap. A deployment that needs a complete audit log
  * alerts on this message.
  */

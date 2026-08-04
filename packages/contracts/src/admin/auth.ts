@@ -4,9 +4,11 @@
  * Both credentials the admin API accepts are described here: the browser's
  * password-and-second-factor sign-in, and the bearer token a script presents. The
  * server holds neither in the clear, so nothing in this file has a response
- * counterpart carrying a secret — except the one moment a new personal access
+ * counterpart carrying a secret - except the one moment a new personal access
  * token is shown to the person who minted it, which is the only time it exists
  * outside the caller's own storage.
+ *
+ * Author: John Grimes
  */
 
 import { z } from "zod";
@@ -45,7 +47,7 @@ export const apiTokenCreateSchema = z.object({
    *
    * Permitted, because a CI pipeline that stops working at an unpredictable
    * moment is worse than one whose token is deliberately long-lived and
-   * revocable — but the console shows the difference plainly.
+   * revocable - but the console shows the difference plainly.
    */
   expiresAt: z.coerce.date().optional(),
 });

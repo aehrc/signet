@@ -4,12 +4,14 @@
  * Its job is narrow and it is important that it stays narrow: validate the
  * request, resolve any launch context the EHR supplied, record everything
  * security-bearing in an `authorization_sessions` row, and hand the browser off to
- * the first interaction step. It issues no code and consults no policy — those
+ * the first interaction step. It issues no code and consults no policy - those
  * happen at the end of the interaction, from the row rather than from the browser.
  *
  * `POST` is supported only on endpoints that advertise the `authorize-post`
  * capability. It exists for requests whose scope string is too long for a URL,
  * which a `patient/`-per-resource-type app reaches sooner than one might expect.
+ *
+ * Author: John Grimes
  */
 
 import { validateLaunchContext } from "@signet/core";
@@ -38,7 +40,7 @@ import type { Context } from "hono";
  *
  * Ten minutes covers signing in, picking a patient and reading a consent screen
  * without leaving abandoned sessions lying around for hours. It is not a security
- * boundary — the code it eventually produces lives for sixty seconds — but a
+ * boundary - the code it eventually produces lives for sixty seconds - but a
  * session that outlived the user's attention would let a shared browser complete
  * somebody else's authorization.
  */
@@ -76,7 +78,7 @@ function toAuthorizeParams(
  * Reads a value from a parsed form body.
  *
  * A repeated field arrives as an array, and a repeated OAuth parameter is a
- * malformed request rather than a list — treating it as absent means the request
+ * malformed request rather than a list - treating it as absent means the request
  * is refused for the missing parameter, which is the right outcome and avoids
  * having to decide which of two `redirect_uri` values the caller meant.
  */
@@ -214,8 +216,8 @@ export function authorizeHandler(context: ServerContext) {
     }
     const request = validation.request;
 
-    // `resolved` is defined whenever the validation succeeded — it refuses an
-    // unknown client before anything else — but the compiler cannot see that
+    // `resolved` is defined whenever the validation succeeded - it refuses an
+    // unknown client before anything else - but the compiler cannot see that
     // through the pure function, and an assertion here would be a lie waiting to
     // become true.
     if (resolved === undefined) {

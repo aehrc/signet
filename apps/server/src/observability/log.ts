@@ -9,8 +9,10 @@
  * The only judgement here is whether a message clears the configured threshold,
  * which is pure and therefore tested. Everything security-relevant is emitted at
  * `warn`, so a deployment that sets `SIGNET_LOG_LEVEL=error` is choosing to keep
- * only failures — a legitimate choice for a noisy environment, and the reason the
+ * only failures - a legitimate choice for a noisy environment, and the reason the
  * audit trail, which is not suppressible, exists separately.
+ *
+ * Author: John Grimes
  */
 
 import type { SignetConfig } from "../config.js";

@@ -11,6 +11,8 @@
  * Every one of them must end the same way - one refusal, nothing signed in - and
  * the assertions check the outcome rather than the message, because the message is
  * deliberately identical.
+ *
+ * Author: John Grimes
  */
 
 import { listEndUsers } from "@signet/db";

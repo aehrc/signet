@@ -4,8 +4,8 @@
  * Pure, and deliberately the whole of step 1 of the authorization flow: every
  * refusal the authorization endpoint can produce before a user is involved is
  * decided here, from parameters and two configuration rows, with no I/O. That
- * makes the entire rejection surface — the part a conformance reviewer and an
- * attacker both care about — unit testable without a database.
+ * makes the entire rejection surface - the part a conformance reviewer and an
+ * attacker both care about - unit testable without a database.
  *
  * Two properties of the ordering are load-bearing.
  *
@@ -19,10 +19,12 @@
  *
  * Capability flags gate the request as well as the discovery document. An
  * endpoint that does not advertise `permission-patient` refuses a `patient/`
- * scope here, so the `capabilities` array cannot be a lie in either direction —
+ * scope here, so the `capabilities` array cannot be a lie in either direction -
  * which is the property the conformance suite asserts.
  *
  * @see https://hl7.org/fhir/smart-app-launch/app-launch.html
+ *
+ * Author: John Grimes
  */
 
 import { parseScopes, areScopesCoveredBy } from "@signet/core";
@@ -41,7 +43,7 @@ import type { ClientType, Scope } from "@signet/core";
  * caller builds this by reading each name out of a query string or a form body and
  * gets `undefined` for the ones that are absent. Under
  * `exactOptionalPropertyTypes` an optional-only property would reject that, and the
- * workaround — conditionally spreading ten fields — would add nothing but noise.
+ * workaround - conditionally spreading ten fields - would add nothing but noise.
  */
 export interface AuthorizeParams {
   readonly responseType?: string | undefined;
@@ -128,7 +130,7 @@ export interface ValidatedAuthorizeRequest {
   readonly nonce: string | undefined;
   readonly aud: string;
   readonly codeChallenge: string;
-  /** Only `S256` is accepted, so this is a constant — kept for the session row. */
+  /** Only `S256` is accepted, so this is a constant - kept for the session row. */
   readonly codeChallengeMethod: "S256";
   /** Raw scope strings in requested order, for the session row and the audit. */
   readonly requestedScopes: readonly string[];
@@ -285,7 +287,7 @@ function unsupportedScope(
  *
  * Unparseable entries are dropped rather than failing the request: they are the
  * operator's mistake, not the app's, and the effect of dropping one is that the
- * app is refused a scope it would otherwise have been allowed — which is the safe
+ * app is refused a scope it would otherwise have been allowed - which is the safe
  * direction. The console validates the allowlist when it is edited.
  */
 function parseAllowlist(allowed: readonly string[]): readonly Scope[] {

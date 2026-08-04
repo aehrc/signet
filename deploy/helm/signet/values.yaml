@@ -28,7 +28,7 @@ database:
   url: ""
 
 # Envelope key protecting endpoint signing keys at rest. Never set this in
-# values for a real deployment — supply it through existingSecret.
+# values for a real deployment - supply it through existingSecret.
 masterKey:
   existingSecret: ""
   existingSecretKey: masterKey

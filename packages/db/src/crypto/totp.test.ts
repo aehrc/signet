@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { decodeBase32, encodeBase32 } from "./encoding.js";
@@ -77,7 +81,7 @@ describe("verifyTotp", () => {
 
   it("does not read the clock", () => {
     // The same arguments always give the same answer, however long the process
-    // has been running — the property that makes this testable at all.
+    // has been running - the property that makes this testable at all.
     expect(verifyTotp(RFC_SECRET, code, 59, 0)).toBe(true);
     expect(verifyTotp(RFC_SECRET, code, 59, 0)).toBe(true);
   });
@@ -155,7 +159,7 @@ describe("generateTotpSecret", () => {
 
   it("produces a secret long enough to pass the verifier's own guard", () => {
     // The 128-bit floor rejects a secret Signet did not write, so a generated
-    // secret must clear it — otherwise every enrolment would fail closed.
+    // secret must clear it - otherwise every enrolment would fail closed.
     const secret = generateTotpSecret();
     const decoded = decodeBase32(secret);
     expect(decoded?.length).toBeGreaterThanOrEqual(16);

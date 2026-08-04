@@ -5,10 +5,12 @@
  * needs: colouring JSON so a policy is scannable, and marking the line an error is on.
  * A tokeniser is a hundred lines and is testable, which the alternative is not.
  *
- * The textarea remains the thing being typed into — highlighted output is rendered
+ * The textarea remains the thing being typed into - highlighted output is rendered
  * behind it, aligned by using the same font and metrics. That keeps every editing
  * behaviour the browser already has: selection, undo, spellcheck off, mobile keyboards,
  * and paste.
+ *
+ * Author: John Grimes
  */
 
 /** What a token is, which decides how it is coloured. */
@@ -151,7 +153,7 @@ export function tokenise(text: string): readonly Token[] {
  *
  * Used to point at the line an issue concerns. Approximate by design: it walks the text
  * looking for each path segment as a key in order, which is right for a document the
- * editor itself formatted — one key per line — and gives up rather than guessing when
+ * editor itself formatted - one key per line - and gives up rather than guessing when
  * the text has been reflowed.
  *
  * @param text - The editor's contents.

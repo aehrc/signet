@@ -2,19 +2,21 @@
  * Request metadata for the audit trail.
  *
  * Every authorization decision is audited with the address and user agent it came
- * from, and neither is trustworthy. That is not a reason to omit them — an audit
- * log records what was claimed as well as what happened — but it is a reason to
+ * from, and neither is trustworthy. That is not a reason to omit them - an audit
+ * log records what was claimed as well as what happened - but it is a reason to
  * be careful about how they are read.
  *
  * `X-Forwarded-For` is a list, and the entries an untrusted client can write are
  * the *leftmost* ones: a client sending `X-Forwarded-For: 1.2.3.4` and then being
  * proxied produces `1.2.3.4, <real address>`. Taking the first entry therefore
  * records whatever the caller asked to be recorded. Signet takes the last entry
- * instead, which is the address the nearest trusted proxy observed — the most
+ * instead, which is the address the nearest trusted proxy observed - the most
  * specific value that is not purely caller-controlled. A deployment that runs
  * several proxies in series will want to count back further, which is a
  * configuration question rather than a code one, and is noted in the deployment
  * documentation rather than guessed at here.
+ *
+ * Author: John Grimes
  */
 
 import type { Context } from "hono";

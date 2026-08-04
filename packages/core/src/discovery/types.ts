@@ -2,6 +2,8 @@
  * Discovery document types.
  *
  * @see https://hl7.org/fhir/smart-app-launch/conformance.html
+ *
+ * Author: John Grimes
  */
 
 /** Every SMART capability string defined by SMART App Launch 2.2.0. */
@@ -40,7 +42,7 @@ export type SmartCapability =
  * `none` is the OpenID Connect value for a public client, which authenticates
  * with PKCE rather than a credential. SMART's own list omits it, but an endpoint
  * that allows only public clients has to be able to say so in its
- * `openid-configuration` — advertising an empty array instead would read as "no
+ * `openid-configuration` - advertising an empty array instead would read as "no
  * client may authenticate".
  */
 export type TokenEndpointAuthMethod =

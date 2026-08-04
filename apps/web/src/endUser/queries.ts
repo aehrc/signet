@@ -9,6 +9,8 @@
  * The interaction is a query with `staleTime: 0` and no retry. Its answer is a step in a
  * flow: a refetch is exactly what should happen after each post, and a retry of a refusal
  * would repeat an authorization decision.
+ *
+ * Author: John Grimes
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";

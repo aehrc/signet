@@ -15,6 +15,8 @@
  *
  * @see https://datatracker.ietf.org/doc/html/rfc5869
  * @see https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
+ *
+ * Author: John Grimes
  */
 
 import { decodeBase64Url, encodeBase64Url } from "./encoding.js";
@@ -23,8 +25,8 @@ import { decodeBase64Url, encodeBase64Url } from "./encoding.js";
  * The scheme identifier carried by every ciphertext this module produces.
  *
  * Stored values outlive the code that wrote them. Tagging the format means a
- * later scheme — a different cipher, a key-encryption-key per tenant, an
- * external KMS — can be introduced by adding a `v2` branch here, while `v1`
+ * later scheme - a different cipher, a key-encryption-key per tenant, an
+ * external KMS - can be introduced by adding a `v2` branch here, while `v1`
  * rows keep decrypting and are rewritten lazily. An untagged blob would leave
  * no way to tell the two apart other than guessing.
  */
@@ -46,8 +48,8 @@ const HKDF_INFO = "signet/envelope/v1/aes-256-gcm";
 
 /**
  * Minimum accepted master key length, matching the server's configuration
- * check. Enforced here as well so a caller that bypasses `loadConfig` — a
- * migration script, a test — cannot quietly encrypt under a weak key.
+ * check. Enforced here as well so a caller that bypasses `loadConfig` - a
+ * migration script, a test - cannot quietly encrypt under a weak key.
  */
 const MASTER_KEY_MIN_LENGTH = 32;
 
@@ -68,7 +70,7 @@ export type EnvelopeErrorReason =
   /**
    * The GCM tag did not verify: a wrong master key, a truncated ciphertext, or a
    * deliberately altered byte. These are indistinguishable by design, and all
-   * three mean the same thing operationally — the plaintext is not recoverable.
+   * three mean the same thing operationally - the plaintext is not recoverable.
    */
   | "authentication-failed";
 
@@ -134,7 +136,7 @@ async function deriveKey(masterKey: string): Promise<CryptoKey> {
       name: "HKDF",
       hash: "SHA-256",
       // RFC 5869 section 3.1 permits an empty salt, and this key must be
-      // reproducible from the master key alone — a random salt would have to be
+      // reproducible from the master key alone - a random salt would have to be
       // stored somewhere, and the only place available is beside the ciphertext
       // it protects, where it adds nothing an attacker does not already have.
       // Domain separation comes from `info` instead.
@@ -156,7 +158,7 @@ async function deriveKey(masterKey: string): Promise<CryptoKey> {
  * @param masterKey - The `SIGNET_MASTER_KEY` value.
  * @returns `v1.<iv>.<ciphertext+tag>`, both parts unpadded base64url. Safe to
  *   store in a `text` column and to compare for equality, though never for
- *   ordering — two encryptions of the same plaintext differ, by design.
+ *   ordering - two encryptions of the same plaintext differ, by design.
  * @throws {EnvelopeError} When the master key is too short.
  */
 export async function encryptSecret(
@@ -197,7 +199,7 @@ export async function encryptSecret(
  * @param masterKey - The `SIGNET_MASTER_KEY` value.
  * @returns The original plaintext.
  * @throws {EnvelopeError} On a short master key, a value that is not in this
- *   format, an unrecognised scheme version, or any failure of the GCM tag —
+ *   format, an unrecognised scheme version, or any failure of the GCM tag -
  *   which covers a wrong master key, a truncated value and a single altered
  *   byte anywhere in the IV or ciphertext.
  */

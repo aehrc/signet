@@ -7,8 +7,10 @@
  * HTML and a 200.
  *
  * The set is closed and small, and every name in it is a URL an end user may bookmark or
- * a branded deployment may link to — so it is stated once, here, and read by both the
+ * a branded deployment may link to - so it is stated once, here, and read by both the
  * router and the static handler.
+ *
+ * Author: John Grimes
  */
 
 /** The page names served under an endpoint's issuer. */
@@ -32,7 +34,7 @@ export type EndUserPage = (typeof END_USER_PAGES)[number];
  * Whether a request path is one of the end-user pages.
  *
  * Matches the page path exactly and nothing beneath it: `/manage` is a page, and
- * `/manage/session` is the API the page calls. That distinction is the whole point —
+ * `/manage/session` is the API the page calls. That distinction is the whole point -
  * without it the shell would be served in place of a 404 for every mistyped route under
  * an issuer.
  *

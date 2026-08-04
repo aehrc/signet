@@ -16,7 +16,7 @@ issuer at the endpoint. For Pathling that is three settings:
 {{ if not .Values.masterKey.existingSecret -}}
 WARNING: no existing secret was supplied for the signing-key envelope key, so
 the chart generated one into {{ include "signet.fullname" . }}-master-key. It is
-annotated `helm.sh/resource-policy: keep` so upgrades preserve it. Back it up —
+annotated `helm.sh/resource-policy: keep` so upgrades preserve it. Back it up -
 if it is lost, every stored endpoint signing key becomes undecryptable and every
 client must be re-registered. For production, manage it externally and set
 `masterKey.existingSecret`.

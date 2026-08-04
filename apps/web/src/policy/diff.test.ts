@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { diffLines, diffSummary, withoutUnchangedRuns } from "./diff.js";

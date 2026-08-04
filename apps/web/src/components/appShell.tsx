@@ -8,9 +8,11 @@
  *
  * Two frames, not one. {@link AppShell} has a navigation drawer and is what an
  * operator works inside; {@link CentredShell} is a single card on an empty page, for
- * the moments where there is exactly one thing to do — signing in, choosing a
+ * the moments where there is exactly one thing to do - signing in, choosing a
  * tenant, consenting. Giving those a sidebar would offer navigation that either does
  * not work yet or is not the point.
+ *
+ * Author: John Grimes
  */
 
 import type { ReactNode } from "react";

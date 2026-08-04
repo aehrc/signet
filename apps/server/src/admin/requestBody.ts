@@ -1,8 +1,8 @@
 /**
  * Reading and validating an admin API request body.
  *
- * Every mutating handler starts the same way — parse JSON, validate against a
- * contract, answer 400 with field-level issues if it does not hold — and doing
+ * Every mutating handler starts the same way - parse JSON, validate against a
+ * contract, answer 400 with field-level issues if it does not hold - and doing
  * that inline in each would be thirty copies of the same four lines, one of which
  * would eventually forget the issues.
  *
@@ -10,6 +10,8 @@
  * parse error, so the response describes the fields that are missing instead of
  * complaining about syntax. That is the more useful answer: a client that sent
  * nothing and a client that sent `{}` have made the same mistake.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -54,7 +56,7 @@ export async function parseBody<T>(
  * Validates a query string against a contract.
  *
  * Repeated parameters are collected into arrays, single ones left as strings, so a
- * schema can accept `?action=a&action=b` as well as `?action=a` — which is what the
+ * schema can accept `?action=a&action=b` as well as `?action=a` - which is what the
  * audit browser's multi-select produces as its selection grows.
  *
  * @param c - The Hono request context.

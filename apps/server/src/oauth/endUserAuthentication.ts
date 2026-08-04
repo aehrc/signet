@@ -10,13 +10,15 @@
  *
  * A missing account costs what a wrong password costs. Argon2id verification dominates
  * the work, so a path that skipped it when the username was unknown would answer
- * measurably faster — turning user enumeration into a timing measurement rather than a
+ * measurably faster - turning user enumeration into a timing measurement rather than a
  * guess. The verification therefore runs against an unmatchable hash when no account was
  * found, and only then is the request refused.
  *
  * A persona is selectable only on a non-production endpoint. That is checked by the data
  * layer's `isPersonaSelectable`, which reads both the endpoint's flag and the account's,
  * so neither can be relaxed alone.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -148,8 +150,8 @@ export type EndUserSignIn =
 /**
  * Authenticates an end user and decides what to answer when it fails.
  *
- * Both surfaces make the same three-way decision — admitted, told what to supply, or
- * refused — and the third case must look identical to the second-to-last for user
+ * Both surfaces make the same three-way decision - admitted, told what to supply, or
+ * refused - and the third case must look identical to the second-to-last for user
  * enumeration to stay impossible. Deciding it here means one message and one status for
  * every credential failure on either surface, rather than two copies that drift.
  *
@@ -213,7 +215,7 @@ export async function signInEndUser(options: {
  * Two cases, and both are the caller being told what to do rather than being refused: no
  * credential of either shape was supplied, and an endpoint that federates authentication
  * has no local password to check. Everything else is a credential failure, which both
- * surfaces audit and answer with one uniform message — so this returns undefined for it.
+ * surfaces audit and answer with one uniform message - so this returns undefined for it.
  *
  * @param reason - Why the attempt failed.
  * @param authMode - The endpoint's `auth_mode`.

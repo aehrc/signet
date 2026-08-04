@@ -4,12 +4,14 @@
  * The list is the console's landing page, because an endpoint is the unit an
  * operator thinks in: one issuer in front of one FHIR server. Each row shows the
  * issuer, since that string is what has to be pasted into the FHIR server's
- * configuration, and whether the endpoint is production — which is the flag that
+ * configuration, and whether the endpoint is production - which is the flag that
  * decides whether password-free personas are selectable.
  *
  * Creating one takes three fields. Everything else has a defensible default, and the
  * server generates the signing key and publishes a starting policy in the same
  * request, so an endpoint created here can serve a discovery document immediately.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";

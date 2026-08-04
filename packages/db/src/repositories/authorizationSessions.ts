@@ -3,8 +3,8 @@
  *
  * A session is the server-side half of an authorization: it holds what the app
  * asked for while the user logs in, picks a patient and consents, across several
- * browser round trips. Everything security-bearing about the request — the
- * redirect URI, the PKCE challenge, the requested scopes — is recorded here at
+ * browser round trips. Everything security-bearing about the request - the
+ * redirect URI, the PKCE challenge, the requested scopes - is recorded here at
  * the start and read from here at the end, never taken again from the browser.
  * That is what makes it impossible for a later step to widen an earlier decision.
  *
@@ -12,6 +12,8 @@
  * URL that the user's own browser holds, and it grants nothing on its own. The
  * authorization code that *is* a credential lives in `./authorizationCodes.ts`
  * and is stored hashed.
+ *
+ * Author: John Grimes
  */
 
 import { and, eq, gt, isNull, lte } from "drizzle-orm";
@@ -32,7 +34,7 @@ import type { LaunchContext } from "@signet/core";
  * The caller-supplied half of an authorization session.
  *
  * `endpointId` and `clientId` come from the scope, and the fields that later
- * steps fill in — the user, the resolved context, the consent timestamp — are not
+ * steps fill in - the user, the resolved context, the consent timestamp - are not
  * settable at creation.
  */
 export type AuthorizationSessionInput = Omit<

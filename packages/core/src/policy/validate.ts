@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { parseScopePattern } from "./pattern.js";
 import {
   isTemplateFilterName,
@@ -174,7 +178,7 @@ function checkBoolean(ctx: Context, value: unknown, path: string): void {
  * Explains why a `match` or `forEachScope` expression is unusable.
  *
  * An expression is either a resource pattern, or the canonical form of a scope
- * that is compared for exact equality — which is how non-resource scopes such
+ * that is compared for exact equality - which is how non-resource scopes such
  * as `openid` and `launch/patient` are matched. A scope written in a
  * non-canonical form (a v1 suffix, say) would never compare equal, so it is
  * reported with the form to use instead.
@@ -394,7 +398,7 @@ function checkDefaults(ctx: Context, value: unknown): void {
  * Validates an untrusted policy document.
  *
  * Everything is checked structurally before a document is accepted, because a
- * policy that fails at evaluation time fails in the middle of issuing a token —
+ * policy that fails at evaluation time fails in the middle of issuing a token -
  * far too late. Templates are checked for syntax and known filters only:
  * whether a path resolves depends on the authorization being evaluated, and an
  * unresolved path is a dropped claim rather than an error.

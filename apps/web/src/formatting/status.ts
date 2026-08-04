@@ -5,6 +5,8 @@
  * wherever it appears: "suspended" must not be a warning on the client list and grey
  * on the client's own page. Clients, endpoints, keys and registration requests share
  * the vocabulary, so they share this.
+ *
+ * Author: John Grimes
  */
 
 /** How a status reads: neutral, good, warning or bad. */

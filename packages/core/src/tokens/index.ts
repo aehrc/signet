@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 export {
   assembleAccessTokenClaims,
   assembleIdTokenClaims,

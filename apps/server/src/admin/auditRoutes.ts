@@ -4,7 +4,7 @@
  * Paging is keyset rather than offset, because `audit_events` only grows: an offset
  * page ten thousand rows in costs the database ten thousand rows, and a row inserted
  * between two requests shifts every subsequent page. The cursor is the data layer's
- * `{ at, id }` position, opaque to the caller — encoded here as base64url so that a
+ * `{ at, id }` position, opaque to the caller - encoded here as base64url so that a
  * client cannot compose a position by hand and ask for a page boundary that never
  * existed.
  *
@@ -14,8 +14,10 @@
  * valid".
  *
  * The tenant is not a filter. It comes from the scope the middleware resolved, and
- * `queryAuditEvents` requires it — so there is no request shape that reads across
+ * `queryAuditEvents` requires it - so there is no request shape that reads across
  * tenants.
+ *
+ * Author: John Grimes
  */
 
 import { auditQuerySchema } from "@signet/contracts";

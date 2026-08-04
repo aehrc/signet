@@ -4,9 +4,11 @@
  * An EHR launch is otherwise impossible to exercise without an EHR: the app has
  * to be opened at its own launch URL with `iss` and a `launch` handle the
  * authorization server minted. This is the console's version of that, and it is
- * deliberately the *same* operation the EHR performs — it mints a real
- * single-use handle through the same repository — so a launch that works in the
+ * deliberately the *same* operation the EHR performs - it mints a real
+ * single-use handle through the same repository - so a launch that works in the
  * simulator works from a real EHR.
+ *
+ * Author: John Grimes
  */
 
 import { z } from "zod";

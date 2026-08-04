@@ -1,5 +1,5 @@
 /**
- * Tenant membership — where a console request acquires its tenant scope.
+ * Tenant membership - where a console request acquires its tenant scope.
  *
  * {@link resolveTenantScopeForMember} is the only way a browser request obtains a
  * {@link TenantScope}, and it will not produce one without a membership row. That
@@ -9,6 +9,8 @@
  * generic `resolveTenantScope` in `./scope.js` exists for the OAuth endpoints,
  * which are authenticated by client credentials rather than by membership; the
  * admin API must use this one instead.
+ *
+ * Author: John Grimes
  */
 
 import { and, eq } from "drizzle-orm";
@@ -69,7 +71,7 @@ async function resolveMembership(
  * @param tenantSlug - The `/t/{slug}` path segment.
  * @param adminUserId - The signed-in admin user.
  * @returns The scope and role, or undefined when the tenant does not exist *or*
- *   the user is not a member — deliberately indistinguishable, so that the
+ *   the user is not a member - deliberately indistinguishable, so that the
  *   console cannot be used to enumerate tenant slugs.
  */
 export async function resolveTenantScopeForMember(
@@ -162,7 +164,7 @@ export type MembershipChange<T> =
  * concurrent invitations of the same person fail with a primary key violation
  * that means nothing to the operator.
  *
- * Demoting the tenant's only owner is refused — see
+ * Demoting the tenant's only owner is refused - see
  * {@link wouldRemoveLastOwner}.
  */
 export async function setTenantMemberRole(

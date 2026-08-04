@@ -14,6 +14,8 @@
  * As everywhere else in this directory, the cookie is stored as a digest and every
  * liveness condition is applied in SQL, so a caller cannot obtain the row and then
  * forget to check one of them.
+ *
+ * Author: John Grimes
  */
 
 import { and, eq, gt, isNull, sql } from "drizzle-orm";

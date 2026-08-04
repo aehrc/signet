@@ -8,6 +8,8 @@
  *
  * Every other refusal shows the server's own message, which is deliberately the same
  * sentence for an unknown account, a wrong password and a disabled one.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";

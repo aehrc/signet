@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import type { LaunchContext } from "../launch/types.js";
 import type { EvaluationContext, PolicyEvaluation } from "../policy/types.js";
 
@@ -15,7 +19,7 @@ export interface RegisteredClaims {
  * A fully assembled access token payload.
  *
  * Policy-supplied claims are merged underneath the registered claims, so a
- * policy can never overwrite `iss`, `aud`, `exp`, `sub` or `jti` — those are
+ * policy can never overwrite `iss`, `aud`, `exp`, `sub` or `jti` - those are
  * security-bearing and belong to the server, not to configuration.
  */
 export type AccessTokenClaims = RegisteredClaims & {

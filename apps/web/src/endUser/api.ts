@@ -2,15 +2,17 @@
  * The end-user surfaces' own API layer.
  *
  * Separate from the console's because the paths and the credential are different:
- * everything here lives under an endpoint's issuer, and the session cookie — where there
- * is one — is scoped to that issuer's path. Sharing the console's client would mean one
+ * everything here lives under an endpoint's issuer, and the session cookie - where there
+ * is one - is scoped to that issuer's path. Sharing the console's client would mean one
  * module whose base path depended on which surface called it.
  *
  * The interaction API is the interesting part. It has no credential at all: the session
  * identifier in the URL grants nothing, and every handler re-derives the current step
  * from the stored row rather than trusting the page that posted to it. So a page cannot
- * skip a step by calling the next one — it is answered with the step it is actually on,
+ * skip a step by calling the next one - it is answered with the step it is actually on,
  * which is exactly what these functions return.
+ *
+ * Author: John Grimes
  */
 
 import { requestJson } from "../api/request.js";
@@ -52,7 +54,7 @@ async function request<T>(
  *
  * The OAuth endpoints answer with `error` and `error_description`, which is what RFC 6749
  * requires and what a client library expects. The shared error type reads `message`, so
- * the two are reconciled here rather than in the error type — the wire format is not
+ * the two are reconciled here rather than in the error type - the wire format is not
  * negotiable and the internal one is.
  */
 function normaliseOAuthError(body: unknown): unknown {

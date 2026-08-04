@@ -5,12 +5,14 @@
  * admin user is a person, and a person may belong to several tenants; scoping the
  * identity to a tenant would mean one human holding several passwords, which
  * ends with the same password in several places. Authority within a tenant lives
- * in `tenant_members` (see `./members.ts`) — this module answers only "who is
+ * in `tenant_members` (see `./members.ts`) - this module answers only "who is
  * this?", never "what may they do?".
  *
  * Nothing here reads or returns a credential in the clear. The password hash
  * crosses the boundary because verification happens in the caller, which holds
  * the presented password; the TOTP secret crosses it encrypted.
+ *
+ * Author: John Grimes
  */
 
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
@@ -158,7 +160,7 @@ export async function setAdminUserDisabled(
  * Almost always the wrong operation: {@link setAdminUserDisabled} locks the
  * account out immediately while keeping a name attached to its audit trail, which
  * is what an operator revoking somebody's access wants. This exists for the case
- * disabling cannot serve — erasing a person's record on request — and takes the
+ * disabling cannot serve - erasing a person's record on request - and takes the
  * consequences with it. Sessions and memberships cascade; audit events do not,
  * because `actor_id` carries no foreign key, so the trail survives with the
  * identifier and the display name that were copied into each event.
@@ -200,8 +202,8 @@ export interface AuthenticatedAdmin {
 /**
  * Resolves a session cookie to the person holding it.
  *
- * Every condition is applied in SQL — not revoked, not expired, and the identity
- * itself not disabled — so that there is exactly one query a request must pass
+ * Every condition is applied in SQL - not revoked, not expired, and the identity
+ * itself not disabled - so that there is exactly one query a request must pass
  * and no opportunity for a caller to check three of the four. In particular the
  * join to `admin_users` is what makes disabling an account take effect on the
  * next request rather than at the next login.

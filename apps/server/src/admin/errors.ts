@@ -8,9 +8,11 @@
  * `invalid_grant` appearing in a response to a form submission.
  *
  * Two invariants hold across every code here. A refusal never says whether the
- * thing asked for exists — an unknown tenant and a tenant the caller is not a
+ * thing asked for exists - an unknown tenant and a tenant the caller is not a
  * member of are both `not_found`, or the API would enumerate tenants for anyone
  * with an account. And no message ever quotes a credential back.
+ *
+ * Author: John Grimes
  */
 
 import type { ZodError } from "zod";

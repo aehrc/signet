@@ -6,8 +6,10 @@
  * `get(path)` rather than as a fetch with options.
  *
  * The admin API's refusal bodies already carry `message`, so no error normalisation is
- * needed — that parameter exists for the OAuth endpoints, which answer in RFC 6749's
+ * needed - that parameter exists for the OAuth endpoints, which answer in RFC 6749's
  * shape instead.
+ *
+ * Author: John Grimes
  */
 
 import { requestJson } from "./request.js";

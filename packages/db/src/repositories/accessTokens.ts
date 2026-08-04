@@ -3,13 +3,15 @@
  *
  * The token itself is a signed JWT and needs nothing from the database to be
  * verified. These rows exist so that introspection can answer for a token, and so
- * that revocation is possible at all — a stateless token is otherwise valid until
+ * that revocation is possible at all - a stateless token is otherwise valid until
  * it expires, whatever anyone decides in the meantime.
  *
  * That makes the rows a revocation list, not a cache: deleting one before the
  * token expires would silently un-revoke it, because a resource server that
  * validates the signature and finds no row has no reason to refuse. The sweep here
  * therefore removes only rows whose tokens have already expired.
+ *
+ * Author: John Grimes
  */
 
 import { and, desc, eq, isNull, lte } from "drizzle-orm";
@@ -85,7 +87,7 @@ export async function findAccessToken(
  *
  * Revoked and expired tokens are returned, not filtered out. Introspection has to
  * answer `active: false` for them, and `@signet/core` makes that judgement from
- * the timestamps this carries — one place, one clock. Filtering here would make an
+ * the timestamps this carries - one place, one clock. Filtering here would make an
  * expired token indistinguishable from a forged `jti`, which is a distinction the
  * audit log wants.
  *

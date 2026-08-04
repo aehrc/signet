@@ -9,12 +9,14 @@
  * Nothing here decides whether a token is active. That judgement is made by
  * `@signet/core` from the stored timestamps, in one place against one clock, and
  * this handler only supplies the row. The important consequence: an expired token
- * and a revoked one both introspect as `active: false` with no further detail —
+ * and a revoked one both introspect as `active: false` with no further detail -
  * RFC 7662 §2.2 requires exactly that, because the difference is information the
  * caller has no right to.
  *
  * A token this endpoint has never issued also answers `active: false` rather than
  * an error. An error would distinguish a forged `jti` from an expired one.
+ *
+ * Author: John Grimes
  */
 
 import { buildIntrospectionResponse } from "@signet/core";

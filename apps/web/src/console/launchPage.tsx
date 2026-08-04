@@ -4,12 +4,14 @@
  * An EHR launch is otherwise impossible to exercise without an EHR: the app has to be
  * opened at its own launch URL with `iss` and a `launch` handle that the authorization
  * server minted. This mints a real handle through the same repository the EHR endpoint
- * uses, with the same five-minute lifetime and the same single-use semantics — so a
+ * uses, with the same five-minute lifetime and the same single-use semantics - so a
  * launch that works here works from a real EHR, because it is the same operation.
  *
  * The handle is always bound to the client being launched. An unbound handle is
  * redeemable by whichever app presents it first, which is only acceptable when the EHR
- * genuinely does not know which app is about to open — and the console always knows.
+ * genuinely does not know which app is about to open - and the console always knows.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -76,7 +78,7 @@ export function LaunchPage() {
           <InfoAlert>
             No active client on this endpoint has a launch URI. An EHR launch
             opens the app at its own URL, so a client needs one to be launchable
-            — add it under Clients.
+            - add it under Clients.
           </InfoAlert>
         ) : null}
 

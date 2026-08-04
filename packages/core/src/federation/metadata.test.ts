@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { supportsPkce, validateUpstreamMetadata } from "./metadata.js";

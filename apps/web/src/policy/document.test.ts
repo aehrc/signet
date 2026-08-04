@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { formatPolicy, parsePolicy, policiesDiffer } from "./document.js";

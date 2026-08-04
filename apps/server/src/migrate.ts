@@ -8,8 +8,10 @@
  * happens. A hook Job runs once, to completion, before any new pod is admitted.
  *
  * The migration files and the migrator itself both come from `@signet/db`, which is
- * the only package that depends on Drizzle — see its `migrations.ts` for why that
+ * the only package that depends on Drizzle - see its `migrations.ts` for why that
  * matters.
+ *
+ * Author: John Grimes
  */
 
 import {

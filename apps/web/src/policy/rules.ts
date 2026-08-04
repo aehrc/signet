@@ -2,14 +2,16 @@
  * Editing the rule lists.
  *
  * All pure: a function from a document to a document. The builder's cards call these
- * and nothing else, which is why the builder contains no reasoning about ordering — and
+ * and nothing else, which is why the builder contains no reasoning about ordering - and
  * ordering is the part that matters, because every list here is evaluated in order and
  * a rule moved one place can change what a token carries.
  *
  * Every rule the builder creates is given an identifier. The document type makes `id`
  * optional, because a policy written by hand or shipped as a preset may omit it, but a
- * rule with no identity cannot be reordered or edited without ambiguity — two identical
+ * rule with no identity cannot be reordered or edited without ambiguity - two identical
  * rules would be indistinguishable. So the editor assigns one on load and keeps it.
+ *
+ * Author: John Grimes
  */
 
 import type {
@@ -243,7 +245,7 @@ export function removeRule(
  *
  * A disabled rule is kept in the document and skipped by the evaluator, which is what
  * makes "turn this off and see what changes" a thing an operator can do without
- * deleting their work — and what lets a preset ship a rule that is deliberately off,
+ * deleting their work - and what lets a preset ship a rule that is deliberately off,
  * as the Pathling preset does for bulk import.
  */
 export function setRuleEnabled(
@@ -257,7 +259,7 @@ export function setRuleEnabled(
       return rule;
     }
     // Enabled is the default, so being enabled is expressed by having no flag
-    // rather than by `enabled: true` — which keeps the code view free of noise.
+    // rather than by `enabled: true` - which keeps the code view free of noise.
     // The rest object is cast because a rest over a union loses the discriminating
     // fields' types, not because anything has been removed but `enabled`.
     if (enabled) {
@@ -288,7 +290,7 @@ export function appendRule(
  * The document's optional fields mean "absent", not "present and empty": a grant rule
  * with `grantTypes: undefined` applies to every grant type, and one with
  * `grantTypes: []` applies to none. The builder's controls produce the first when a list
- * is emptied, so this is where the key is dropped rather than set — which is also what
+ * is emptied, so this is where the key is dropped rather than set - which is also what
  * keeps the code view free of `"requireUserRole": null`.
  *
  * @param rule - The rule as it is.

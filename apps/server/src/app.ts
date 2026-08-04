@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { pingDatabase } from "@signet/db";
 import { Hono } from "hono";
 
@@ -11,7 +15,7 @@ import type { ServerContext, SignetEnvironment } from "./context.js";
  * Builds the Signet Hono application.
  *
  * Kept separate from the process entry point so integration tests can drive it
- * through `app.request()` without opening a socket — which is how every grant and
+ * through `app.request()` without opening a socket - which is how every grant and
  * every rejection path is exercised against a real database.
  *
  * @param context - The server's dependencies. Passed in rather than constructed
@@ -37,7 +41,7 @@ export function createApp(context: ServerContext): Hono<SignetEnvironment> {
   });
 
   // The admin API is mounted before the OAuth routes. Neither can shadow the
-  // other — one lives under `/api/v1` and the other under `/t/{tenant}` — but
+  // other - one lives under `/api/v1` and the other under `/t/{tenant}` - but
   // reading them in this order matches how a request is authenticated: by session
   // or personal access token here, by client credentials there.
   app.route(ADMIN_BASE_PATH, createAdminRouter(context));

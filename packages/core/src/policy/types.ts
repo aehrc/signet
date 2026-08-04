@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import type { LaunchContext } from "../launch/types.js";
 import type { Permission, Scope, ScopeContext } from "../scopes/types.js";
 
@@ -128,7 +132,7 @@ export interface ContextRule extends RuleMetadata {
  * an array claim.
  *
  * This is what lets a policy translate SMART scopes into a resource server's own
- * vocabulary — Pathling's `authorities` claim, for instance, needs one entry per
+ * vocabulary - Pathling's `authorities` claim, for instance, needs one entry per
  * resource type plus separate operation authorities.
  *
  * Uses **intersects** matching. Values are deduplicated, and order follows the

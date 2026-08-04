@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import type { ResourceScope, Scope } from "./types.js";
 
 /**

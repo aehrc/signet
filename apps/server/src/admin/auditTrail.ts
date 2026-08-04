@@ -2,13 +2,15 @@
  * Recording what an admin API call did.
  *
  * Every mutating route writes an audit event, and each one has the same tenant,
- * endpoint and actor — all three already established by the middleware. Writing
+ * endpoint and actor - all three already established by the middleware. Writing
  * that out at thirty call sites would invite one of them to name the wrong endpoint,
  * or to attribute a token's action to the person who created the token.
  *
  * The actor comes from the principal, so a personal access token appears as itself
  * rather than as its creator: revoking a script's access and revoking a person's are
  * different acts, and the trail has to make them distinguishable after the fact.
+ *
+ * Author: John Grimes
  */
 
 import { principalActor } from "./principal.js";

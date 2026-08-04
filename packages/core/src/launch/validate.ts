@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import type {
   FhirContextEntry,
   FhirIdentifier,
@@ -201,7 +205,7 @@ function isValidCanonical(canonical: string): boolean {
 /**
  * True when an identifier carries enough to be worth conveying.
  *
- * Empty strings count as absent — `{ "value": "" }` identifies nothing, and
+ * Empty strings count as absent - `{ "value": "" }` identifies nothing, and
  * accepting it would push a meaningless context onto the app.
  */
 function isValidIdentifier(identifier: FhirIdentifier): boolean {

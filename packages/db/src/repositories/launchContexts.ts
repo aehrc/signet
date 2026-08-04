@@ -8,6 +8,8 @@
  *
  * The handle is stored only as a digest. Signet cannot reproduce it, which is why
  * `POST /launch-context` returns it exactly once.
+ *
+ * Author: John Grimes
  */
 
 import { and, eq, gt, isNull, lte, or } from "drizzle-orm";
@@ -86,8 +88,8 @@ export type LaunchContextRedemption =
 /**
  * Redeems a launch handle for the scoped client.
  *
- * The claim is one statement. Every condition — the right endpoint, unconsumed,
- * unexpired, and either unbound or bound to this client — is in its `WHERE`
+ * The claim is one statement. Every condition - the right endpoint, unconsumed,
+ * unexpired, and either unbound or bound to this client - is in its `WHERE`
  * clause, so there is no window between checking and consuming, and no path by
  * which a caller can act on a handle it did not claim.
  *

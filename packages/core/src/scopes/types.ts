@@ -2,6 +2,8 @@
  * Types for the SMART App Launch 2.2.0 scope grammar.
  *
  * @see https://hl7.org/fhir/smart-app-launch/scopes-and-launch-context.html
+ *
+ * Author: John Grimes
  */
 
 /** The three access contexts a resource scope can be requested in. */

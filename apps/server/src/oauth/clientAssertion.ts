@@ -3,7 +3,7 @@
  *
  * Pure: the signature is verified elsewhere, against a JWKS this module knows
  * nothing about. What is decided here is everything that remains once the
- * signature is known good, and it is not a formality — an assertion with a valid
+ * signature is known good, and it is not a formality - an assertion with a valid
  * signature and the wrong `aud` is a token minted for another authorization
  * server, replayed against this one.
  *
@@ -12,7 +12,7 @@
  * `aud` must be this endpoint's token URL. RFC 7523 §3 requires the assertion to
  * name its intended recipient, and SMART Backend Services makes that the token
  * endpoint. Accepting any audience would let an assertion the client sent to a
- * different Signet endpoint — or to an entirely different vendor's server — be
+ * different Signet endpoint - or to an entirely different vendor's server - be
  * replayed here.
  *
  * `sub` must equal `iss`, and both must be the client id. That is what makes the
@@ -26,6 +26,8 @@
  *
  * @see https://datatracker.ietf.org/doc/html/rfc7523#section-3
  * @see https://hl7.org/fhir/smart-app-launch/backend-services.html#protocol-details
+ *
+ * Author: John Grimes
  */
 
 /** Signing algorithms SMART permits for a client assertion. */
@@ -39,7 +41,7 @@ export const PERMITTED_ASSERTION_ALGORITHMS: readonly string[] = [
  *
  * SMART recommends five minutes. Accepting an unbounded `exp` would mean keeping
  * the corresponding replay-ledger row for as long as the client chose, so an
- * assertion valid for a year would pin a row for a year — and a client that
+ * assertion valid for a year would pin a row for a year - and a client that
  * issues long-lived assertions has built a bearer token, which is the thing
  * `private_key_jwt` exists to avoid.
  */
@@ -108,7 +110,7 @@ export interface ClientAssertionInput {
    *
    * The token URL is the correct value. The issuer is also accepted because a
    * number of SMART client libraries send it, and the spec's own examples are
-   * inconsistent — but both are exact strings belonging to this endpoint, so
+   * inconsistent - but both are exact strings belonging to this endpoint, so
    * neither widens the assertion beyond it.
    */
   readonly acceptedAudiences: readonly string[];

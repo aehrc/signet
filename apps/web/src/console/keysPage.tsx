@@ -5,11 +5,13 @@
  * two steps rather than one. A key generated here is published in the JWKS
  * immediately and signs nothing; promoting it makes it active. The gap between those
  * is what lets a relying party that caches the JWKS for a few minutes have the new
- * key before the first token needs it — collapsing the two into one button is how a
+ * key before the first token needs it - collapsing the two into one button is how a
  * rotation rejects every token issued in the following five minutes.
  *
  * Retiring is separate again, and warned about: a retired key stops being published,
  * so any token it signed becomes unverifiable.
+ *
+ * Author: John Grimes
  */
 
 import { roleAllows, useEndpointContext } from "./useConsole.js";
@@ -154,8 +156,8 @@ export function KeysPage() {
         <div className="mb-6">
           <InfoAlert>
             A next key is published and signing nothing. Give relying parties
-            long enough to have fetched the JWKS — a few minutes is usually
-            plenty — then promote it. Tokens signed by the outgoing key stay
+            long enough to have fetched the JWKS - a few minutes is usually
+            plenty - then promote it. Tokens signed by the outgoing key stay
             verifiable until they expire, which for this endpoint is{" "}
             {formatDuration(endpoint.accessTokenTtl)}.
           </InfoAlert>

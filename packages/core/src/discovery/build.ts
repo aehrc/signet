@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { deriveCapabilities } from "./capabilities.js";
 import { endpointUrls, normaliseIssuer } from "./endpoints.js";
 
@@ -12,7 +16,7 @@ import type {
  * The only PKCE challenge method Signet will ever advertise or accept.
  *
  * SMART requires `S256` and forbids `plain`, so this is a constant rather than
- * anything derived from configuration — there is no supported deployment in
+ * anything derived from configuration - there is no supported deployment in
  * which downgrading to `plain` is a legitimate choice.
  */
 const CODE_CHALLENGE_METHODS: readonly "S256"[] = ["S256"];
@@ -160,7 +164,7 @@ export function buildSmartConfiguration(
 /**
  * Builds the `.well-known/openid-configuration` document.
  *
- * Resource servers — Pathling among them — assemble their own SMART
+ * Resource servers - Pathling among them - assemble their own SMART
  * configuration by merging fields out of this document, so it is filled in
  * completely even for endpoints whose primary purpose is not single sign-on.
  *

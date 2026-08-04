@@ -2,16 +2,18 @@
  * The interaction state, described once.
  *
  * The three end-user pages render from this and the server's interaction API returns it,
- * so it is a wire contract rather than either side's internal shape — which makes this
+ * so it is a wire contract rather than either side's internal shape - which makes this
  * package the right home for it. Both sides previously carried their own copy, and two
  * descriptions of one response is exactly the arrangement where a field is added to the
  * server and quietly ignored by the browser.
  *
  * A type rather than a Zod schema, unlike the rest of this package. Everything else here
  * describes a *request*, which is validated at the boundary; this describes a response,
- * and validating the server's own output in the browser would be ceremony — the browser
+ * and validating the server's own output in the browser would be ceremony - the browser
  * cannot do anything useful about a mismatch beyond what a type error at build time
  * already prevents.
+ *
+ * Author: John Grimes
  */
 
 /** What the user must do next. */

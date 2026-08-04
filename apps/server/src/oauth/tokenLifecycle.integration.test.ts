@@ -3,8 +3,10 @@
  *
  * The refresh suite is the one worth reading twice. Rotation is only useful if reuse
  * of a rotated token is detected, and detection is only useful if it revokes the
- * whole family — so both are asserted, along with the property that a client bug
+ * whole family - so both are asserted, along with the property that a client bug
  * (asking for a scope it does not hold) does *not* cost the user their session.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -165,7 +167,7 @@ describeWithDatabase("the refresh_token grant", () => {
     expect(page.events).toHaveLength(1);
     // One, not two: the presented token was already revoked when it was rotated, so
     // the live member the reuse response had to revoke is its successor. The key is
-    // named without the word "token" on purpose — the audit redactor treats any key
+    // named without the word "token" on purpose - the audit redactor treats any key
     // containing it as a credential, and a redacted count is a useless one.
     expect(page.events[0]?.detail).toMatchObject({ revokedRefreshCount: 1 });
   });

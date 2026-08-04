@@ -3,7 +3,7 @@
  *
  * A client assertion is a signed JWT that authenticates a confidential-asymmetric
  * client. Its signature stays valid for as long as the assertion's own `exp`
- * allows, so anyone who observes one can present it again within that window — the
+ * allows, so anyone who observes one can present it again within that window - the
  * `jti` claim, recorded here, is what makes the second attempt fail.
  *
  * The composite primary key `(client_id, jti)` *is* the check. Recording is an
@@ -19,6 +19,8 @@
  * conflict keeps the transaction usable, and the empty `RETURNING` is the signal.
  *
  * @see https://hl7.org/fhir/smart-app-launch/client-confidential-asymmetric.html
+ *
+ * Author: John Grimes
  */
 
 import { and, eq, lte } from "drizzle-orm";
@@ -33,7 +35,7 @@ import type { ClientScope } from "./scope.js";
  * What recording a `jti` decided.
  *
  * A typed result rather than an exception, because the caller must distinguish
- * three outcomes — accepted, replayed, and "the database is unavailable" — and only
+ * three outcomes - accepted, replayed, and "the database is unavailable" - and only
  * the last is an error. Conflating the middle two would answer a replay with a 500
  * and a real fault with an authentication failure, which is the wrong response in
  * both directions.

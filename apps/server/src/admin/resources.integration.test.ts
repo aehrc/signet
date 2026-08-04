@@ -9,6 +9,8 @@
  *
  * Role enforcement is exercised through personal access tokens, since a token's role
  * is settable per test without touching anybody's membership.
+ *
+ * Author: John Grimes
  */
 
 import { getActiveEndpointKey, listPolicyVersions } from "@signet/db";

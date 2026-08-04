@@ -5,7 +5,7 @@
  * server. Pointing one environment variable at the issuer is the entire
  * integration for Pathling, because Pathling builds its own
  * `.well-known/smart-configuration` by merging fields out of the OpenID Connect
- * discovery document — so `openid-configuration` has to be correct even on an
+ * discovery document - so `openid-configuration` has to be correct even on an
  * endpoint nobody uses for single sign-on.
  *
  * Nothing here is written by hand. Every field is derived by `@signet/core` from
@@ -16,6 +16,8 @@
  * cached for a day is a day during which a rotated key or a withdrawn capability
  * has not taken effect; five minutes keeps the documents cheap to serve without
  * making a configuration change effectively irreversible.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -88,7 +90,7 @@ function advertisedAlgorithms(
  * promotion is the whole point of the rotation states: a relying party that caches
  * the JWKS has already seen the incoming key by the time the first token signed
  * with it arrives, so rotation causes no verification failures. Retired keys are
- * excluded — a relying party holding a stale cache will still verify tokens they
+ * excluded - a relying party holding a stale cache will still verify tokens they
  * signed, which is why retirement is a state and not a delete, but the document
  * must stop advertising a key the moment Signet stops signing with it.
  *

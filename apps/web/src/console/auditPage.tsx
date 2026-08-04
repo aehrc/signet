@@ -4,13 +4,15 @@
  * Reads one page at a time through the API's keyset cursor rather than an offset,
  * because `audit_events` only grows: paging by offset both costs more the further in
  * you go and shifts every subsequent page when a row is written between requests.
- * The cursor is opaque here, exactly as the API intends — the console holds it and
+ * The cursor is opaque here, exactly as the API intends - the console holds it and
  * hands it back.
  *
  * The action filter is a free-text field rather than a select over every action.
  * There are around fifty, the names are stable and dotted (`token.issued`), and the
- * API refuses one it does not record — so typing is faster than hunting, and a
+ * API refuses one it does not record - so typing is faster than hunting, and a
  * mistake is answered rather than silently matching nothing.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -121,7 +123,7 @@ export function AuditPage() {
       secondary: true,
       cell: (event) =>
         event.targetType === null ? (
-          <span className="text-base-content/50">—</span>
+          <span className="text-base-content/50">-</span>
         ) : (
           <div className="text-xs">
             <div>{event.targetType}</div>
@@ -264,8 +266,8 @@ export function AuditPage() {
 /**
  * An event's detail blob, rendered compactly.
  *
- * The keys the recorder adds for readability — the actor's display name, the
- * endpoint's slug — are dropped, because the surrounding columns already carry them
+ * The keys the recorder adds for readability - the actor's display name, the
+ * endpoint's slug - are dropped, because the surrounding columns already carry them
  * and repeating them fills the cell with what the reader can already see.
  */
 function AuditDetail({ event }: Readonly<{ readonly event: AuditEventView }>) {
@@ -275,7 +277,7 @@ function AuditDetail({ event }: Readonly<{ readonly event: AuditEventView }>) {
   );
 
   if (entries.length === 0) {
-    return <span className="text-base-content/50">—</span>;
+    return <span className="text-base-content/50">-</span>;
   }
 
   return (

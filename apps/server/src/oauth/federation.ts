@@ -32,6 +32,8 @@
  * and an attacker cannot.
  *
  * @see https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
+ *
+ * Author: John Grimes
  */
 
 import {

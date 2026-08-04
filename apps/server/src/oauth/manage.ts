@@ -7,7 +7,7 @@
  *
  * It needs its own authentication, and that is the reason `end_user_sessions` exists.
  * An end user reviewing their authorizations is not in the middle of an authorization,
- * so there is no `authorization_sessions` row to hang the identity off — and the
+ * so there is no `authorization_sessions` row to hang the identity off - and the
  * console's admin session is a different credential belonging to a different kind of
  * person.
  *
@@ -20,6 +20,8 @@
  * is not sent to another. Two endpoints of the same tenant hold separate accounts with
  * separate passwords, and a cookie shared between them would make one password admit
  * the holder to both.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -61,8 +63,8 @@ import type { Context } from "hono";
  * How long an end user's management session lasts, in seconds.
  *
  * One hour. Shorter than the console's twelve, because this is a page a patient may
- * open on a shared or borrowed device, and the work it exists for — reviewing a list and
- * withdrawing one entry — takes minutes.
+ * open on a shared or borrowed device, and the work it exists for - reviewing a list and
+ * withdrawing one entry - takes minutes.
  */
 export const MANAGE_SESSION_TTL_SECONDS = 3600;
 
@@ -74,7 +76,7 @@ export const MANAGE_COOKIE_NAME = "signet_end_user";
  *
  * The attributes come from the shared helper; what is specific here is the path. It is
  * the endpoint's own issuer path rather than `/`, which is what keeps a session on one
- * endpoint from being presented to another — the two hold separate accounts with
+ * endpoint from being presented to another - the two hold separate accounts with
  * separate passwords.
  *
  * @param value - The session token, or an empty string to clear it.
@@ -140,8 +142,8 @@ async function authenticate(
 /**
  * Handles `POST {iss}/manage/session`: signs an end user in.
  *
- * The same two credentials the authorization flow accepts — a local password, or a
- * persona on a non-production endpoint — because they are the same accounts. A persona
+ * The same two credentials the authorization flow accepts - a local password, or a
+ * persona on a non-production endpoint - because they are the same accounts. A persona
  * has no password by design, and refusing it here would mean a connectathon endpoint
  * whose management page nobody could open.
  *
@@ -324,7 +326,7 @@ export function manageAuthorizationsHandler(context: ServerContext) {
 /**
  * Handles `POST {iss}/manage/revoke`: withdraws one app's access.
  *
- * Consent and tokens together — see the module header for why either alone is the
+ * Consent and tokens together - see the module header for why either alone is the
  * wrong answer.
  *
  * @param context - The server's dependencies.

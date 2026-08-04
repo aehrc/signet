@@ -4,6 +4,8 @@
  * Drizzle needs one module exporting every table so that `drizzle-kit` can
  * diff the whole schema and so that a `Database` handle can be typed against
  * it. Import from here rather than from the individual concern modules.
+ *
+ * Author: John Grimes
  */
 
 export * from "./audit.js";

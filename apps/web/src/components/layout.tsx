@@ -3,9 +3,11 @@
  *
  * These exist to keep Tailwind class combinations in one place. The project's React
  * guidelines are explicit about it: if two elements share a style, the style belongs
- * in a component. That is also what makes the daisyUI theme lock meaningful — every
+ * in a component. That is also what makes the daisyUI theme lock meaningful - every
  * colour here is a semantic token (`base-100`, `primary`, `error`), never a palette
  * value, so the whole product re-themes from one word in `styles.css`.
+ *
+ * Author: John Grimes
  */
 
 import type { ReactNode } from "react";
@@ -214,7 +216,7 @@ export function ShownOnce({
         <p className="font-medium">{title}</p>
         <p className="mt-1 mb-2 text-sm">
           Copy it now. It is stored only as a hash, so this is the one time it
-          can be read — a lost credential is rotated, not recovered.
+          can be read - a lost credential is rotated, not recovered.
         </p>
         <CopyableValue value={value} label={title} />
       </div>

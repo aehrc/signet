@@ -10,8 +10,10 @@
  *
  * Every refusal is audited as `token.denied` with the reason, and every success as
  * `token.issued` with the policy version that authorised it. That pairing is what
- * makes the audit log able to answer "why does this token contain that claim?" —
+ * makes the audit log able to answer "why does this token contain that claim?" -
  * the answer is a policy version, and policy versions are immutable rows.
+ *
+ * Author: John Grimes
  */
 
 import {

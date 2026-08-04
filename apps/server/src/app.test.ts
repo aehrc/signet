@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "./app.js";

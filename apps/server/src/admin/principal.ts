@@ -3,7 +3,7 @@
  *
  * Two kinds of caller, with deliberately different authority models. A person
  * signs in and holds whatever role their `tenant_members` row gives them in each
- * tenant they belong to — so the same session may be an owner of one tenant and a
+ * tenant they belong to - so the same session may be an owner of one tenant and a
  * viewer of another. A personal access token names *one* tenant and carries a role
  * of its own, which may be narrower than its creator's: a script that only reads
  * the audit log should hold a viewer token even if an owner minted it.
@@ -12,6 +12,8 @@
  * because the two resolve their tenant differently and a handler that could not
  * tell them apart would have to guess. The one thing they share is how they appear
  * in the audit trail, which is what {@link principalActor} produces.
+ *
+ * Author: John Grimes
  */
 
 import type { AdminUser, ApiToken, AuditActor, TenantScope } from "@signet/db";
@@ -40,7 +42,7 @@ export type AdminPrincipal = AdminUserPrincipal | ApiTokenPrincipal;
  * How a principal appears in the audit trail.
  *
  * The display name is copied into the event at write time, so an event stays
- * readable after the account or token is deleted — which is why a token's name is
+ * readable after the account or token is deleted - which is why a token's name is
  * carried here rather than only its identifier.
  *
  * @param principal - The authenticated caller.
@@ -63,7 +65,7 @@ export function principalActor(principal: AdminPrincipal): AuditActor {
  * The admin user identifier to record as the author of a created row.
  *
  * Null for a token, because `created_by` references `admin_users` and a token is
- * not a person. The audit event still names the token, so authorship is not lost —
+ * not a person. The audit event still names the token, so authorship is not lost -
  * it simply is not expressible as a foreign key.
  *
  * @param principal - The authenticated caller.

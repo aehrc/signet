@@ -10,8 +10,10 @@
  * for it still cannot smuggle a credential into the table.
  *
  * The second is that recording an event must never fail the operation being
- * audited — see {@link recordAuditEvent} for the trade-off and the risk it
+ * audited - see {@link recordAuditEvent} for the trade-off and the risk it
  * accepts.
+ *
+ * Author: John Grimes
  */
 
 import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
@@ -72,7 +74,7 @@ export const MAX_AUDIT_PAGE_SIZE = 200;
  *
  * It carries the *redacted* row rather than the original input, because a
  * failure reporter is by definition something that writes to a less controlled
- * place than the audit table — a log aggregator, an error tracker — and handing
+ * place than the audit table - a log aggregator, an error tracker - and handing
  * it the raw detail blob would defeat the redactor for exactly the events that
  * are most likely to be interesting.
  */
@@ -94,7 +96,7 @@ export type AuditFailureReporter = (failure: AuditRecordFailure) => void;
  * Fallback reporter, used when the caller injects none.
  *
  * `console.error` is the one sink a library can assume exists. Production wires
- * its own reporter — a lost audit event should page someone.
+ * its own reporter - a lost audit event should page someone.
  *
  * @param failure - The insert that failed.
  */
@@ -188,7 +190,7 @@ export function buildAuditEventRow(event: AuditEventInput): NewAuditEvent {
  * through `reportFailure` and the promise resolves normally.
  *
  * **The accepted risk.** Signet therefore cannot claim its audit log is complete
- * in the face of a database fault — an event can be lost while the operation it
+ * in the face of a database fault - an event can be lost while the operation it
  * describes succeeds, and nothing in the row set reveals the gap. That is
  * accepted deliberately, on the grounds that the alternative (failing the
  * operation) converts an audit outage into an availability outage for the whole
@@ -369,7 +371,7 @@ function cursorPredicate(
  * Turns a filter into a single SQL predicate.
  *
  * Pure, and exported so that the translation can be asserted against generated
- * SQL with no database — including the property that matters most, which is that
+ * SQL with no database - including the property that matters most, which is that
  * the tenant predicate is always present.
  *
  * @param filter - What to select.
@@ -377,7 +379,7 @@ function cursorPredicate(
  */
 export function buildAuditEventPredicate(filter: AuditEventFilter): SQL {
   // The tenant predicate is held separately from the optional ones so that it is
-  // structurally impossible for a query to lose it — the type system, not a
+  // structurally impossible for a query to lose it - the type system, not a
   // comment, guarantees the conjunction is tenant-scoped and non-empty.
   const tenantPredicate: SQL = eq(auditEvents.tenantId, filter.tenantId);
   const conditions: SQL[] = [];

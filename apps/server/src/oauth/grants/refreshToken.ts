@@ -4,7 +4,7 @@
  * Every redemption issues a new refresh token and revokes the one presented, in a
  * single transaction inside `../issuance.ts`. That is not merely hygiene: it is what
  * makes theft *detectable*. A stolen refresh token is indistinguishable from the
- * legitimate one until somebody presents a token that has already been rotated — at
+ * legitimate one until somebody presents a token that has already been rotated - at
  * which point two parties hold it, one of them should not, and the whole rotation
  * family is revoked. The data layer does the detection; this handler's job is to
  * react to it, which means auditing it distinctly and refusing without hinting at
@@ -17,19 +17,21 @@
  *
  * The launch context is carried forward from the refreshed token rather than
  * re-resolved. The user is not present at a refresh, so there is nobody to pick a
- * patient — and a refresh that silently changed the patient in context would change
+ * patient - and a refresh that silently changed the patient in context would change
  * what the app is looking at without anybody having agreed to it.
  *
  * Every check that does *not* need the token to be spent happens before it is: the
  * row is read without claiming, and a client mismatch or a widened scope refuses
  * without logging the user out. A client bug should not cost the user their session.
+ *
+ * Author: John Grimes
  */
 
 /* jscpd:ignore-start */
 // The import list and the issuance call below are near-identical to the other
 // interactive grant's, and deliberately so: both establish the same four things for
-// `issueTokens`, and the parts that differ — the grant type, where the scopes came
-// from, and which launch context applies — are exactly what a reader compares. The
+// `issueTokens`, and the parts that differ - the grant type, where the scopes came
+// from, and which launch context applies - are exactly what a reader compares. The
 // shared judgements have already been factored out into `./subject.ts`, `./audit.ts`
 // and `./issuanceRefusals.ts`; what remains is the call itself.
 import { areScopesCoveredBy, parseScopes } from "@signet/core";
@@ -59,7 +61,7 @@ import type { RefreshTokenRefusal } from "@signet/db";
  * Reuse gets the same message as an unknown token. Saying that it had already been
  * rotated would tell an attacker that the legitimate client is still active, and
  * telling the legitimate client that it has been robbed is not something a token
- * endpoint response can usefully do — that belongs in the audit trail, and in an
+ * endpoint response can usefully do - that belongs in the audit trail, and in an
  * alert for a deployment that wants one.
  */
 const REFRESH_REFUSAL_DESCRIPTIONS: Readonly<
@@ -123,7 +125,7 @@ export async function refreshTokenGrant(
 
   // Reuse is deliberately *not* short-circuited here. A token with a successor
   // fails `isLive`, and the claim inside the issuance is what detects the reuse and
-  // revokes the family — doing it from this non-claiming read would race with a
+  // revokes the family - doing it from this non-claiming read would race with a
   // concurrent legitimate refresh.
   if (!isLive(held, context.clock()) && held.replacedById === null) {
     return grantRefusal(

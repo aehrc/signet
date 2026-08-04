@@ -3,13 +3,15 @@
  *
  * Two responsibilities, both of which have to happen before any page renders. The
  * session is read once here and shared through the router's outlet context, so a page
- * never has to ask again — and a caller who is not signed in is sent to the sign-in
+ * never has to ask again - and a caller who is not signed in is sent to the sign-in
  * page rather than being shown a shell full of failed queries.
  *
  * The tenant comes from the URL, not from a stored preference. A bookmark or a link
  * shared with a colleague must open the same tenant it did for the person who sent
  * it, and a "current tenant" in local storage would make the same URL mean different
  * things to different people.
+ *
+ * Author: John Grimes
  */
 
 import { Navigate, NavLink, Outlet, useParams } from "react-router";

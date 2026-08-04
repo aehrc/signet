@@ -8,11 +8,13 @@
  * retroactively change what a live token says about its subject.
  *
  * Access is gated on the token, not on the client. A bearer token presented here
- * must be active and must carry the `openid` scope — an access token minted for a
+ * must be active and must carry the `openid` scope - an access token minted for a
  * backend service with no user has no identity to describe, and answering with the
  * client id as `sub` would invite a caller to treat it as a person.
  *
  * @see https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
+ *
+ * Author: John Grimes
  */
 
 import { accessTokenState, introspectAccessToken } from "@signet/db";

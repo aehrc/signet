@@ -4,6 +4,8 @@
  * Policy versions are immutable rows: editing produces a new version so that a
  * change can be diffed and rolled back, and so an audit event can name the exact
  * document that authorised a token.
+ *
+ * Author: John Grimes
  */
 
 import { sql } from "drizzle-orm";
@@ -67,7 +69,7 @@ export const policies = pgTable(
  * A per-client policy replacing the endpoint's published policy.
  *
  * The document is complete rather than a patch: merging two rule lists has no
- * unambiguous meaning — ordering is significant in both — so an override
+ * unambiguous meaning - ordering is significant in both - so an override
  * substitutes wholesale and the console shows the difference.
  */
 export const clientPolicyOverrides = pgTable("client_policy_overrides", {

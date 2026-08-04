@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import type {
   ClaimRule,
   ContextRule,
@@ -184,8 +188,8 @@ export const SMART_BASELINE_PRESET: PolicyDocument = {
  * `s`; bulk export follows from a system-context read, since `$export` is a
  * whole-population read; creates and updates map to `pathling:update` (Pathling
  * has no separate create authority) and deletes to `pathling:delete`. The
- * administrative operations — import, batch, bulk submit and the SQL-on-FHIR view
- * operations — have no SMART scope that implies them and are never granted
+ * administrative operations - import, batch, bulk submit and the SQL-on-FHIR view
+ * operations - have no SMART scope that implies them and are never granted
  * implicitly. An operator who wants them adds a rule, as the disabled import
  * rule below illustrates.
  *
@@ -277,7 +281,7 @@ export const PATHLING_PRESET: PolicyDocument = {
  *
  * SMART puts `patient` in the token response body, not in the token, and a server
  * that authorises off the JWT alone never sees it there. Three of the resource
- * servers below therefore need it as a claim as well — which is the whole content
+ * servers below therefore need it as a claim as well - which is the whole content
  * of their presets, and the reason those presets are worth shipping rather than
  * telling an operator to start from the baseline.
  *
@@ -320,7 +324,7 @@ function tokenPatientPreset(claimDescription: string): PolicyDocument {
  * Two things distinguish it from the baseline, and both are documented. `atv: 2`
  * declares the access token to be SMART v2 rather than v1, and Aidbox refuses to
  * apply v2 scope semantics without it. The patient compartment is read from
- * `context.patient` — nested inside a `context` object rather than sitting at the
+ * `context.patient` - nested inside a `context` object rather than sitting at the
  * top level as it does everywhere else.
  *
  * The nesting is why `emit` takes arbitrary JSON rather than a flat record: the
@@ -352,7 +356,7 @@ export const AIDBOX_PRESET: PolicyDocument = {
  * Firely Server: the baseline plus `patient`, and an audience that has to match.
  *
  * Firely enforces compartments from the `patient` claim, resolving it through the
- * configured `PatientFilter` — `_id` by default, but an installation may match on
+ * configured `PatientFilter` - `_id` by default, but an installation may match on
  * `identifier` instead, in which case what belongs in the claim is the patient's
  * business identifier rather than its resource id. Signet emits whatever the launch
  * context resolved, so an operator whose Firely is configured that way sets the
@@ -371,7 +375,7 @@ export const FIRELY_PRESET: PolicyDocument = tokenPatientPreset(
  *
  * Smile CDR accepts an external authorization server's token, but what it does with
  * the claims is decided by an operator-authored login script in the SMART Inbound
- * Security module — so like HAPI, its contract is whatever that script reads. The
+ * Security module - so like HAPI, its contract is whatever that script reads. The
  * documented convention for a third-party server is to communicate the patient's
  * identity in a claim on the access token, which the script then decodes to assign
  * permissions. That convention is what this preset mints.
@@ -396,7 +400,7 @@ export interface PolicyPreset {
    * The vendor documentation this preset was written from.
    *
    * Not decoration. A preset asserts what another system will do with a token, and
-   * an operator has no way to check that assertion without the page it came from —
+   * an operator has no way to check that assertion without the page it came from -
    * so every preset that speaks about a specific product carries its citation, and
    * a product whose contract could not be found gets no preset at all. The console
    * shows these beside the preset.
@@ -416,7 +420,7 @@ export interface PolicyPreset {
  * **HAPI FHIR** is absent for a different reason: it has no claim contract at all,
  * because `AuthorizationInterceptor` requires the operator to write Java. The
  * baseline preset mints a clean standards JWT for it, and the useful half of that
- * pairing is the generated interceptor that consumes it — see
+ * pairing is the generated interceptor that consumes it - see
  * `integrations/hapiInterceptor.ts`.
  */
 export const POLICY_PRESETS: readonly PolicyPreset[] = [
@@ -428,7 +432,7 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
     policy: SMART_BASELINE_PRESET,
     references: [
       {
-        label: "SMART App Launch 2.2.0 — Scopes and Launch Context",
+        label: "SMART App Launch 2.2.0 - Scopes and Launch Context",
         url: "https://hl7.org/fhir/smart-app-launch/STU2.2/scopes-and-launch-context.html",
       },
     ],
@@ -441,7 +445,7 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
     policy: PATHLING_PRESET,
     references: [
       {
-        label: "Pathling — Authorization",
+        label: "Pathling - Authorization",
         url: "https://pathling.csiro.au/docs/server/authorization",
       },
     ],
@@ -454,7 +458,7 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
     policy: AIDBOX_PRESET,
     references: [
       {
-        label: "Aidbox — SMART: Scopes for Limiting Access",
+        label: "Aidbox - SMART: Scopes for Limiting Access",
         url: "https://docs.aidbox.app/access-control/authorization/smart-on-fhir/smart-scopes-for-limiting-access",
       },
     ],
@@ -467,7 +471,7 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
     policy: FIRELY_PRESET,
     references: [
       {
-        label: "Firely Server — Tokens and Compartments",
+        label: "Firely Server - Tokens and Compartments",
         url: "https://docs.fire.ly/projects/Firely-Server/en/latest/security/tokens_and_compartments.html",
       },
     ],
@@ -480,7 +484,7 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
     policy: SMILE_CDR_PRESET,
     references: [
       {
-        label: "Smile CDR — SMART Inbound Security Module",
+        label: "Smile CDR - SMART Inbound Security Module",
         url: "https://smilecdr.com/docs/smart/smart_on_fhir_inbound_security_module.html",
       },
     ],

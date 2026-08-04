@@ -1,14 +1,16 @@
 /**
  * Policy versions and the simulator.
  *
- * The simulate request is the interesting one. It is the console's inner loop —
- * every keystroke in the rule builder re-renders a decoded token — and it takes a
+ * The simulate request is the interesting one. It is the console's inner loop -
+ * every keystroke in the rule builder re-renders a decoded token - and it takes a
  * policy document *in the request* rather than a stored version, so an operator
  * can see what an unsaved edit would produce. That is also why it identifies the
  * client and user by their existing rows rather than accepting invented ones: a
  * simulation that let the caller describe an arbitrary user would answer a
  * question nobody asked, and would be a way to probe what a policy does with
  * roles the tenant has not defined.
+ *
+ * Author: John Grimes
  */
 
 import { z } from "zod";

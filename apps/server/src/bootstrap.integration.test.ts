@@ -3,9 +3,11 @@
  *
  * Two properties matter and neither can be checked without a database: that it
  * produces an account which can actually sign in and reach the tenant, and that
- * running it twice changes nothing — including not resetting the password, which is
+ * running it twice changes nothing - including not resetting the password, which is
  * what would happen if a Helm hook re-ran on every upgrade and the command were
  * careless.
+ *
+ * Author: John Grimes
  */
 
 import { deleteAdminUser, deleteTenant, resolveTenantScope } from "@signet/db";

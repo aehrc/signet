@@ -4,17 +4,19 @@
  * The simulator mints a real launch handle through the same repository the EHR
  * endpoint uses, with the same TTL and the same single-use semantics. That is the
  * point: a launch that works here works from a real EHR, because it *is* the same
- * operation. The only difference is how the caller authenticated — an administrator
- * with a session rather than a client with a credential — and that the handle is
+ * operation. The only difference is how the caller authenticated - an administrator
+ * with a session rather than a client with a credential - and that the handle is
  * always bound to the app that will redeem it, because the console always knows which
  * app it is about to open.
  *
  * The interceptor route generates Java. HAPI FHIR has no claim contract to write a
- * policy preset against — `AuthorizationInterceptor` requires the operator to write
- * `buildRuleList` themselves, and reads no token by itself — so what Signet can
+ * policy preset against - `AuthorizationInterceptor` requires the operator to write
+ * `buildRuleList` themselves, and reads no token by itself - so what Signet can
  * usefully ship is the other side of the handshake: the interceptor that consumes what
  * this endpoint was configured to mint. See `@signet/core`'s generator for what the
  * generated code deliberately does not do.
+ *
+ * Author: John Grimes
  */
 
 import { launchSimulationSchema } from "@signet/contracts";
@@ -53,7 +55,7 @@ export function registerLaunchRoutes(
    * Mints a launch handle and reports where to open the app.
    *
    * `launchUrl` is assembled here rather than in the console so that the two
-   * parameters an EHR launch requires — `iss` and `launch` — are added in one place
+   * parameters an EHR launch requires - `iss` and `launch` - are added in one place
    * and cannot be forgotten.
    */
   router.post(

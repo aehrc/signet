@@ -1,5 +1,5 @@
 /**
- * Postgres row-level security — the backstop, not the defence.
+ * Postgres row-level security - the backstop, not the defence.
  *
  * Tenant isolation in Signet is primarily a property of the type system. Every
  * repository function demands a `TenantScope`, `EndpointScope` or `ClientScope`,
@@ -24,7 +24,7 @@
  *
  * Every policy compares against `current_setting('signet.tenant_id', true)`. The
  * `true` makes a missing setting return NULL rather than raise, and a NULL
- * comparison yields NULL, which is not true — so a connection that has *not* set
+ * comparison yields NULL, which is not true - so a connection that has *not* set
  * the variable sees no tenant-owned rows at all. Fail-closed: forgetting the
  * setting produces an obviously empty result, never a quietly cross-tenant one.
  *
@@ -45,10 +45,12 @@
  * `ENABLE ROW LEVEL SECURITY` does not apply to a table's owner. That is
  * deliberate on Postgres's part and useful here: migrations and the expiry sweep
  * are cross-tenant by design and connect as the owner, while the application should
- * connect as a separate, non-owning role — conventionally `signet_app` — for which
+ * connect as a separate, non-owning role - conventionally `signet_app` - for which
  * the policies bite. Passing `force: true` additionally subjects the owner to them,
  * which is the stricter posture and requires the sweep to run as a role with
  * `BYPASSRLS`.
+ *
+ * Author: John Grimes
  */
 
 import { sql } from "drizzle-orm";
@@ -81,7 +83,7 @@ const CURRENT_TENANT = `nullif(current_setting('${TENANT_SETTING}', true), '')::
  * plausible as this one.
  *
  * The nested lookups compose safely. RLS applies inside a policy's own subqueries,
- * so the `EXISTS` on `endpoints` is itself filtered by the `endpoints` policy —
+ * so the `EXISTS` on `endpoints` is itself filtered by the `endpoints` policy -
  * which asserts the same tenant, so the result is the same predicate twice, not a
  * loophole.
  */
@@ -127,7 +129,7 @@ const TENANT_PREDICATES: Readonly<Record<string, string>> = {
  *
  * Present so that the accompanying test can assert every table in the schema is
  * either covered by a policy or listed here. A new tenant-owned table added
- * without a policy then fails a test rather than shipping unprotected — which is
+ * without a policy then fails a test rather than shipping unprotected - which is
  * the failure mode this whole file exists to catch, so it must not be possible to
  * introduce it silently.
  */
@@ -135,7 +137,7 @@ export const RLS_EXEMPT_TABLES: Readonly<Record<string, string>> = {
   admin_users:
     "A person, not a tenant's property. One human may belong to several tenants and must hold one password, so the identity cannot be scoped to any of them.",
   admin_sessions:
-    "Belongs to an admin user rather than to a tenant, and is resolved before any tenant is known — the session is what determines which tenants the caller may see.",
+    "Belongs to an admin user rather than to a tenant, and is resolved before any tenant is known - the session is what determines which tenants the caller may see.",
 };
 
 /** `EXISTS` through the row's own `endpoint_id`. */
@@ -179,7 +181,7 @@ export interface RowLevelSecurityOptions {
  * Idempotent: each policy is dropped if it exists before being created, so the
  * script can be re-run after a table is added without a bespoke migration. Returned
  * as strings rather than executed so that they can be reviewed, written into a
- * migration, or diffed in a test — an isolation policy nobody can read is not
+ * migration, or diffed in a test - an isolation policy nobody can read is not
  * worth much.
  *
  * `FOR ALL USING (...)` covers reads and writes both: Postgres applies a
@@ -224,7 +226,7 @@ export function rowLevelSecurityScript(
  * Installs tenant isolation.
  *
  * Must be run by the table owner. Every statement is DDL and therefore
- * transactional in Postgres, so the whole thing applies or none of it does — a
+ * transactional in Postgres, so the whole thing applies or none of it does - a
  * half-installed set of policies would protect some tables and not others, which is
  * worse than none, because it would look done.
  */

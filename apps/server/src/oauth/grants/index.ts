@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 export { authorizationCodeGrant } from "./authorizationCode.js";
 export { clientCredentialsGrant } from "./clientCredentials.js";
 export { issuanceRefusalOutcome } from "./issuanceRefusals.js";

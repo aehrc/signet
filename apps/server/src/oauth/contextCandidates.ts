@@ -4,7 +4,7 @@
  * A standalone launch asking for `launch/patient` has to get a patient from
  * somewhere, and Signet deliberately does not get it by querying the FHIR server:
  * it holds no credential for the BYO server, and a picker that searched it would
- * have to be given one — an authorization server with read access to every
+ * have to be given one - an authorization server with read access to every
  * patient record it fronts is a much larger thing to defend than one without.
  *
  * The candidates therefore come from the end user's own record, by three
@@ -14,7 +14,7 @@
  *    app launched by the patient is about that patient, and this is the case that
  *    must work with no configuration at all.
  * 2. A persona's `default_context`, which is what makes a connectathon endpoint
- *    usable — seed a persona with a patient and the launch simply works.
+ *    usable - seed a persona with a patient and the launch simply works.
  * 3. An explicit list in the user's `attributes`, under `patients` and
  *    `encounters`. This is the general answer for a production endpoint: the
  *    operator states which patients this user may act on, from whatever system of
@@ -25,6 +25,8 @@
  * data. On a production endpoint they may not: allowing it would let any
  * authenticated user mint a token scoped to any patient, which is the one thing a
  * patient picker must not permit.
+ *
+ * Author: John Grimes
  */
 
 import type { LaunchContext } from "@signet/core";
@@ -55,7 +57,7 @@ const RESOURCE_TYPES: Readonly<Record<ContextKey, string>> = {
  * Reduces a candidate to the logical id a launch context carries.
  *
  * A launch context's `patient` is a bare id, not a reference, but an operator
- * populating `attributes.patients` will reasonably write either — so
+ * populating `attributes.patients` will reasonably write either - so
  * `Patient/123` and `123` are accepted and both mean `123`.
  */
 function toLogicalId(value: string, key: ContextKey): string | undefined {

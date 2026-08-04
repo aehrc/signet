@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 export * from "./scopes/index.js";
 export * from "./launch/index.js";
 export * from "./policy/index.js";

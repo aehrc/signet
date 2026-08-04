@@ -1,8 +1,8 @@
 /**
  * Canonical base64 codecs shared by the secret-handling primitives.
  *
- * Every value in this directory that crosses the database boundary — a token
- * hash, an envelope ciphertext, an Argon2id salt — is text, and each of those
+ * Every value in this directory that crosses the database boundary - a token
+ * hash, an envelope ciphertext, an Argon2id salt - is text, and each of those
  * encodings has to be canonical: exactly one string per byte sequence. Tokens
  * and launch handles are *looked up by hash*, so a second accepted spelling of
  * the same bytes would be a second key for the same row, and the uniqueness
@@ -12,13 +12,15 @@
  * does not come back byte-identical, which rules out padding variants, the
  * opposite alphabet, and the non-canonical trailing bits that a permissive
  * decoder silently discards.
+ *
+ * Author: John Grimes
  */
 
 /** Characters permitted in an unpadded base64url string (RFC 4648 section 5). */
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]*$/;
 
 /**
- * Characters permitted in the base64 variant used by PHC strings — the standard
+ * Characters permitted in the base64 variant used by PHC strings - the standard
  * alphabet of RFC 4648 section 4, without padding.
  */
 const BASE64_PATTERN = /^[A-Za-z0-9+/]*$/;
@@ -117,8 +119,8 @@ const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
  *
  * Unlike the base64 codecs above, this one is deliberately lenient: lower case,
  * grouping whitespace and trailing `=` padding are all accepted. A TOTP secret
- * is never a lookup key — it is only ever read back for one account whose row
- * has already been found — so there is no uniqueness property for a second
+ * is never a lookup key - it is only ever read back for one account whose row
+ * has already been found - so there is no uniqueness property for a second
  * spelling to undermine, and refusing a secret because it was pasted with
  * spaces would be a usability failure with no security benefit.
  *
@@ -131,7 +133,7 @@ export function decodeBase32(
 ): Uint8Array<ArrayBuffer> | undefined {
   const normalised = text.replaceAll(/[\s=]/g, "").toUpperCase();
 
-  // Within a final group, 1, 3 and 6 characters carry 5, 15 and 30 bits — none of
+  // Within a final group, 1, 3 and 6 characters carry 5, 15 and 30 bits - none of
   // which is a whole number of bytes plus zero padding, so such a length can only
   // mean the value was truncated. The remaining lengths are checked bitwise
   // below.

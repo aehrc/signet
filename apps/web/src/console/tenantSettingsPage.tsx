@@ -5,10 +5,12 @@
  * leaving to an error message. A tenant can never be left without an owner, because
  * a tenant with no owner cannot grant membership to anybody and is therefore
  * permanently unadministrable. And nobody can grant a role, or mint a token, above
- * the one they hold themselves — otherwise "admin" would be a route to "owner".
+ * the one they hold themselves - otherwise "admin" would be a route to "owner".
  *
  * A new token's value appears once. It is stored as a SHA-256 digest, so this
  * response is the only opportunity to copy it.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -43,10 +45,10 @@ const ROLE_OPTIONS: readonly {
   readonly value: string;
   readonly label: string;
 }[] = [
-  { value: "viewer", label: "Viewer — read only" },
-  { value: "developer", label: "Developer — manage clients" },
-  { value: "admin", label: "Admin — manage configuration" },
-  { value: "owner", label: "Owner — manage membership" },
+  { value: "viewer", label: "Viewer - read only" },
+  { value: "developer", label: "Developer - manage clients" },
+  { value: "admin", label: "Admin - manage configuration" },
+  { value: "owner", label: "Owner - manage membership" },
 ];
 
 /** The tenant settings page. */

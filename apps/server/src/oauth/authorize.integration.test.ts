@@ -5,6 +5,8 @@
  * endpoint records what it validated. A session that did not carry the PKCE
  * challenge, or that carried the request's `scope` rather than the validated one,
  * would pass every unit test and lose the whole point of having a session.
+ *
+ * Author: John Grimes
  */
 
 import { getAuthorizationSession } from "@signet/db";

@@ -3,8 +3,8 @@
  *
  * One process serves both the API and the UI, which is what makes the session
  * cookie work without CORS and without a second deployment to configure. In
- * development this is absent — Vite serves the UI on its own port and proxies
- * `/api` here — so every path below is dead code in a developer's terminal and
+ * development this is absent - Vite serves the UI on its own port and proxies
+ * `/api` here - so every path below is dead code in a developer's terminal and
  * load-bearing in production.
  *
  * Two things need care.
@@ -21,6 +21,8 @@
  * script that its request succeeded. The fallback therefore applies only to paths
  * that are not claimed by the API or by an endpoint issuer, and only to requests
  * that look like navigation.
+ *
+ * Author: John Grimes
  */
 
 import { createReadStream } from "node:fs";
@@ -59,7 +61,7 @@ const RESERVED_PREFIXES = ["/api/", "/t/", "/healthz", "/readyz"];
  * Whether a request path belongs to something other than the UI.
  *
  * An endpoint's issuer prefix is reserved, because everything under it is an OAuth
- * endpoint — with one documented exception: the five end-user pages, which are part of
+ * endpoint - with one documented exception: the five end-user pages, which are part of
  * the UI and are served from the bundle. See `../oauth/endUserPages.js`.
  *
  * @param path - The request path.
@@ -79,7 +81,7 @@ export function isReservedPath(path: string): boolean {
  * Resolves a request path to a file inside the web root, or undefined.
  *
  * Undefined means "not addressable": either the path escapes the root, or it names
- * a directory. Both are refusals rather than fallbacks — a directory listing is
+ * a directory. Both are refusals rather than fallbacks - a directory listing is
  * not something this server should ever produce.
  *
  * @param root - The absolute web root.

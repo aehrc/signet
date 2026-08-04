@@ -13,6 +13,8 @@
  * policy's `requireContext: [patient]` will deny it outright if none is resolved.
  * Treating that as "no context needed" would produce an authorization that
  * completes and then grants nothing.
+ *
+ * Author: John Grimes
  */
 
 import type { LaunchContext, Scope } from "@signet/core";

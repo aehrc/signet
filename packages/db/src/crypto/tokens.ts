@@ -13,7 +13,7 @@
  * the only defence is to make each attempt cost real time and memory.
  *
  * These tokens are the opposite case. Each is 256 bits straight from the
- * operating system's CSPRNG, so there is no distribution to enumerate — an
+ * operating system's CSPRNG, so there is no distribution to enumerate - an
  * offline attacker holding the digest has nothing cheaper than 2^255 expected
  * guesses, and no work factor improves on that. A slow hash would buy nothing.
  *
@@ -26,6 +26,8 @@
  *
  * The same reasoning is why the digest is unsalted: a per-token salt could not
  * be looked up by, and a rainbow table over a 256-bit space cannot be built.
+ *
+ * Author: John Grimes
  */
 
 import { encodeBase64Url } from "./encoding.js";
@@ -43,7 +45,7 @@ const TOKEN_BYTES = 32;
 /**
  * Mints a fresh opaque bearer token.
  *
- * The returned value is the *only* copy — the caller stores
+ * The returned value is the *only* copy - the caller stores
  * {@link hashToken}'s output and hands this string to the client, which is why
  * a lost secret can only be replaced, never recovered.
  *
@@ -79,7 +81,7 @@ export async function hashToken(token: string): Promise<string> {
  * This walks the whole of both strings and folds every difference, including a
  * difference in length, into one accumulator.
  *
- * Both operands are expected to be the digests or codes this module produces —
+ * Both operands are expected to be the digests or codes this module produces -
  * short, ASCII, and of predictable length. Comparison is per index over code
  * points, which is exact for those and still rejects any pair of differing
  * strings, but it is not a general-purpose byte comparison for arbitrary

@@ -3,8 +3,8 @@
  *
  * HAPI FHIR (the open-source server) has no claim contract to write a policy
  * preset against. `AuthorizationInterceptor` and `SearchNarrowingInterceptor` both
- * require the operator to write Java — `buildRuleList` and `buildAuthorizedList`
- * respectively — and neither reads a token by itself. The nearest thing to a
+ * require the operator to write Java - `buildRuleList` and `buildAuthorizedList`
+ * respectively - and neither reads a token by itself. The nearest thing to a
  * convention is the community `mcode/smart-backend-auth` interceptor, which reads
  * exactly `exp` and `scope`.
  *
@@ -23,8 +23,8 @@
  * an explicit `denyAll`.
  *
  * It refuses scopes it cannot honour rather than approximating them. A SMART v2
- * scope may carry search parameters — `patient/Observation.rs?category=vital-signs`
- * — which restrict the scope to a subset of instances. `AuthorizationInterceptor`
+ * scope may carry search parameters - `patient/Observation.rs?category=vital-signs`
+ * - which restrict the scope to a subset of instances. `AuthorizationInterceptor`
  * cannot express that restriction, so the generated code skips such a scope
  * entirely. Silently granting the unrestricted form would turn a narrow grant into
  * a broad one, which is the one failure mode worth being inconvenient about.
@@ -33,6 +33,8 @@
  * this user may see", which depends on the deployment's own model of who may see
  * what; the generated rules treat it as access to the resource type, and the header
  * comment points at `SearchNarrowingInterceptor` as the place that decision belongs.
+ *
+ * Author: John Grimes
  */
 
 /** What the generated interceptor needs to know about the endpoint. */
@@ -84,8 +86,8 @@ function javaIdentifier(algorithm: string): string {
 /**
  * Escapes a value for inclusion in a Java string literal.
  *
- * Configuration values reach here from the database — an issuer, a URL, an
- * endpoint's display name — and a quotation mark in any of them would produce Java
+ * Configuration values reach here from the database - an issuer, a URL, an
+ * endpoint's display name - and a quotation mark in any of them would produce Java
  * that does not compile at best. Backslash first, or it would escape the escapes.
  *
  * @param value - The value to embed.

@@ -6,8 +6,10 @@
  *
  * The move buttons are buttons rather than a drag handle. Dragging is nicer with a mouse
  * and unusable without one, and reordering a policy rule is a decision with
- * consequences — a keyboard-reachable pair of buttons is both accessible and harder to
+ * consequences - a keyboard-reachable pair of buttons is both accessible and harder to
  * do by accident.
+ *
+ * Author: John Grimes
  */
 
 import { moveRule, removeRule, replaceRule, setRuleEnabled } from "./rules.js";

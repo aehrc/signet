@@ -3,7 +3,7 @@
  *
  * Authentication is deny-by-default. A single gate runs before every route under
  * `/api/v1`, and the handful of routes that must answer before anybody is signed in
- * are named in `UNAUTHENTICATED_REQUESTS` — an allowlist, so adding a route
+ * are named in `UNAUTHENTICATED_REQUESTS` - an allowlist, so adding a route
  * makes it authenticated without anybody remembering to say so. The alternative,
  * attaching the middleware per route, fails silently in the direction that matters.
  *
@@ -17,6 +17,8 @@
  * No CORS. The console is served from the same origin as the API, and the responses
  * here are session-authenticated: a cross-origin caller that could read them would
  * be reading a tenant's configuration with the operator's own cookie.
+ *
+ * Author: John Grimes
  */
 
 import { POLICY_PRESETS } from "@signet/core";
@@ -54,7 +56,7 @@ import type { MiddlewareHandler } from "hono";
  * admin API, which should be visible in a diff and hard to do by accident.
  *
  * Compared against the whole request path rather than the matched route pattern,
- * because a pattern is only known once a route has matched — and this gate runs
+ * because a pattern is only known once a route has matched - and this gate runs
  * before that. Every entry is therefore a literal path with no parameters in it, so
  * there is nothing a caller can put in a path segment to make their request look
  * like one of these.
@@ -144,7 +146,7 @@ export function createAdminRouter(
 
   // Registered last, so it answers only what nothing above matched. A `notFound`
   // handler would not do: this router is mounted into the application, and the
-  // application's own handler is what runs for an unmatched path — which would
+  // application's own handler is what runs for an unmatched path - which would
   // answer an admin API call with the SPA's fallback or with plain text.
   router.all("*", (c) =>
     c.json(

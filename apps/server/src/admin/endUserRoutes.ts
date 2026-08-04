@@ -3,7 +3,7 @@
  *
  * A persona is an account with no password, seeded with a launch context so that a
  * connectathon launch works without an EHR. Personas may be *created* on any
- * endpoint but are only *selectable* on one flagged non-production — that rule lives
+ * endpoint but are only *selectable* on one flagged non-production - that rule lives
  * in the data layer's `isPersonaSelectable` and is checked at sign-in, which is the
  * only place it can be enforced. Allowing creation either way lets an endpoint be
  * seeded before it is promoted, and refusing selection is what stops a production
@@ -13,6 +13,8 @@
  * authenticating on the next request, keeps its name attached to its audit trail, and
  * leaves the consents it granted visible; deleting it takes all three away. Both are
  * available, and the console leads with the first.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -55,7 +57,7 @@ interface EndUserRoute {
  * Resolves the user named in the path, or the 404 to answer with.
  *
  * Every route below needs the same three things and would otherwise repeat the same
- * preamble, one copy of which would eventually forget the endpoint predicate — and a
+ * preamble, one copy of which would eventually forget the endpoint predicate - and a
  * user lookup without one would reach another endpoint's account.
  *
  * @param c - The Hono request context.
@@ -153,7 +155,7 @@ export function registerEndUserRoutes(
    *
    * The username is not editable: it is what a stored consent and an audit trail name
    * the person by. Neither is the password, which has its own route and its own audit
-   * event — a display-name change and a credential change should not be
+   * event - a display-name change and a credential change should not be
    * indistinguishable in the trail.
    */
   router.patch(

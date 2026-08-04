@@ -5,14 +5,16 @@
  * Two rules govern this file.
  *
  * Every bearer credential is stored as a SHA-256 digest, never in clear. A
- * digest is sufficient for the only operation Signet performs on these values —
- * look up the row for a credential the client just presented — and it means a
+ * digest is sufficient for the only operation Signet performs on these values -
+ * look up the row for a credential the client just presented - and it means a
  * database disclosure yields nothing replayable.
  *
  * Clients are referenced by their surrogate `clients.id`, not by the OAuth
  * `client_id` string. Introspection joins once on a primary key to recover the
  * identifier, which is cheaper than carrying a wide text key through five
  * tables and impossible to get out of step.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -49,7 +51,7 @@ export const launchContexts = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     /**
      * SHA-256 of the opaque `launch` parameter. The handle itself is returned to
-     * the caller once and never stored — it is a bearer credential.
+     * the caller once and never stored - it is a bearer credential.
      */
     handleHash: text("handle_hash").notNull(),
     endpointId: uuid("endpoint_id")
@@ -209,7 +211,7 @@ export const accessTokens = pgTable(
  *
  * Rotation issues a successor and links to it via `replacedById`. Presenting a
  * token that already has a successor is reuse, and revokes every row sharing
- * `familyId` — which is why the family identifier is a plain indexed column and
+ * `familyId` - which is why the family identifier is a plain indexed column and
  * not derived from the chain.
  */
 export const refreshTokens = pgTable(
@@ -371,7 +373,7 @@ export const federationStates = pgTable(
  *
  * The composite primary key IS the replay prevention: an insert that conflicts
  * means the assertion has been presented before, and the authentication must
- * fail. It is load-bearing, not an optimisation — dropping it would silently
+ * fail. It is load-bearing, not an optimisation - dropping it would silently
  * permit assertion replay within the token's validity window.
  */
 export const jtiReplay = pgTable(

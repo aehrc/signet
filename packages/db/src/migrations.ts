@@ -5,12 +5,14 @@
  * than tidiness: it is the only place that knows where the migration folder is,
  * and it keeps `drizzle-orm` a dependency of exactly one workspace package. A
  * second package depending on Drizzle directly means two resolved copies, and two
- * copies of a library whose types carry private fields are mutually unassignable —
+ * copies of a library whose types carry private fields are mutually unassignable -
  * so the server would need a cast to hand its own connection to its own migrator.
  *
  * Migrations are never applied at server startup. Several replicas racing to apply
  * the same migration is how a half-migrated schema happens, and the deployment runs
  * this as a hook Job that completes before any new pod is admitted.
+ *
+ * Author: John Grimes
  */
 
 import { sql } from "drizzle-orm";
@@ -24,7 +26,7 @@ import type { Executor } from "./repositories/executor.js";
  * Where the generated SQL and its journal might be, relative to this module.
  *
  * Two layouts have to work, and `import.meta.url` means something different in
- * each. Unbundled — the tests, and `drizzle-kit` — this module is
+ * each. Unbundled - the tests, and `drizzle-kit` - this module is
  * `packages/db/src/migrations.ts`, so the folder is one level up. Bundled into the
  * server, it is `/app/dist/index.js`, and the Dockerfile copies the folder to
  * `/app/drizzle`, which is also one level up. The second candidate covers running

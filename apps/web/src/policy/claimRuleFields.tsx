@@ -2,7 +2,7 @@
  * A claim or context rule's fields: a condition, and what to emit.
  *
  * The emitted claims are key/value rows with a variable inserter beside each value,
- * which is the single most useful thing in the builder — nobody should have to remember
+ * which is the single most useful thing in the builder - nobody should have to remember
  * whether it is `context.patient` or `launch.patient`, and the answer is not guessable.
  *
  * Values are edited as text and stored as text. A policy may emit a number, a boolean or
@@ -10,6 +10,8 @@
  * offer a type picker would be a worse editor for the common case, which is a template
  * string. A value that is already a non-string is shown read-only, with a note, rather
  * than being stringified into something different.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -202,7 +204,7 @@ function EmitRows({ emit, disabled, onChange }: Readonly<EmitRowsProps>) {
                   <p className="text-base-content/70 font-mono text-xs">
                     {JSON.stringify(value)}{" "}
                     <span className="text-warning">
-                      — not a string; edit in the code view
+                      - not a string; edit in the code view
                     </span>
                   </p>
                 )}

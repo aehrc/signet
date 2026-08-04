@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { adminUsers } from "./tenancy.js";
@@ -43,7 +47,7 @@ export function timestamps() {
  * The lifecycle of a single-use credential: created, expires, and consumed
  * exactly once.
  *
- * `consumedAt` being nullable is what makes redemption safe — the conditional
+ * `consumedAt` being nullable is what makes redemption safe - the conditional
  * `UPDATE ... WHERE consumed_at IS NULL` in the repositories relies on it, so
  * two concurrent redemptions cannot both succeed.
  */

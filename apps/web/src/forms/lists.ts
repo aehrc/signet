@@ -6,6 +6,8 @@
  * the ones a naive `split("\n")` gets wrong: a trailing newline, a line of
  * whitespace, a value pasted with a stray comma, and the difference between an empty
  * list and no list at all.
+ *
+ * Author: John Grimes
  */
 
 /**
@@ -65,7 +67,7 @@ export function formatScopeList(scopes: readonly string[] | undefined): string {
  * Reads a positive integer from a text input.
  *
  * Returns undefined for anything that is not one, so a half-typed value leaves the
- * field out of the patch rather than sending `NaN` — which the API would refuse with
+ * field out of the patch rather than sending `NaN` - which the API would refuse with
  * a message about a type the operator never chose.
  *
  * @param text - The input's contents.
@@ -122,7 +124,7 @@ function isSameValue(a: unknown, b: unknown): boolean {
  * Drops the fields whose value is blank.
  *
  * Several forms build a request body from optional text inputs, where an untouched field
- * must be absent rather than sent as an empty string — an empty `intent` or `patient` is
+ * must be absent rather than sent as an empty string - an empty `intent` or `patient` is
  * not the same request as no `intent` at all, and the API's schemas say so. Written once
  * because the conditional-spread version of it, repeated per field, is where a stray
  * empty string gets through.

@@ -3,15 +3,17 @@
  *
  * Migrations are DDL, and DDL takes exclusive table locks. Applying them lazily
  * from whichever test file happened to run first meant a worker altering tables
- * while another worker held row locks on them — which Postgres resolves by killing
+ * while another worker held row locks on them - which Postgres resolves by killing
  * one of the two, and which surfaced as a deadlock in an unrelated assertion. The
  * schema is therefore migrated exactly once, before any worker starts, by the
  * global setup in `./globalSetup.ts`.
  *
  * The signal is an environment variable rather than Vitest's `provide`/`inject`,
  * because the setup runs in the main process and the workers are spawned after it
- * completes: they inherit the variable, and a suite run outside Vitest — a single
- * file invoked directly — still migrates for itself.
+ * completes: they inherit the variable, and a suite run outside Vitest - a single
+ * file invoked directly - still migrates for itself.
+ *
+ * Author: John Grimes
  */
 
 /** Set by the global setup once the schema has been migrated. */

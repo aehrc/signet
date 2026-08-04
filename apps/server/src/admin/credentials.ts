@@ -4,13 +4,15 @@
  * Three things are generated here, and all three follow the same rule: the value is
  * returned to the caller exactly once, in the response to the request that created
  * it, and only its digest is stored. There is no "show secret" route, because there
- * is nothing left to show — a lost client secret is rotated, not recovered.
+ * is nothing left to show - a lost client secret is rotated, not recovered.
  *
  * Client identifiers are generated too, though they are not secret. A caller may
  * supply one, because a connectathon wants a memorable identifier and a migrating
  * app already has one; when they do not, a name-derived prefix plus random suffix
  * gives an identifier that is recognisable in a log and still unique across the
  * deployment, which `clients.client_id` requires.
+ *
+ * Author: John Grimes
  */
 
 import { generateOpaqueToken } from "@signet/db";
@@ -24,7 +26,7 @@ const CLIENT_ID_PREFIX_LENGTH = 32;
 /**
  * Derives a URL-safe prefix from a display name.
  *
- * Falls back to `client` when the name yields nothing usable — a name in a script
+ * Falls back to `client` when the name yields nothing usable - a name in a script
  * that transliterates to no ASCII at all is perfectly legitimate, and should not
  * produce an identifier beginning with a hyphen.
  *
@@ -46,7 +48,7 @@ export function clientIdPrefix(name: string): string {
  * The suffix comes from the same generator as every other opaque value, so its
  * entropy is not a separate thing to reason about. It is truncated because a client
  * identifier is typed into app configuration by hand, and this one is not a
- * credential — uniqueness is all it has to provide.
+ * credential - uniqueness is all it has to provide.
  *
  * @param name - The client's display name.
  */

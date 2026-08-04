@@ -5,6 +5,8 @@
  * database) or as discrete parts with the password from the bundled PostgreSQL
  * subchart's own secret. Both shapes are supported here so the chart never has
  * to invent a password that the database does not actually have.
+ *
+ * Author: John Grimes
  */
 
 /** A resolved, validated Signet configuration. */
@@ -26,8 +28,8 @@ export interface SignetConfig {
   /**
    * Permits outbound fetches to private addresses and over plain HTTP.
    *
-   * Signet fetches two user-supplied URLs — a client's `jwks_uri` and an upstream
-   * IdP's issuer — and normally refuses any address that is not publicly
+   * Signet fetches two user-supplied URLs - a client's `jwks_uri` and an upstream
+   * IdP's issuer - and normally refuses any address that is not publicly
    * routable, because an authorization server is a valuable place to have an SSRF.
    * A development or connectathon stack legitimately needs the opposite: its
    * upstream IdP is `http://keycloak:8080` on a compose network.
@@ -139,7 +141,7 @@ function normalisePublicUrl(raw: string): string {
  *
  * The `migrate` and `bootstrap` commands need a connection and nothing else, and
  * requiring the whole configuration for them would mean an operator supplying a public
- * URL and a master key to run a migration that uses neither — and being told off by name
+ * URL and a master key to run a migration that uses neither - and being told off by name
  * when they did not.
  *
  * @param env - The environment to read.

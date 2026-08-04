@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -17,7 +21,7 @@ export interface DatabaseOptions {
  *
  * Drizzle is deliberately constructed WITHOUT its `schema` option. Passing the
  * schema would produce a differently parameterised type that is not assignable
- * to `Executor`, forcing a cast at every repository call site — the kind of
+ * to `Executor`, forcing a cast at every repository call site - the kind of
  * friction that eventually gets solved with `as any`. The relational query
  * builder it unlocks (`db.query.*`) is unused: the repositories write their
  * joins explicitly. If that changes, widen `Executor` rather than casting here.

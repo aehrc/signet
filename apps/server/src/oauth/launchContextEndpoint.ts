@@ -2,7 +2,7 @@
  * The launch-context API: how an EHR mints a `launch` handle.
  *
  * This is the piece that makes an EHR launch possible without Signet being the EHR.
- * The EHR — or the console's launch simulator, or a connectathon harness — posts the
+ * The EHR - or the console's launch simulator, or a connectathon harness - posts the
  * context it wants an app to receive, and gets back a single-use opaque handle to
  * put in the app's launch URL alongside `iss`. Signet holds the context; the handle
  * carries nothing.
@@ -17,8 +17,10 @@
  *
  * The handle is bound to the app that will redeem it whenever the caller says which
  * app that is. An unbound handle can be redeemed by whichever app presents it first,
- * which is only acceptable when the EHR genuinely does not know — and the console's
+ * which is only acceptable when the EHR genuinely does not know - and the console's
  * simulator always knows, so it always binds.
+ *
+ * Author: John Grimes
  */
 
 import { validateLaunchContext } from "@signet/core";
@@ -108,7 +110,7 @@ export function launchContextHandler(context: ServerContext) {
     }
 
     // The context is JSON, because `fhirContext` has nested structure that form
-    // encoding cannot carry — so the body is read before the credential, which may
+    // encoding cannot carry - so the body is read before the credential, which may
     // be in it.
     const body = (await c.req.json().catch(() => ({}))) as LaunchContextBody;
 

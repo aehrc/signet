@@ -11,13 +11,15 @@
  * The strategy is therefore deny-list by key, applied to the whole subtree under
  * a matching key, plus a value-shape check that catches credentials smuggled
  * under an innocuous name. Matching values are replaced with a marker rather than
- * dropped, so the trail still records that (say) a client secret was supplied —
+ * dropped, so the trail still records that (say) a client secret was supplied -
  * an absent key and a rejected credential are very different events.
  *
  * Known limitation: a credential that appears as a bare array element or as part
  * of a longer string under a harmless key (`{ argv: ["--secret", "hunter2"] }`)
  * is only caught if it happens to match one of the value patterns. Call sites
  * must not build detail blobs that way.
+ *
+ * Author: John Grimes
  */
 
 /** Replaces a value that matched the deny-list. */
@@ -96,7 +98,7 @@ export const REDACTED_KEY_SUBSTRINGS: readonly string[] = [
 
 /**
  * Short key names that are credentials on their own but too generic to match as
- * substrings — `code` must not redact `status_code` or `code_challenge_method`.
+ * substrings - `code` must not redact `status_code` or `code_challenge_method`.
  *
  * Matched against the whole normalised key.
  */
@@ -177,7 +179,7 @@ function redactString(value: string): string {
  * Applies the value-shape check and the length cap to a single string.
  *
  * Exported for the handful of typed string fields that are merged into a detail
- * blob after it has been redacted — reserved keys such as the actor's display
+ * blob after it has been redacted - reserved keys such as the actor's display
  * name, which must overwrite anything the call site put there and so cannot go
  * through the blob itself.
  *
@@ -264,7 +266,7 @@ function redactValue(
     }
     if (value instanceof Map) {
       // Converted rather than left alone: a Map serialises to `{}`, which would
-      // silently discard whatever it held — including, possibly, the reason the
+      // silently discard whatever it held - including, possibly, the reason the
       // event was recorded.
       return redactEntries(
         [...value.entries()].map(

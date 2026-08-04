@@ -5,7 +5,7 @@
  * checks rather than faults: the `jti_replay` primary key rejecting a replayed
  * client assertion, and the unique index on `(endpoint_id, version)` rejecting
  * two policy versions allocated concurrently. A caller has to be able to tell
- * those apart from a database that is broken or unreachable — "the assertion has
+ * those apart from a database that is broken or unreachable - "the assertion has
  * been seen before" and "the database is down" call for opposite responses, and
  * a bare driver error conflates them.
  *
@@ -14,6 +14,8 @@
  * boundary, and so they can be unit tested without a driver.
  *
  * @see https://www.postgresql.org/docs/current/errcodes-appendix.html
+ *
+ * Author: John Grimes
  */
 
 /** SQLSTATE for `unique_violation`. */

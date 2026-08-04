@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import type { Scope, ScopeParameter } from "./types.js";
 
 /** Renders search parameter restrictions back into a query string. */
@@ -15,8 +19,8 @@ function formatParameters(parameters: readonly ScopeParameter[]): string {
  * Renders a {@link Scope} back to its canonical SMART v2 string form.
  *
  * Round-tripping a v1 scope through {@link parseScope} and this function
- * returns the v2 equivalent — `patient/Observation.read` becomes
- * `patient/Observation.rs` — which is what should be reported in the token
+ * returns the v2 equivalent - `patient/Observation.read` becomes
+ * `patient/Observation.rs` - which is what should be reported in the token
  * response `scope` value so the client sees what it actually got.
  *
  * @param scope - The scope to render.

@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { evaluatePolicy } from "./evaluate.js";
@@ -205,7 +209,7 @@ function expectedAuthorities(
   return expected;
 }
 
-describe("PATHLING_PRESET — the two mandated cases", () => {
+describe("PATHLING_PRESET - the two mandated cases", () => {
   it("maps patient/Observation.rs to a read and a search authority", () => {
     expect(authoritiesFor("patient/Observation.rs")).toEqual([
       "pathling:read:Observation",
@@ -220,7 +224,7 @@ describe("PATHLING_PRESET — the two mandated cases", () => {
   });
 });
 
-describe("PATHLING_PRESET — authority table", () => {
+describe("PATHLING_PRESET - authority table", () => {
   it.each([
     ["patient/Observation.r", ["pathling:read:Observation"]],
     ["patient/Observation.s", ["pathling:read:Observation", "pathling:search"]],
@@ -324,7 +328,7 @@ describe("PATHLING_PRESET — authority table", () => {
   });
 });
 
-describe("PATHLING_PRESET — invariants across every scope shape", () => {
+describe("PATHLING_PRESET - invariants across every scope shape", () => {
   const cases = [
     ...(["patient", "user", "system"] as const).flatMap((scopeContext) =>
       ["*", "Observation"].flatMap((resourceType) =>
@@ -454,7 +458,7 @@ describe("PATHLING_PRESET — invariants across every scope shape", () => {
   });
 });
 
-describe("PATHLING_PRESET — as shipped", () => {
+describe("PATHLING_PRESET - as shipped", () => {
   it("grants patient reads only once a patient is in context", () => {
     const requested = "patient/Observation.rs";
     expect(

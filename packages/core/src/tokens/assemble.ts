@@ -4,6 +4,8 @@
  * Every function here is pure: time, identifiers and the policy evaluation all
  * arrive as parameters, so the console's policy simulator can render exactly
  * what the server would issue.
+ *
+ * Author: John Grimes
  */
 
 import { formatScopes } from "../scopes/index.js";
@@ -102,7 +104,7 @@ export interface IdTokenInput {
  *
  * Unlike the access token, an ID token is addressed to the *client*: its `aud`
  * is the client id, and a resource server must never accept one in place of an
- * access token. Policy-emitted claims are deliberately not merged in — they
+ * access token. Policy-emitted claims are deliberately not merged in - they
  * describe authorization, which belongs in the access token, not in an identity
  * assertion.
  *

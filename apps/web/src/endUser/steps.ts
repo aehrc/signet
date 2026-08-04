@@ -3,12 +3,14 @@
  *
  * The server decides what the user must do next and answers every request with that
  * step; the browser's job is to be on the matching page. Those are two different things
- * and this is the mapping between them — the same one the server uses when it redirects
+ * and this is the mapping between them - the same one the server uses when it redirects
  * from `/authorize`, restated here because the pages navigate between themselves without
  * going back through it.
  *
  * Pure and tested. Getting it wrong does not fail loudly: the page simply stays where it
  * is, showing a form for a step that has already been completed.
+ *
+ * Author: John Grimes
  */
 
 import type { InteractionStep } from "./api.js";
@@ -36,7 +38,7 @@ export function pageForStep(step: InteractionStep): string | undefined {
  * Where to send the browser next, or undefined to stay put.
  *
  * Returns a path with the session identifier attached, so a navigation between steps
- * keeps the flow addressable — a reload of the picker must land on the picker.
+ * keeps the flow addressable - a reload of the picker must land on the picker.
  *
  * @param currentPath - The path being rendered now.
  * @param step - The step the interaction API reported.

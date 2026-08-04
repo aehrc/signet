@@ -12,6 +12,8 @@
  * capability every tenant-scoped query in `@signet/db` requires. A handler under
  * this middleware therefore cannot read another tenant's rows: it has no scope
  * naming one.
+ *
+ * Author: John Grimes
  */
 
 import { endpointUrls, normaliseIssuer } from "@signet/core";

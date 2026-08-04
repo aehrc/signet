@@ -5,6 +5,8 @@
  * client identifier travels in tokens, introspection responses and app
  * configuration, where no endpoint is in scope to disambiguate it; making it
  * globally unique means it can be referenced directly from the runtime tables.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -117,8 +119,8 @@ export const clientRequests = pgTable(
     /**
      * SHA-256 of the token the developer keeps to track this request.
      *
-     * The portal is not an authenticated surface — a developer asking for a client has
-     * no account yet — so the submission returns a bearer token once, and checking the
+     * The portal is not an authenticated surface - a developer asking for a client has
+     * no account yet - so the submission returns a bearer token once, and checking the
      * request's status or collecting its credentials requires presenting it. Nullable
      * because a request an administrator files on someone's behalf has nobody to hand
      * a token to.

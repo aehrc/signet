@@ -9,6 +9,8 @@
  *
  * Only the `keys` array is checked, because that is all `createLocalJWKSet`
  * requires: it validates each key itself and ignores anything it cannot use.
+ *
+ * Author: John Grimes
  */
 
 import type { JSONWebKeySet } from "jose";

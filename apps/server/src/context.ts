@@ -6,6 +6,8 @@
  * context over a throwaway database and a fixed clock, and the handlers cannot
  * tell the difference. There is no ambient `db` for a handler to accidentally
  * use instead.
+ *
+ * Author: John Grimes
  */
 
 import type { AdminPrincipal } from "./admin/principal.js";
@@ -75,7 +77,7 @@ export interface ResolvedIssuerContext {
  * an OAuth request names an endpoint by its public issuer path and is
  * authenticated by client credentials, whereas an admin request names it inside a
  * tenant the caller has already proved membership of. The tenant row is therefore
- * absent — the tenant scope already carries its slug — and the endpoint row is
+ * absent - the tenant scope already carries its slug - and the endpoint row is
  * present because every console view renders its configuration.
  */
 export interface AdminEndpointContext {

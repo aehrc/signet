@@ -5,7 +5,7 @@
  * the Signet deployment: a client's `jwks_uri` and an upstream identity
  * provider's issuer. Fetching either is a server-side request to an
  * attacker-influenced address, and an authorization server is a particularly bad
- * place to have one — it sits inside the network holding the FHIR servers it
+ * place to have one - it sits inside the network holding the FHIR servers it
  * fronts, and in a cloud deployment beside a metadata service that will hand out
  * credentials to any process that asks.
  *
@@ -17,8 +17,8 @@
  * 2. **No userinfo.** `https://metadata@attacker.example/` and its inverse are
  *    the standard way to make a URL's apparent host differ from its real one.
  * 3. **Address.** The hostname is resolved, and *every* address it resolves to
- *    must be publicly routable. Checking the name is useless — `localtest.me`
- *    resolves to `127.0.0.1` — and checking only the first address lets a
+ *    must be publicly routable. Checking the name is useless - `localtest.me`
+ *    resolves to `127.0.0.1` - and checking only the first address lets a
  *    multi-A-record name slip a private address past.
  * 4. **No redirects.** A redirect is a second URL that the guard never saw. Rather
  *    than re-running the check per hop, redirects are refused outright: a JWKS
@@ -26,7 +26,7 @@
  *    document.
  *
  * **The residual risk.** Between resolving the name and connecting, the DNS
- * answer can change — DNS rebinding. Closing that window entirely requires
+ * answer can change - DNS rebinding. Closing that window entirely requires
  * pinning the connection to the address that was checked, which means replacing
  * the HTTP agent's socket factory rather than using `fetch`. Signet accepts the
  * window, and the reasons are worth stating: the responses fetched here are
@@ -35,6 +35,8 @@
  * control a registered `jwks_uri`, and the response body is never reflected to
  * the requester. A deployment that needs the stronger guarantee should place an
  * egress proxy in front of Signet, which is the control that actually holds.
+ *
+ * Author: John Grimes
  */
 
 import { lookup } from "node:dns/promises";
@@ -118,7 +120,7 @@ export const DEFAULT_OUTBOUND_TIMEOUT_MS = 10_000;
  * 256 KiB.
  *
  * A JWKS with a hundred keys is a few tens of kilobytes. The limit exists so that
- * a hostile host cannot exhaust memory by streaming indefinitely — the classic
+ * a hostile host cannot exhaust memory by streaming indefinitely - the classic
  * decompression-bomb-adjacent denial of service against a fetching server.
  */
 export const DEFAULT_OUTBOUND_MAX_BYTES = 262_144;
@@ -183,7 +185,7 @@ export function checkOutboundUrl(
   }
 
   // An IP literal can be judged now. A DNS name cannot, and is checked after
-  // resolution — `isFetchableAddress` returns false for anything unparseable, so
+  // resolution - `isFetchableAddress` returns false for anything unparseable, so
   // it cannot be used here to reject names.
   const isLiteral =
     /^[\d.]+$/.test(url.hostname) || url.hostname.startsWith("[");

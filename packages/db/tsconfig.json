@@ -3,8 +3,8 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    // Unlike `@signet/core`, this package is server-only — it opens Postgres
-    // connections and handles secrets — so it may depend on the Node type
+    // Unlike `@signet/core`, this package is server-only - it opens Postgres
+    // connections and handles secrets - so it may depend on the Node type
     // surface for `Buffer`, `crypto` and `node:crypto`.
     "types": ["node"]
   },

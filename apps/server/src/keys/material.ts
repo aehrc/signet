@@ -8,13 +8,15 @@
  *
  * The private half is envelope-encrypted under `SIGNET_MASTER_KEY` before it
  * reaches the database, and this module is the only place that decrypts it. No
- * API returns it, and the value handed to the data layer is already ciphertext —
+ * API returns it, and the value handed to the data layer is already ciphertext -
  * so a repository, a logical dump and a Drizzle log all see the same opaque
  * string.
  *
  * SMART requires RS384 or ES384 for client assertions, and Signet signs its own
  * tokens with the same pair of algorithms so that a resource server verifying
  * Signet's tokens needs no configuration it does not already have.
+ *
+ * Author: John Grimes
  */
 
 import { decryptSecret, encryptSecret } from "@signet/db";
@@ -34,7 +36,7 @@ export interface GeneratedEndpointKey {
    * The RFC 7638 JWK thumbprint.
    *
    * Derived from the key rather than random, so that the same key always has the
-   * same identifier — which makes a `kid` collision within an endpoint mean
+   * same identifier - which makes a `kid` collision within an endpoint mean
    * "this key is already published", not "bad luck".
    */
   readonly kid: string;
@@ -49,7 +51,7 @@ export interface GeneratedEndpointKey {
  * Generates a signing key pair for an endpoint.
  *
  * The keys are extractable, because the private half has to be serialised to be
- * stored at all — an endpoint's key must survive a pod restart, and a
+ * stored at all - an endpoint's key must survive a pod restart, and a
  * non-extractable key could not.
  *
  * @param algorithm - `RS384` or `ES384`.

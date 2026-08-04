@@ -8,7 +8,7 @@
  *
  * - **No policy.** An endpoint with no published policy grants nothing. Answering
  *   400 would tell a correctly behaving app to discard its credential and try
- *   again, which will fail identically until an operator publishes a policy — and
+ *   again, which will fail identically until an operator publishes a policy - and
  *   would send its developer looking for a bug in their own code.
  * - **No signing key.** The same reasoning. An endpoint whose only key has been
  *   retired cannot issue tokens until a new one is activated, and nothing the app
@@ -16,6 +16,8 @@
  *
  * The third is a genuine 400: a policy that granted none of the requested scopes
  * has refused the request, and the app can act on it by asking for less.
+ *
+ * Author: John Grimes
  */
 
 import { grantRefusal } from "./types.js";

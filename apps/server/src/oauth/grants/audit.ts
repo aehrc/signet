@@ -1,8 +1,8 @@
 /**
  * The audit events every grant writes.
  *
- * All three grants record the same two things — a token was issued, or a presented
- * credential turned out to have been replayed — and the events differ only in the
+ * All three grants record the same two things - a token was issued, or a presented
+ * credential turned out to have been replayed - and the events differ only in the
  * grant name and the subject. Writing them out per grant meant three copies of the
  * tenant and endpoint identifiers, which is three chances for one of them to name
  * the wrong endpoint and for the event to become invisible to the console's filter.
@@ -10,6 +10,8 @@
  * The `token.issued` event carries the policy version that authorised the token.
  * That is the field that makes the trail answer "why does this token contain that
  * claim?", and it is only answerable because policy versions are immutable rows.
+ *
+ * Author: John Grimes
  */
 
 import type { GrantRequest } from "./types.js";

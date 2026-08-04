@@ -2,8 +2,8 @@
  * OAuth 2.0 error responses.
  *
  * Every refusal Signet issues is built here, for two reasons. The response codes
- * are a closed set defined by RFC 6749, and inventing one — or returning
- * `invalid_request` where the spec requires `invalid_client` — breaks client
+ * are a closed set defined by RFC 6749, and inventing one - or returning
+ * `invalid_request` where the spec requires `invalid_client` - breaks client
  * libraries that switch on the value. And the *status* attached to each is not
  * obvious: `invalid_client` is 401, everything else at the token endpoint is
  * 400, and a token endpoint must never answer with a redirect.
@@ -13,6 +13,8 @@
  *
  * @see https://datatracker.ietf.org/doc/html/rfc6749#section-4.1.2.1
  * @see https://datatracker.ietf.org/doc/html/rfc6749#section-5.2
+ *
+ * Author: John Grimes
  */
 
 /** Error codes the authorization endpoint may return. RFC 6749 §4.1.2.1. */
@@ -72,7 +74,7 @@ export function statusForTokenError(code: TokenErrorCode): 400 | 401 {
 /**
  * Builds the redirect an authorization endpoint refusal produces.
  *
- * `state` is echoed back when the request carried one — a client that cannot
+ * `state` is echoed back when the request carried one - a client that cannot
  * correlate the error with its own request will usually surface it as a blank
  * page rather than as a message.
  *

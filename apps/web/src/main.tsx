@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 

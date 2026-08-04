@@ -6,8 +6,8 @@
     // This package runs unchanged on the server and in the browser (the console's
     // policy simulator calls the same functions that issue real tokens), so it
     // must not depend on the Node type surface. DOM is included for the
-    // web-standard globals it genuinely needs — `URL`, `crypto.subtle`,
-    // `TextEncoder` — all of which Node has provided since v18.
+    // web-standard globals it genuinely needs - `URL`, `crypto.subtle`,
+    // `TextEncoder` - all of which Node has provided since v18.
     "lib": ["ES2023", "DOM"]
   },
   "include": ["src/**/*"]

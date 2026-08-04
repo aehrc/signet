@@ -7,7 +7,9 @@
  * operator does not have to learn those rules from an error message.
  *
  * A generated secret appears once, in the panel above the list, and is never
- * retrievable afterwards — the server stores only its Argon2id digest.
+ * retrievable afterwards - the server stores only its Argon2id digest.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -201,16 +203,16 @@ function ClientForm({
 
   const permitted = [
     ...(allows.public
-      ? [{ value: "public", label: "Public — PKCE only" }]
+      ? [{ value: "public", label: "Public - PKCE only" }]
       : []),
     ...(allows.symmetric
-      ? [{ value: "confidential-symmetric", label: "Confidential — secret" }]
+      ? [{ value: "confidential-symmetric", label: "Confidential - secret" }]
       : []),
     ...(allows.asymmetric
       ? [
           {
             value: "confidential-asymmetric",
-            label: "Confidential — signed assertion",
+            label: "Confidential - signed assertion",
           },
         ]
       : []),
@@ -325,7 +327,7 @@ function ClientForm({
           value={redirectUris}
           onChange={setRedirectUris}
           error={issues["redirectUris"] ?? issues["redirectUris.0"]}
-          hint="One per line. Matched exactly at /authorize — never by prefix."
+          hint="One per line. Matched exactly at /authorize - never by prefix."
         />
         <TextField
           label="Launch URI"
@@ -379,7 +381,7 @@ function ClientForm({
               value={jwks}
               onChange={setJwks}
               error={issues["jwks"]}
-              hint="A JSON key set. Use this or a JWKS URI, not both — with two key sources there is no single answer to which key verified an assertion."
+              hint="A JSON key set. Use this or a JWKS URI, not both - with two key sources there is no single answer to which key verified an assertion."
             />
           </>
         ) : null}

@@ -2,8 +2,10 @@
  * The append-only audit log.
  *
  * Nothing in the application updates or deletes an audit event; the repository
- * layer exposes insert and read only. Rows disappear in exactly one situation —
+ * layer exposes insert and read only. Rows disappear in exactly one situation -
  * the tenant they belong to is deleted, which is a full erasure.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -38,8 +40,8 @@ export const auditEvents = pgTable(
     actorType: auditActorTypeEnum("actor_type").notNull(),
     /**
      * The actor's identifier as text, and deliberately not a foreign key. Actors
-     * are polymorphic — admin user, API token, end user, client or the system
-     * itself — and an audit trail that a `DELETE FROM admin_users` could
+     * are polymorphic - admin user, API token, end user, client or the system
+     * itself - and an audit trail that a `DELETE FROM admin_users` could
      * orphan or truncate would be no audit trail at all. The identifier is also
      * echoed into `detail` alongside the actor's display name at write time, so
      * the row stays readable once the referent is gone.

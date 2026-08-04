@@ -3,8 +3,8 @@
  *
  * The console's policy editor is only trustworthy if what it shows is what the
  * token endpoint would mint. This composes the same three calls the server's
- * issuance path makes — evaluate, assemble the access token, assemble the ID token
- * — in the same order over the same context, and returns the results decoded rather
+ * issuance path makes - evaluate, assemble the access token, assemble the ID token
+ * - in the same order over the same context, and returns the results decoded rather
  * than signed.
  *
  * Deliberately in `@signet/core` rather than in the console or the admin API. A
@@ -16,6 +16,8 @@
  * refresh token, and the `jti` is whatever the caller passes: a simulation is a
  * pure function of a policy and a context, which is what makes it safe to run on
  * every keystroke.
+ *
+ * Author: John Grimes
  */
 
 import {

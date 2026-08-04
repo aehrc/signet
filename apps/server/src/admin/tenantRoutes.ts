@@ -5,7 +5,7 @@
  * and are worth naming because the handlers look incomplete without them.
  *
  * A tenant can never be left with no owner. Demoting or removing its last one would
- * make it permanently unadministrable — nobody could grant membership to anybody —
+ * make it permanently unadministrable - nobody could grant membership to anybody -
  * so `setTenantMemberRole` and `removeTenantMember` refuse, under a row lock, and
  * these handlers translate the refusal into a 409.
  *
@@ -13,6 +13,8 @@
  * That is what lets an owner mint a viewer token for a reporting script, and it is
  * why the create route refuses to mint a token more powerful than the caller: a
  * developer able to mint an owner token would be able to promote themselves.
+ *
+ * Author: John Grimes
  */
 
 import {

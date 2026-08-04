@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { policyDocumentSchema, policyIssuePath } from "./policy.js";

@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 export {
   admitRequest,
   emptyWindow,

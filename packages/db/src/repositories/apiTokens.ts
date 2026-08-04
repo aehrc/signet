@@ -2,7 +2,7 @@
  * Personal access tokens for the admin API.
  *
  * {@link findLiveApiToken} is the other entry point at which a tenant scope comes
- * into existence — a PAT names its tenant, so presenting one both authenticates
+ * into existence - a PAT names its tenant, so presenting one both authenticates
  * the caller and fixes the tenant, and there is no way to present a token for one
  * tenant and act on another.
  *
@@ -10,6 +10,8 @@
  * that only reads the audit log should hold a `viewer` token even if the person
  * who minted it is an owner, and revoking that script's access should not mean
  * changing a human's membership.
+ *
+ * Author: John Grimes
  */
 
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
@@ -53,7 +55,7 @@ export interface AuthenticatedApiToken {
 /**
  * Resolves a presented bearer token to a tenant scope.
  *
- * Not revoked, and not expired — a null `expires_at` means a token that does not
+ * Not revoked, and not expired - a null `expires_at` means a token that does not
  * expire, which is why the predicate is a disjunction rather than a comparison
  * against a default. Both conditions are in SQL so that a caller cannot obtain
  * the row and then forget to check one of them.

@@ -6,6 +6,8 @@
  * because `openid-configuration` carries the fields Pathling merges into its own
  * SMART configuration. A missing `jwks_uri` or a mistyped `issuer` would break that
  * with no other symptom.
+ *
+ * Author: John Grimes
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

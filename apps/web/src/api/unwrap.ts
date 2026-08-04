@@ -1,13 +1,15 @@
 /**
  * Unwrapping the admin API's envelopes.
  *
- * Every collection response is an object with one field — `{ endpoints: [...] }`,
- * `{ client: {...} }` — rather than a bare array or a bare row. That is deliberate on
+ * Every collection response is an object with one field - `{ endpoints: [...] }`,
+ * `{ client: {...} }` - rather than a bare array or a bare row. That is deliberate on
  * the server's side: an envelope leaves room to add a field later without changing the
  * shape a client already parses.
  *
  * It does mean every caller would otherwise write `(await get(...)).endpoints`, which
  * is both noisy and awkward. These two helpers do the unwrapping once.
+ *
+ * Author: John Grimes
  */
 
 import { get, patch, post } from "./client.js";

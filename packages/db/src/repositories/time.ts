@@ -4,7 +4,7 @@
  * Expiry decisions in this directory are made by the database, not by the
  * process clock. A conditional `UPDATE ... WHERE expires_at > now()` decides and
  * acts in one statement, so there is no window in which a credential is judged
- * live and then honoured after it has expired — and no dependence on the
+ * live and then honoured after it has expired - and no dependence on the
  * application server's clock agreeing with Postgres, which it will not, because
  * several application servers share one database.
  *
@@ -13,6 +13,8 @@
  * test can pin the instant, and so that a caller who has already read
  * `databaseNow()` for an audit event can make several statements agree on one
  * timestamp. It is not there so that a handler can pass `new Date()`.
+ *
+ * Author: John Grimes
  */
 
 import { sql } from "drizzle-orm";

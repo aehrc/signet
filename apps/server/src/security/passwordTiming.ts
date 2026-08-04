@@ -2,13 +2,15 @@
  * Making a rejection cost the same whether or not the account exists.
  *
  * Argon2id verification dominates the cost of a sign-in, so a path that skips it
- * when the username is unknown answers measurably faster — which turns user
+ * when the username is unknown answers measurably faster - which turns user
  * enumeration into a timing measurement rather than a guess. Both sign-in paths
  * (the console's and the end user's) therefore verify the presented password
  * against this hash when they found no account, and only then refuse.
  *
  * Shared rather than duplicated so the two paths cannot drift into having
  * different costs, which would reintroduce the difference between them.
+ *
+ * Author: John Grimes
  */
 
 /**

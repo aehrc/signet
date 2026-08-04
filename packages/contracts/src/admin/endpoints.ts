@@ -2,11 +2,13 @@
  * Endpoint configuration as the admin API accepts it.
  *
  * Every capability flag is listed explicitly rather than derived from the
- * database schema. The list is a conformance claim — each flag becomes an entry in
- * `.well-known/smart-configuration` — so adding a column should require a
+ * database schema. The list is a conformance claim - each flag becomes an entry in
+ * `.well-known/smart-configuration` - so adding a column should require a
  * deliberate decision to expose it, not inherit one. A flag missing from here is
  * simply not settable over the API, which is a safe default; a flag inherited
  * automatically would be advertised the moment it was added.
+ *
+ * Author: John Grimes
  */
 
 import { z } from "zod";

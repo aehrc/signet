@@ -9,6 +9,8 @@
  * The algorithm is a longest-common-subsequence walk, which is small, pure and exact.
  * A heuristic diff would occasionally attribute a change to the wrong line, and this is
  * read to decide whether to publish.
+ *
+ * Author: John Grimes
  */
 
 /** What happened to one line. */

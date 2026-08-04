@@ -4,7 +4,7 @@
  * Signet fetches two things from URLs an operator or a developer supplied: a
  * client's `jwks_uri`, and an upstream identity provider's discovery document.
  * Both are server-side requests to an attacker-influenced address, which is the
- * definition of SSRF — and an authorization server is an unusually valuable
+ * definition of SSRF - and an authorization server is an unusually valuable
  * place to have one, because it runs inside the same network as the FHIR servers
  * it fronts and, in a cloud deployment, next to a metadata service that hands out
  * credentials to anything that asks.
@@ -22,6 +22,8 @@
  *
  * @see https://datatracker.ietf.org/doc/html/rfc5735
  * @see https://datatracker.ietf.org/doc/html/rfc6890
+ *
+ * Author: John Grimes
  */
 
 /**
@@ -33,7 +35,7 @@
  */
 export type AddressClassification =
   | "public"
-  /** `0.0.0.0`, `::` — "this host", and on some stacks a route to localhost. */
+  /** `0.0.0.0`, `::` - "this host", and on some stacks a route to localhost. */
   | "unspecified"
   /** `127.0.0.0/8`, `::1`. */
   | "loopback"
@@ -43,7 +45,7 @@ export type AddressClassification =
   | "unique-local"
   /** Carrier-grade NAT, `100.64.0.0/10`. */
   | "shared"
-  /** `169.254/16`, `fe80::/10` — includes the cloud metadata address. */
+  /** `169.254/16`, `fe80::/10` - includes the cloud metadata address. */
   | "link-local"
   /** `224/4`, `ff00::/8`. */
   | "multicast"
@@ -59,7 +61,7 @@ export type AddressClassification =
  *
  * Strict on purpose. `inet_aton` accepts `0177.0.0.1`, `2130706433` and
  * `127.1`, all of which are `127.0.0.1` to a C resolver and none of which look
- * like loopback to a naive string check — a classic SSRF filter bypass. Rejecting
+ * like loopback to a naive string check - a classic SSRF filter bypass. Rejecting
  * everything but four plain decimal octets means the classification below sees the
  * same address the network stack will.
  */
@@ -229,7 +231,7 @@ function classifyIpv4Bytes(bytes: Uint8Array): AddressClassification {
  *
  * `::ffff:a.b.c.d` is the IPv4-mapped form and `::a.b.c.d` the deprecated
  * IPv4-compatible form. Both reach an IPv4 destination, so both are classified as
- * the address they carry — otherwise `::ffff:127.0.0.1` would read as a public
+ * the address they carry - otherwise `::ffff:127.0.0.1` would read as a public
  * IPv6 address and be fetched, which is the oldest bypass of this kind of filter.
  *
  * Called only after `::` and `::1` have been handled, so the all-zero and
@@ -294,7 +296,7 @@ function classifyIpv6Bytes(bytes: Uint8Array): AddressClassification {
  *
  * @param text - A dotted-quad or IPv6 literal, with or without brackets.
  * @returns The classification, or undefined when the value is not an IP address
- *   at all — which for a URL host means it is a DNS name and must be resolved
+ *   at all - which for a URL host means it is a DNS name and must be resolved
  *   before it can be judged.
  */
 export function classifyIpAddress(

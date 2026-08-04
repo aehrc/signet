@@ -5,7 +5,7 @@
  * because these are the judgements that decide whether a credential is honoured:
  * whether a token is still live, whether a refresh token has been reused, how
  * many versions a policy has. Keeping them out of the query layer means they can
- * be tested exhaustively — including the boundaries, which is where an
+ * be tested exhaustively - including the boundaries, which is where an
  * authorization server gets these wrong.
  *
  * The inputs are deliberately narrow structural types rather than whole rows.
@@ -15,6 +15,8 @@
  * Every comparison treats an expiry falling exactly on `now` as expired. That
  * matches the SQL predicates used for the atomic claims (`expires_at > now()`),
  * and erring the other way would honour a credential one tick past its lifetime.
+ *
+ * Author: John Grimes
  */
 
 /** A row with a lifetime that may be unbounded. */
@@ -75,7 +77,7 @@ export type ConsumptionRefusal = "not-found" | "already-consumed" | "expired";
  * Explains why an atomic claim on a single-use row failed.
  *
  * This runs only after the conditional `UPDATE` has already declined to claim
- * the row, so it decides nothing — it exists so that the caller can audit a
+ * the row, so it decides nothing - it exists so that the caller can audit a
  * replayed authorization code differently from one that merely timed out.
  * Consumption is reported ahead of expiry: a code that was redeemed and then sat
  * around until it expired was still, first and foremost, replayed.
@@ -108,7 +110,7 @@ export type LaunchHandleRefusal = ConsumptionRefusal | "client-mismatch";
  * A mismatched client is reported ahead of consumption and expiry. An EHR that
  * mints a handle for one app and sees it presented by another has been handed
  * evidence of a leaked handle, and that is a different event from an app
- * retrying its own launch — so it must not be flattened into
+ * retrying its own launch - so it must not be flattened into
  * `already-consumed`.
  *
  * Note that a handle stays unredeemable by the wrong client even after it has
@@ -146,7 +148,7 @@ export type RefreshTokenRefusal =
  *
  * The ordering here *is* the reuse detection. A token that has a successor has
  * already been rotated, so presenting it again means two parties hold it and one
- * of them should not — that verdict is returned ahead of both revocation and
+ * of them should not - that verdict is returned ahead of both revocation and
  * expiry, because a rotated token is necessarily also revoked, and because a
  * stolen token presented after its own expiry is still evidence of theft.
  *

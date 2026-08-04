@@ -7,7 +7,7 @@
  * 1. **Single use.** The code is claimed by a conditional `UPDATE` in the data
  *    layer, so two concurrent redemptions produce one winner. A replayed code is
  *    reported as `already-consumed`, which RFC 6749 §10.5 says should be treated as
- *    an attack — Signet revokes every token issued from that authorization, because
+ *    an attack - Signet revokes every token issued from that authorization, because
  *    if two parties hold the code then one of them holds a token they should not.
  * 2. **Redirect URI binding.** The `redirect_uri` presented here must equal the one
  *    the code was issued against. Without it, an attacker who obtained a code can
@@ -16,19 +16,21 @@
  *    This is what a public client has instead of a secret, and it is the only thing
  *    that makes a code intercepted from a mobile app's redirect useless.
  * 4. **Client identity.** The code's session belongs to one client. A different
- *    client presenting a valid code — including one that authenticated
- *    successfully as itself — must be refused.
+ *    client presenting a valid code - including one that authenticated
+ *    successfully as itself - must be refused.
  *
  * The scopes come from the session, not from the request. An app cannot ask for
  * more at the token endpoint than the user approved at the consent screen, because
  * there is nowhere in this handler that the request's `scope` parameter is read.
+ *
+ * Author: John Grimes
  */
 
 /* jscpd:ignore-start */
 // The import list and the issuance call below are near-identical to the other
 // interactive grant's, and deliberately so: both establish the same four things for
-// `issueTokens`, and the parts that differ — the grant type, where the scopes came
-// from, and which launch context applies — are exactly what a reader compares. The
+// `issueTokens`, and the parts that differ - the grant type, where the scopes came
+// from, and which launch context applies - are exactly what a reader compares. The
 // shared judgements have already been factored out into `./subject.ts`, `./audit.ts`
 // and `./issuanceRefusals.ts`; what remains is the call itself.
 import { parseScopes, verifyPkce } from "@signet/core";

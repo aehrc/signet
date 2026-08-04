@@ -6,8 +6,10 @@
  * mistyped, would silently widen to the wrong shape.
  *
  * Both throw when used outside their layout. That is a programming error rather than
- * a runtime condition — a page can only be reached through its layout — and throwing
+ * a runtime condition - a page can only be reached through its layout - and throwing
  * gives the mistake a name instead of an `undefined` several lines later.
+ *
+ * Author: John Grimes
  */
 
 import { useOutletContext } from "react-router";
@@ -37,8 +39,8 @@ export function useEndpointContext(): EndpointContext {
  * Whether a role is at least the one required.
  *
  * The same total order the server enforces, restated here for one purpose: hiding a
- * control the caller may not use. It is not a security check — the API refuses
- * regardless — but showing a viewer a "Delete" button that always fails is a worse
+ * control the caller may not use. It is not a security check - the API refuses
+ * regardless - but showing a viewer a "Delete" button that always fails is a worse
  * interface than not showing it.
  *
  * @param held - The role the caller holds in this tenant.

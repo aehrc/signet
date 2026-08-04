@@ -20,6 +20,8 @@
  * problem and never the credential. The uniform code is deliberate: telling a
  * caller apart "no such client" from "wrong secret" is a client-enumeration
  * oracle.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -307,7 +309,7 @@ async function verifySecret(
 /**
  * Collects the credential fields out of a parsed form body.
  *
- * All three authenticated endpoints — token, introspection and revocation — read
+ * All three authenticated endpoints - token, introspection and revocation - read
  * the same four fields, and each has to omit rather than nullify an absent one to
  * satisfy `exactOptionalPropertyTypes`. Doing that in one place keeps the three
  * handlers from drifting into accepting slightly different sets.

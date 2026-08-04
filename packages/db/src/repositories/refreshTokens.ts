@@ -6,7 +6,7 @@
  * detectable. A refresh token is a long-lived bearer credential with no proof of
  * possession, so if an attacker copies one, both parties hold something that
  * looks valid. Rotation guarantees that the second party to present it presents a
- * token that has already been consumed — and that observation is the only signal
+ * token that has already been consumed - and that observation is the only signal
  * available that the credential leaked.
  *
  * The response to that signal is to revoke the whole family, not just the token.
@@ -22,6 +22,8 @@
  *
  * @see https://datatracker.ietf.org/doc/html/rfc9700 (OAuth 2.0 Security Best
  *   Current Practice, refresh token protection)
+ *
+ * Author: John Grimes
  */
 
 import { and, desc, eq, gt, isNull, lte } from "drizzle-orm";
@@ -47,7 +49,7 @@ import type { SQL } from "drizzle-orm";
  * `familyId` is optional: omitting it starts a new family, which is what an
  * authorization-code grant does. {@link rotateRefreshToken} supplies the
  * predecessor's family instead, so a rotation can never accidentally begin a new
- * one — which would make the old token's reuse undetectable.
+ * one - which would make the old token's reuse undetectable.
  */
 export type RefreshTokenInput = Omit<
   NewRefreshToken,
@@ -103,7 +105,7 @@ export type RefreshTokenRedemption =
  * what makes reuse detectable at all: the token is spent the instant it is
  * accepted, so a second presentation cannot claim it, whatever happens next. If
  * issuing the successor then fails, the family survives with a revoked leaf and
- * no successor — the user must reauthorise, which is inconvenient and correct.
+ * no successor - the user must reauthorise, which is inconvenient and correct.
  * See `classifyRefreshTokenRefusal` for why that case is *not* treated as theft.
  *
  * On reuse, the whole family is revoked before returning.
@@ -159,7 +161,7 @@ export async function redeemRefreshToken(
  * would break the very property the family exists to provide.
  *
  * The successor's scopes may narrow but must never widen. That is a policy
- * judgement, made in `@signet/core` before this is called — the repository stores
+ * judgement, made in `@signet/core` before this is called - the repository stores
  * what it is given.
  */
 export async function rotateRefreshToken(
@@ -418,7 +420,7 @@ export async function listRefreshTokensForSubject(
  * An expired token cannot be redeemed by the conditional claim, so keeping it
  * protects nothing: a reuse attempt on an expired token is already refused. What
  * does matter is that a *live* family member is never deleted, or reuse detection
- * would lose its history — hence the predicate is on the row's own expiry and
+ * would lose its history - hence the predicate is on the row's own expiry and
  * nothing else.
  *
  * @returns How many rows were deleted.

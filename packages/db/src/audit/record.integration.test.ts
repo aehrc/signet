@@ -3,11 +3,13 @@
  *
  * The unit tests assert the SQL that keyset pagination generates; only a real
  * server can confirm that the row-value comparison and its casts actually page
- * without skipping or repeating a row — which is the whole point of paging this
+ * without skipping or repeating a row - which is the whole point of paging this
  * way, and the kind of thing that a plausible-looking predicate gets wrong.
  *
  * Skipped unless `SIGNET_TEST_DATABASE_URL` names a throwaway database. CI has
  * none yet, and a suite that tries to connect regardless would fail the build.
+ *
+ * Author: John Grimes
  */
 
 import { eq } from "drizzle-orm";

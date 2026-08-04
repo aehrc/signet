@@ -8,7 +8,7 @@
  *   principal in the request, and every handler below reads one.
  * - {@link withAdminTenant} turns `/tenants/:tenantSlug` into a `TenantScope`, which
  *   is the capability `@signet/db` requires before it will answer any question about
- *   tenant-owned data. A caller who is not a member of the named tenant gets a 404 —
+ *   tenant-owned data. A caller who is not a member of the named tenant gets a 404 -
  *   the same answer as for a tenant that does not exist, so the API cannot be used
  *   to enumerate tenant slugs.
  * - {@link withAdminEndpoint} narrows that scope to one endpoint.
@@ -20,6 +20,8 @@
  * Both credentials are presented as digests to the database. A session cookie and a
  * personal access token are hashed before they are looked up, so a disclosure of
  * either table yields nothing replayable.
+ *
+ * Author: John Grimes
  */
 
 import { endpointUrls } from "@signet/core";
@@ -126,7 +128,7 @@ export function withAdminPrincipal(
  * The two principal kinds reach a scope by different routes, and neither can
  * reach one they were not given. A person's scope comes from a membership join, so
  * a tenant with no `tenant_members` row for them is invisible. A token's scope is
- * the tenant the token names, and the path is checked against it — presenting a
+ * the tenant the token names, and the path is checked against it - presenting a
  * token for one tenant on another tenant's URL is refused rather than silently
  * acting on the token's own tenant, which would make a mistyped script quietly
  * modify the wrong deployment.
@@ -206,7 +208,7 @@ export function withAdminEndpoint(
  * Refuses the request unless the caller holds at least `minimum`.
  *
  * The comparison is `@signet/db`'s, which is a total order over the four roles
- * rather than a set of equality checks — see its documentation for why authority is
+ * rather than a set of equality checks - see its documentation for why authority is
  * a comparison here.
  *
  * @param minimum - The least authority the operation accepts.

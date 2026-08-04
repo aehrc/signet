@@ -3,13 +3,15 @@
  *
  * A textarea with the highlighted text rendered behind it, rather than a
  * contenteditable or an editor library. That keeps every behaviour the browser already
- * has — selection, undo, paste, a sane mobile keyboard — and costs one alignment
+ * has - selection, undo, paste, a sane mobile keyboard - and costs one alignment
  * constraint: the two layers must use the same font, size and whitespace handling, which
  * is why both carry the same typography classes.
  *
  * Validation runs on every change and is shown rather than enforced: an operator midway
  * through typing a rule has invalid text, and refusing to let them continue would be
  * absurd. The Save button is what the invalid state disables.
+ *
+ * Author: John Grimes
  */
 
 import { useMemo } from "react";

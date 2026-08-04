@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { z } from "zod";
 
 /**

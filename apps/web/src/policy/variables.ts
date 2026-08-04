@@ -3,12 +3,14 @@
  *
  * The inserter beside every claim value lists these, so nobody has to remember whether
  * it is `context.patient` or `launch.patient`. The list is written out rather than
- * derived, because the evaluation context is a type rather than a value at runtime —
+ * derived, because the evaluation context is a type rather than a value at runtime -
  * and because each entry needs a sentence saying what it holds, which a type cannot
  * carry.
  *
  * Kept beside the filters, which are the other half of the template language and are a
  * closed set the evaluator enforces.
+ *
+ * Author: John Grimes
  */
 
 import { TEMPLATE_FILTER_NAMES } from "@signet/core";
@@ -134,7 +136,7 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
   {
     path: "scope.resourceTypeSuffix",
     description:
-      "Inside a scope mapping only: `:Observation` for a typed scope, and empty for a wildcard — so one template covers both.",
+      "Inside a scope mapping only: `:Observation` for a typed scope, and empty for a wildcard - so one template covers both.",
     group: "scopes",
   },
   {

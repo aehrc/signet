@@ -8,9 +8,11 @@
  * types into the console's simulator, or seeds a persona with, is the flat part.
  *
  * One schema serves both the policy simulator and the launch simulator, because
- * they are the same question asked at two moments — "what would this context
- * produce?" and "make a handle carrying this context" — and two descriptions of it
+ * they are the same question asked at two moments - "what would this context
+ * produce?" and "make a handle carrying this context" - and two descriptions of it
  * would drift into a simulation that cannot be launched.
+ *
+ * Author: John Grimes
  */
 
 import { z } from "zod";

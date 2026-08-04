@@ -7,10 +7,12 @@
  * construction rather than by a conversion step.
  *
  * Saving creates a new version rather than editing one. That is what makes a rollback a
- * publish — republish the version before the mistake — and it is why the save panel shows
+ * publish - republish the version before the mistake - and it is why the save panel shows
  * a diff against what is currently live: publishing changes what every token from this
  * endpoint carries, and a confirmation dialogue that said "are you sure?" would be
  * asking about something the operator cannot see.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -177,7 +179,7 @@ function PolicyEditor({
           {mode === "code" ? (
             <Panel
               title="Document"
-              description="The policy as JSON — the form it takes in the database and over the API. Problems are listed beneath and do not stop you typing."
+              description="The policy as JSON - the form it takes in the database and over the API. Problems are listed beneath and do not stop you typing."
             >
               <CodeEditor
                 value={text}

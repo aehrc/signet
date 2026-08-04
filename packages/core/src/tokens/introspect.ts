@@ -2,6 +2,8 @@
  * Token introspection responses (RFC 7662) with the SMART additions.
  *
  * @see https://datatracker.ietf.org/doc/html/rfc7662
+ *
+ * Author: John Grimes
  */
 
 import { toTokenResponseContext } from "../launch/index.js";

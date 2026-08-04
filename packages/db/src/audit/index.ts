@@ -4,6 +4,8 @@
  * The module's guarantee is that everything reaching `audit_events.detail` has
  * been through {@link redactAuditDetail}. Nothing here exports a way to insert a
  * row without it.
+ *
+ * Author: John Grimes
  */
 
 export {

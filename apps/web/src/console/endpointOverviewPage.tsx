@@ -8,14 +8,16 @@
  * the generated HAPI interceptor for the case where the server needs code rather
  * than configuration.
  *
- * Then the settings that change behaviour — token lifetimes, how end users
+ * Then the settings that change behaviour - token lifetimes, how end users
  * authenticate, whether consent is remembered, and whether this is a production
  * endpoint. That last flag is the one that decides whether password-free personas
  * can be selected, so it is stated in words rather than left as a checkbox label.
  *
  * Then the capabilities. Each is a conformance claim published in
- * `.well-known/smart-configuration`, so turning one off is a promise withdrawn —
+ * `.well-known/smart-configuration`, so turning one off is a promise withdrawn -
  * which is why they are edited here rather than being buried in a settings dialog.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -84,7 +86,7 @@ export function EndpointOverviewPage() {
               Download interceptor
             </a>
             <p className="text-base-content/60 mt-1 text-xs">
-              HAPI reads no token by itself — its authorization interceptor is
+              HAPI reads no token by itself - its authorization interceptor is
               Java you write. This generates that file for this endpoint, so the
               two sides of the handshake cannot disagree.
             </p>
@@ -233,7 +235,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
           error={issues["status"]}
           options={[
             { value: "active", label: "Active" },
-            { value: "disabled", label: "Disabled — refuse authorizations" },
+            { value: "disabled", label: "Disabled - refuse authorizations" },
           ]}
         />
 
@@ -242,7 +244,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
           checked={isProduction}
           onChange={setIsProduction}
           disabled={disabled}
-          hint="Personas — accounts with no password — are only selectable when this is off. Leave it on unless this endpoint exists for a connectathon or a demonstration."
+          hint="Personas - accounts with no password - are only selectable when this is off. Leave it on unless this endpoint exists for a connectathon or a demonstration."
         />
 
         {isProduction === endpoint.isProduction ? null : (

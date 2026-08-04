@@ -2,12 +2,14 @@
  * The management endpoint and the developer portal, against a real database.
  *
  * The properties worth asserting are the ones that involve more than one table. That
- * withdrawing an app's access revokes the tokens it already holds — not just the consent —
+ * withdrawing an app's access revokes the tokens it already holds - not just the consent -
  * is the difference between "disconnect" meaning what a person expects and meaning
  * nothing for the next five minutes. That withdrawing one app leaves the others alone is
  * the mistake a broader `WHERE` clause would make. And that a tracking token is required
  * to follow a request up, and only reveals a client identifier once an administrator has
  * approved it.
+ *
+ * Author: John Grimes
  */
 
 import {

@@ -9,9 +9,11 @@
  * already resolved.
  *
  * `tenantId` is absent from every input type, so no update can move an endpoint
- * between tenants. That is not an operation with a safe implementation — the
+ * between tenants. That is not an operation with a safe implementation - the
  * endpoint's clients, keys, policies and audit history would all have to move
- * with it — and making it inexpressible is cheaper than making it correct.
+ * with it - and making it inexpressible is cheaper than making it correct.
+ *
+ * Author: John Grimes
  */
 
 import { and, eq } from "drizzle-orm";
@@ -33,7 +35,7 @@ import type {
  * The caller-supplied half of an endpoint.
  *
  * Every capability flag and TTL is included by construction rather than listed,
- * so a flag added to the schema is settable at creation without an edit here —
+ * so a flag added to the schema is settable at creation without an edit here -
  * while `tenantId` and the generated columns stay out of reach.
  */
 export type EndpointInput = Omit<
@@ -198,8 +200,8 @@ export async function getIdpConfig(
 /**
  * Creates or replaces the scoped endpoint's upstream IdP configuration.
  *
- * An endpoint federates to at most one provider — that is the shape of the table,
- * whose primary key is the endpoint — so this is an upsert rather than an insert
+ * An endpoint federates to at most one provider - that is the shape of the table,
+ * whose primary key is the endpoint - so this is an upsert rather than an insert
  * the caller has to know whether to make.
  */
 export async function upsertIdpConfig(

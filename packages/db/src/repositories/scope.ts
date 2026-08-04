@@ -1,5 +1,5 @@
 /**
- * Tenant and endpoint scopes — the primary defence against cross-tenant access.
+ * Tenant and endpoint scopes - the primary defence against cross-tenant access.
  *
  * Tenant isolation in Signet is a property of the type system, not of code
  * review. Every repository function that touches tenant-owned data requires a
@@ -12,8 +12,8 @@
  *
  * Postgres row-level security (`../rls.ts`) enforces the same property inside
  * the database, and is deliberately second. RLS depends on two runtime
- * conditions — that the application set a session variable, and that it
- * connected as a role which cannot bypass the policies — whereas these types
+ * conditions - that the application set a session variable, and that it
+ * connected as a role which cannot bypass the policies - whereas these types
  * fail the build. RLS catches the query written outside this directory; the
  * scope types catch the query written inside it.
  *
@@ -22,6 +22,8 @@
  * `endpoints` rather than off `tenants`: verifying the endpoint's ownership once,
  * when the scope is built, lets every subsequent query filter on `endpoint_id`
  * alone instead of joining back to `tenants` on every read.
+ *
+ * Author: John Grimes
  */
 
 import { and, eq, sql } from "drizzle-orm";
@@ -63,7 +65,7 @@ export interface EndpointScope extends TenantScope {
 /**
  * Proof that the caller is operating on one client of one endpoint.
  *
- * Every runtime table — codes, tokens, consents, the `jti` ledger — hangs off a
+ * Every runtime table - codes, tokens, consents, the `jti` ledger - hangs off a
  * client, and the writes into them happen deep inside a grant handler where the
  * endpoint is several frames away. Requiring this scope means an access token
  * cannot be recorded against a client that belongs to a different endpoint, and
@@ -228,7 +230,7 @@ export interface ResolvedClient {
  * The endpoint predicate is applied in SQL as well as being re-checked by
  * {@link clientScopeFromRow}: a client identifier registered on another
  * endpoint must read as unknown here, not as a client that then fails a later
- * check — the two are different error responses and different audit events.
+ * check - the two are different error responses and different audit events.
  *
  * The client's status is deliberately not filtered. A suspended client
  * presenting a valid secret must be told it is suspended, and that decision is
@@ -266,7 +268,7 @@ export interface ResolvedIssuer {
  * Resolves `/t/{tenantSlug}/e/{endpointSlug}` in a single round trip.
  *
  * Every OAuth request begins here, and every one of them needs the endpoint row
- * as well as the scope — its TTLs, capability flags and FHIR base URL. Resolving
+ * as well as the scope - its TTLs, capability flags and FHIR base URL. Resolving
  * the two separately would double the query count on the hottest path in the
  * server for no gain.
  */
@@ -299,13 +301,13 @@ export async function resolveIssuer(
  *
  * Conditional updates in this directory compare against `now()` inside SQL so
  * that there is no window between deciding an expiry and acting on it. When a
- * caller needs that same instant in TypeScript — to stamp an audit event that
- * must agree with the row it describes — it must come from the same source.
+ * caller needs that same instant in TypeScript - to stamp an audit event that
+ * must agree with the row it describes - it must come from the same source.
  */
 export async function databaseNow(db: Executor): Promise<Date> {
   // Asked for as epoch milliseconds rather than as a timestamp. `execute` runs
   // outside Drizzle's column mapping, so a `timestamptz` arrives in its Postgres
-  // text form — `2026-08-03 08:53:13.215+00`, which is not ISO 8601 and reaches
+  // text form - `2026-08-03 08:53:13.215+00`, which is not ISO 8601 and reaches
   // JavaScript as a string that only a lenient date parser will accept. An integer
   // has one spelling and no locale.
   const rows = await db.execute<{ epoch_ms: unknown }>(

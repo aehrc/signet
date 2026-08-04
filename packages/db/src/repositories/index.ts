@@ -4,7 +4,7 @@
  * Import from here rather than from the individual modules. The one thing worth
  * knowing before reading any of them: no function that touches tenant-owned data
  * takes a tenant identifier. They take a `TenantScope`, `EndpointScope` or
- * `ClientScope` — branded values that cannot be constructed outside `./scope.ts` —
+ * `ClientScope` - branded values that cannot be constructed outside `./scope.ts` -
  * so a caller has to prove which tenant it is in before it can ask a question, and
  * "forgot to filter by tenant" is not an expressible mistake.
  *
@@ -12,12 +12,14 @@
  * something:
  *
  * - `resolveIssuer` / `resolveTenantScope`, from a URL, for the OAuth endpoints.
- * - `resolveTenantScopeForMember`, which requires a `tenant_members` row — the
+ * - `resolveTenantScopeForMember`, which requires a `tenant_members` row - the
  *   console's authorisation check.
  * - `findLiveApiToken`, which requires an unrevoked, unexpired token naming the
  *   tenant.
  * - `endpointScopeFromRow` / `clientScopeFromRow`, which narrow an existing scope
  *   and throw if the row does not belong to it.
+ *
+ * Author: John Grimes
  */
 
 export * from "./accessTokens.js";

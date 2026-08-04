@@ -1,5 +1,5 @@
 /**
- * The `client_credentials` grant — SMART Backend Services.
+ * The `client_credentials` grant - SMART Backend Services.
  *
  * No user, no launch context, no consent: a backend service acts as itself, so the
  * token's `sub` is the client id and the only `system/` scopes it can obtain are the
@@ -9,12 +9,14 @@
  *
  * Unlike the other two grants, the requested scopes come from the request body,
  * because there is no earlier step to have recorded them. The client's allowlist is
- * therefore checked here — at `/authorize` it is checked as part of validating the
+ * therefore checked here - at `/authorize` it is checked as part of validating the
  * request, and a backend service never visits `/authorize`.
  *
  * A refresh token is never issued. SMART Backend Services says so, and it is the
  * right rule: a client that can mint a fresh assertion whenever it likes has no use
  * for a long-lived credential it would then have to store.
+ *
+ * Author: John Grimes
  */
 
 import { areScopesCoveredBy, parseScopes } from "@signet/core";
@@ -76,7 +78,7 @@ export async function clientCredentialsGrant(
 
   // The allowlist check that `/authorize` performs for interactive clients. A
   // backend service never visits `/authorize`, so without this its only ceiling
-  // would be the policy — and the allowlist is the per-client ceiling an operator
+  // would be the policy - and the allowlist is the per-client ceiling an operator
   // edits, while the policy is shared by the endpoint.
   const allowed = parseScopes(client.allowedScopes.join(" ")).scopes;
   if (!areScopesCoveredBy(parsed.scopes, allowed)) {

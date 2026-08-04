@@ -2,8 +2,10 @@
  * Tenancy and administrative identity.
  *
  * A tenant owns endpoints; an admin user is a person, and may be a member of
- * several tenants. Every credential in this file is stored as a hash — Signet
+ * several tenants. Every credential in this file is stored as a hash - Signet
  * holds no bearer secret it could hand back.
+ *
+ * Author: John Grimes
  */
 
 import { sql } from "drizzle-orm";

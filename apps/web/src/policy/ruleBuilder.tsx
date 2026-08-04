@@ -2,8 +2,8 @@
  * The builder: the policy as a list of cards.
  *
  * This is the mode most operators should live in. Nothing here is typed except free
- * text — scope patterns are pickers, contexts and grant types are selects, and claim
- * values have an inserter listing the template variables — so the classes of mistake
+ * text - scope patterns are pickers, contexts and grant types are selects, and claim
+ * values have an inserter listing the template variables - so the classes of mistake
  * the code view allows are not expressible.
  *
  * Two decisions run through it.
@@ -16,8 +16,10 @@
  * A rule the builder cannot represent is rendered read-only rather than approximated. A
  * grant rule whose `match` carries search parameters, or a claim rule whose condition
  * combines fields the cards do not offer, is shown as its JSON with a note to edit it in
- * the code view — so the builder never silently drops or rewrites part of a policy it
+ * the code view - so the builder never silently drops or rewrites part of a policy it
  * did not fully understand.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -69,7 +71,7 @@ const LIST_DESCRIPTIONS: Readonly<
   contextRules: {
     title: "Response parameters",
     description:
-      "What accompanies the token in the response body rather than inside it — the launch context an app reads to know which patient it was opened for.",
+      "What accompanies the token in the response body rather than inside it - the launch context an app reads to know which patient it was opened for.",
   },
 };
 

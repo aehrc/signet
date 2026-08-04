@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 export { evaluatePolicy } from "./evaluate.js";
 export {
   parseScopePattern,

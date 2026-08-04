@@ -24,7 +24,7 @@ adding a rule rather than by remembering to remove one.
 
 [Pathling authorization](https://pathling.csiro.au/docs/server/authorization).
 
-Pathling does not read SMART scopes. It authorizes off a Spring Security style
+Pathling does not read SMART scopes. It authorises off a Spring Security style
 `authorities` claim, and the rule that makes the mapping non-obvious is that an
 operation authority is required _in addition to_ a read or write authority:
 `pathling:search` alone does not permit searching. So `patient/Observation.rs`
@@ -98,7 +98,7 @@ compartment. Use the baseline preset with it.
 Medplum [documents which SMART scopes it
 supports](https://www.medplum.com/docs/access/smart-scopes) and implements SMART
 App Launch as an authorization server itself. What it does not document is a
-contract for consuming a _third-party_ access token: its FHIR API authorizes off
+contract for consuming a _third-party_ access token: its FHIR API authorises off
 tokens Medplum issued, and its [external
 authentication](https://www.medplum.com/docs/auth/direct-external-auth) federates
 login rather than authorization.

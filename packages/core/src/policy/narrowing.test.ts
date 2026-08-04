@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { evaluatePolicy } from "./evaluate.js";
@@ -147,7 +151,7 @@ describe("narrowScopeToPattern", () => {
   });
 });
 
-describe("evaluatePolicy — narrowing", () => {
+describe("evaluatePolicy - narrowing", () => {
   it("degrades an over-broad request to read rather than granting nothing", () => {
     // The failure this prevents: an app asking for patient/*.cruds against a
     // read-only policy used to receive no data scopes at all, and would fail at
@@ -229,7 +233,7 @@ describe("evaluatePolicy — narrowing", () => {
   });
 });
 
-describe("evaluatePolicy — narrowing cannot escape an explicit deny", () => {
+describe("evaluatePolicy - narrowing cannot escape an explicit deny", () => {
   const withDeny: PolicyDocument = {
     version: 1,
     scopeGrants: [

@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { argon2id } from "hash-wasm";
 import { describe, expect, it } from "vitest";
 

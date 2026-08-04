@@ -3,12 +3,14 @@
  *
  * Every slug is percent-encoded on the way in. A tenant or endpoint slug is
  * constrained to lower-case alphanumerics and hyphens by the API, so in practice
- * encoding changes nothing — but a client identifier is not, and neither is an
+ * encoding changes nothing - but a client identifier is not, and neither is an
  * audit filter value. Encoding everything means the rule is "paths are built here",
  * with no exceptions to remember.
  *
  * Pure and tested, because a path built wrongly fails as a 404 that looks like
  * missing data rather than as a mistake.
+ *
+ * Author: John Grimes
  */
 
 /** Where the admin API is mounted. */

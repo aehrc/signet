@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import js from "@eslint/js";
 import vitest from "@vitest/eslint-plugin";
 import importPlugin from "eslint-plugin-import";
@@ -215,7 +219,7 @@ export default tseslint.config(
     files: ["packages/db/**/*.ts"],
     rules: {
       // Drizzle's insert builder exposes `.values()`, which this rule mistakes
-      // for `Array#values()` and reports as a discarded return — the builder is
+      // for `Array#values()` and reports as a discarded return - the builder is
       // awaited, so the finding is spurious throughout the package.
       "unicorn/no-unused-array-method-return": "off",
     },

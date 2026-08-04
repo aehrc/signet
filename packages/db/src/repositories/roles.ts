@@ -2,11 +2,13 @@
  * What a tenant role is allowed to do.
  *
  * The four roles form a total order, so authority is a comparison rather than a
- * matrix. Keeping that comparison here — pure, exhaustive over the enum, and unit
- * tested — means an endpoint that requires `admin` cannot be satisfied by a
+ * matrix. Keeping that comparison here - pure, exhaustive over the enum, and unit
+ * tested - means an endpoint that requires `admin` cannot be satisfied by a
  * `developer` because someone wrote `!==` where they meant `<`. The rank values
  * themselves are never persisted; only the role name is, so the ordering can be
  * changed without a migration.
+ *
+ * Author: John Grimes
  */
 
 import type { TenantMember } from "../schema/tenancy.js";
@@ -20,7 +22,7 @@ export type TenantRole = TenantMember["role"];
  * Written as an exhaustive `Record` so that adding a role to the enum without
  * deciding where it ranks is a compile error. A new role silently ranking at
  * zero would be granted nothing, which is safe, but ranking by accident at the
- * top would not — and the type system cannot tell the difference, so it refuses
+ * top would not - and the type system cannot tell the difference, so it refuses
  * both.
  */
 const ROLE_RANK: Readonly<Record<TenantRole, number>> = {
@@ -75,7 +77,7 @@ export interface MembershipSummary {
  * Whether a change would leave a tenant with no owner.
  *
  * A tenant with no owner cannot grant membership to anybody, so it is
- * permanently unadministrable — the only remedy is a platform operator editing
+ * permanently unadministrable - the only remedy is a platform operator editing
  * the database. Removal and demotion are the same hazard, so they are the same
  * check: `nextRole` is null for a removal and the new role for a change.
  *

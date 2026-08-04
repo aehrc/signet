@@ -4,12 +4,14 @@
  * The distinction is the whole point of the page, so it is stated rather than
  * implied: a local account has a password and signs in; a persona has none and is
  * chosen from a picker. Personas are only *selectable* on a non-production endpoint,
- * which is a property of the endpoint rather than of the persona — so the page says
+ * which is a property of the endpoint rather than of the persona - so the page says
  * so where it matters instead of hiding the option.
  *
  * Disabling is offered before deleting. A disabled account stops authenticating on
  * the next request and keeps its name attached to its audit trail; deleting takes
  * that away along with the consents it granted.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";

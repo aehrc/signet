@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { expect, test } from "@playwright/test";
 
 import { CONSOLE_STORAGE_STATE, SEED, SIGNET } from "../support/stack.js";

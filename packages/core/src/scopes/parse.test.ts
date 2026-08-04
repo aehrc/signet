@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { parseScope, parseScopes } from "./parse.js";
@@ -36,7 +40,7 @@ function rejection(raw: string): string {
   return result.code;
 }
 
-describe("parseScope — resource scopes", () => {
+describe("parseScope - resource scopes", () => {
   it("parses each access context", () => {
     expect(resource("patient/Observation.rs").context).toBe("patient");
     expect(resource("user/Observation.rs").context).toBe("user");
@@ -83,10 +87,10 @@ describe("parseScope — resource scopes", () => {
   });
 });
 
-describe("parseScope — permission suffix validation", () => {
+describe("parseScope - permission suffix validation", () => {
   it("rejects out-of-order permissions rather than silently reordering them", () => {
     // The spec permits rejection, and reordering would grant a set the client
-    // never wrote — the wrong default for an authorization server.
+    // never wrote - the wrong default for an authorization server.
     expect(rejection("patient/Observation.dus")).toBe("unordered-permissions");
     expect(rejection("patient/Observation.sr")).toBe("unordered-permissions");
     expect(rejection("patient/Observation.rc")).toBe("unordered-permissions");
@@ -108,7 +112,7 @@ describe("parseScope — permission suffix validation", () => {
   });
 });
 
-describe("parseScope — SMART v1 compatibility", () => {
+describe("parseScope - SMART v1 compatibility", () => {
   it("normalises .read to .rs", () => {
     expect(resource("patient/Observation.read").permissions).toEqual([
       "r",
@@ -151,7 +155,7 @@ describe("parseScope — SMART v1 compatibility", () => {
   });
 });
 
-describe("parseScope — search parameter restrictions", () => {
+describe("parseScope - search parameter restrictions", () => {
   it("parses a single restriction", () => {
     const scope = resource(
       "patient/Observation.rs?category=http://terminology.hl7.org/CodeSystem/observation-category|laboratory",
@@ -198,7 +202,7 @@ describe("parseScope — search parameter restrictions", () => {
   });
 });
 
-describe("parseScope — launch scopes", () => {
+describe("parseScope - launch scopes", () => {
   it("parses the bare launch scope used in an EHR launch", () => {
     expect(parsed("launch")).toEqual({ kind: "launch" });
   });
@@ -236,7 +240,7 @@ describe("parseScope — launch scopes", () => {
   });
 });
 
-describe("parseScope — identity and refresh scopes", () => {
+describe("parseScope - identity and refresh scopes", () => {
   it("parses OpenID Connect scopes", () => {
     expect(parsed("openid")).toEqual({ kind: "identity", name: "openid" });
     expect(parsed("fhirUser")).toEqual({ kind: "identity", name: "fhirUser" });
@@ -255,7 +259,7 @@ describe("parseScope — identity and refresh scopes", () => {
   });
 });
 
-describe("parseScope — extension scopes", () => {
+describe("parseScope - extension scopes", () => {
   it("passes through double-underscore experimental scopes", () => {
     expect(parsed("__profilePhoto.manage")).toEqual({
       kind: "custom",
@@ -273,7 +277,7 @@ describe("parseScope — extension scopes", () => {
   });
 });
 
-describe("parseScope — rejections", () => {
+describe("parseScope - rejections", () => {
   it("rejects an empty scope", () => {
     expect(rejection("")).toBe("empty");
   });

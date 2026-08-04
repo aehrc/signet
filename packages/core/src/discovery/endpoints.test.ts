@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { endpointUrls, normaliseIssuer } from "./endpoints.js";

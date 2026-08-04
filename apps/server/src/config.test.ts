@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { ConfigError, loadConfig, type Environment } from "./config.js";
@@ -14,7 +18,7 @@ function env(overrides: Environment = {}): Environment {
   };
 }
 
-describe("loadConfig — defaults", () => {
+describe("loadConfig - defaults", () => {
   it("resolves a minimal valid environment", () => {
     expect(loadConfig(env())).toEqual({
       port: 3000,
@@ -64,7 +68,7 @@ describe("loadConfig — defaults", () => {
   });
 });
 
-describe("loadConfig — public URL", () => {
+describe("loadConfig - public URL", () => {
   it("strips trailing slashes so issuers concatenate predictably", () => {
     expect(
       loadConfig(env({ SIGNET_PUBLIC_URL: "https://s.example.org/" }))
@@ -108,7 +112,7 @@ describe("loadConfig — public URL", () => {
   });
 });
 
-describe("loadConfig — database from discrete parts", () => {
+describe("loadConfig - database from discrete parts", () => {
   // This is the shape the Helm chart uses with the bundled PostgreSQL subchart,
   // where the password comes from the subchart's own secret.
   const parts: Environment = {
@@ -173,7 +177,7 @@ describe("loadConfig — database from discrete parts", () => {
   });
 });
 
-describe("loadConfig — database validation", () => {
+describe("loadConfig - database validation", () => {
   it("rejects supplying both a URL and discrete parts", () => {
     expect(() =>
       loadConfig(
@@ -193,7 +197,7 @@ describe("loadConfig — database validation", () => {
   });
 });
 
-describe("loadConfig — master key", () => {
+describe("loadConfig - master key", () => {
   it("is required", () => {
     expect(() => loadConfig(env({ SIGNET_MASTER_KEY: undefined }))).toThrow(
       /SIGNET_MASTER_KEY is required/,
@@ -213,7 +217,7 @@ describe("loadConfig — master key", () => {
   });
 });
 
-describe("loadConfig — log level", () => {
+describe("loadConfig - log level", () => {
   it.each(["debug", "info", "warn", "error"])("accepts %s", (level) => {
     expect(loadConfig(env({ SIGNET_LOG_LEVEL: level })).logLevel).toBe(level);
   });

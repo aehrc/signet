@@ -8,13 +8,15 @@
  *
  * The endpoint's client-type flags are enforced here rather than left to the token
  * endpoint. An endpoint that does not allow public clients should refuse to register
- * one, not register it and then refuse every authorization it attempts — the second
+ * one, not register it and then refuse every authorization it attempts - the second
  * produces a client that appears configured and never works.
  *
  * Approving a registration request registers a client from the *administrator's*
  * body, not from the developer's payload. The payload is retained verbatim as the
  * record of what was asked for, so narrowing a scope or correcting a redirect URI at
  * approval time leaves the difference visible.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -307,7 +309,7 @@ export function registerClientRoutes(
   /**
    * Edits a client.
    *
-   * Suspending one — `status: "suspended"` — also revokes its live tokens. A
+   * Suspending one - `status: "suspended"` - also revokes its live tokens. A
    * suspension that left issued tokens working would take effect only at the next
    * token request, which for a backend service holding a five-minute token is not
    * what an operator means by "suspend".
@@ -434,7 +436,7 @@ export function registerClientRoutes(
    * Deletes a client.
    *
    * Cascades to its tokens, consents and codes. Suspending is usually what an
-   * operator wants — it is reversible and keeps the registration visible — and the
+   * operator wants - it is reversible and keeps the registration visible - and the
    * console says so, but a client registered by mistake should be removable.
    */
   router.delete(

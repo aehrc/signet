@@ -5,7 +5,7 @@
  * being typed. That is deliberate and it is what makes the flow safe: the scopes, the
  * redirect URI and the PKCE challenge all live in the `authorization_sessions` row, and
  * every response says which step the session is *actually* on. So a page cannot advance
- * the flow by claiming to — it posts, and renders whatever it is told next.
+ * the flow by claiming to - it posts, and renders whatever it is told next.
  *
  * The session identifier is in the query string. It is not a credential: reading a
  * session tells the caller what the app asked for, which the app already knows, and
@@ -13,7 +13,9 @@
  *
  * These pages are the only part of Signet whose audience is a patient or a clinician
  * rather than a developer, so they carry no console chrome and every scope is translated
- * into a sentence — see `./scopeDescriptions.js`.
+ * into a sentence - see `./scopeDescriptions.js`.
+ *
+ * Author: John Grimes
  */
 
 import { useEffect, useState } from "react";
@@ -64,13 +66,13 @@ function useInteractionRoute(): InteractionRoute | undefined {
  * Keeps the browser on the page the server says the flow is on.
  *
  * Two destinations. A `complete` or `denied` step carries a redirect out of Signet
- * altogether — to the app, with a code or with `access_denied` — and that is a full
+ * altogether - to the app, with a code or with `access_denied` - and that is a full
  * navigation. Any other step belongs on one of the three pages, and moving between them
  * is a client-side navigation carrying the session identifier, so a reload lands where
  * the flow actually is.
  *
- * A legitimate effect either way: it synchronises an external system — the browser's
- * location — with what the server said, and sets no React state.
+ * A legitimate effect either way: it synchronises an external system - the browser's
+ * location - with what the server said, and sets no React state.
  *
  * @param state - The interaction state, once it has loaded.
  * @param sessionId - The authorization session's identifier.
@@ -102,7 +104,7 @@ function useFollowFlow(
 /**
  * Everything an interaction page needs: the state, and the way to advance it.
  *
- * One hook rather than three call sites repeating the same four arguments — and the
+ * One hook rather than three call sites repeating the same four arguments - and the
  * empty-string fallbacks are safe because a page with no route renders
  * {@link MissingSession} before any of this is used.
  */
@@ -124,8 +126,8 @@ function useInteractionPage(route: InteractionRoute | undefined) {
 /**
  * The shell's props for a page, derived from what it has loaded.
  *
- * All three pages frame themselves the same way — the state, the failure that stops it
- * rendering, a title, and a subtitle naming the app — and the only difference is the
+ * All three pages frame themselves the same way - the state, the failure that stops it
+ * rendering, a title, and a subtitle naming the app - and the only difference is the
  * wording. Deriving it means the "is this failure fatal?" decision is made once.
  *
  * @param state - The interaction state, once it has loaded.
@@ -458,7 +460,7 @@ export function ConsentPage() {
       {state !== undefined && includesWrites(state.requestedScopes) ? (
         <InfoAlert>
           Some of this permits the app to add to, change or delete information
-          in your record — not only to read it.
+          in your record - not only to read it.
         </InfoAlert>
       ) : null}
 

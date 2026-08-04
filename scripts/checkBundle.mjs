@@ -1,8 +1,12 @@
+/**
+ * Author: John Grimes
+ */
+
 // Fails when a bundle imports anything that is not a Node builtin.
 //
 // The runtime container ships no `node_modules`: the server is bundled into a
 // single self-contained file. Anything left external at runtime would resolve to
-// nothing and crash on startup, so this runs as a Docker build step — a
+// nothing and crash on startup, so this runs as a Docker build step - a
 // dependency that cannot be bundled fails the build rather than the deployment.
 //
 // Bare builtin specifiers count as builtins. The Postgres driver imports `crypto`

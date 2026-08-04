@@ -12,6 +12,8 @@
  * redirect URI, because it is derived from the endpoint's own issuer - a
  * configurable one would be a field an operator has to keep in step with a value
  * Signet already knows.
+ *
+ * Author: John Grimes
  */
 
 import { z } from "zod";

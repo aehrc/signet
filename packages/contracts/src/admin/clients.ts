@@ -5,8 +5,10 @@
  * refuses the combinations that cannot work rather than leaving them to fail at
  * the token endpoint: a public client with a secret, an asymmetric client with no
  * keys, and a client offering both an inline JWKS and a `jwks_uri` are all
- * rejected here. The last is not merely redundant — with two key sources there is
+ * rejected here. The last is not merely redundant - with two key sources there is
  * no answer to "which one was the assertion verified against?".
+ *
+ * Author: John Grimes
  */
 
 import { z } from "zod";
@@ -111,8 +113,8 @@ function checkCredentials(
 /**
  * Registering a client.
  *
- * `clientId` may be supplied — a connectathon usually wants a memorable one, and
- * an app being migrated has one already — and is otherwise generated. A
+ * `clientId` may be supplied - a connectathon usually wants a memorable one, and
+ * an app being migrated has one already - and is otherwise generated. A
  * symmetric client's secret is likewise generated unless given, and either way is
  * returned exactly once.
  */
@@ -171,7 +173,7 @@ export const clientRequestSchema = z.object({
  * An administrator's decision on a request.
  *
  * An approval carries the client to register, because the administrator may
- * narrow what was asked for — trimming a scope, correcting a redirect URI — and
+ * narrow what was asked for - trimming a scope, correcting a redirect URI - and
  * the request payload is retained verbatim so the difference stays visible.
  */
 export const clientRequestDecisionSchema = z.object({

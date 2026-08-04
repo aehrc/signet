@@ -9,20 +9,22 @@
  * accepted", which is all a legitimate user needs and all an attacker should get.
  *
  * The one deliberate exception is the second factor. When the password is right and
- * a TOTP code is required but absent, the response says so — with a distinct
- * `totpRequired` flag rather than a different message — because the console has to
+ * a TOTP code is required but absent, the response says so - with a distinct
+ * `totpRequired` flag rather than a different message - because the console has to
  * know to show the field. That does disclose that the password was correct, which
  * is unavoidable in any interface that asks for a second factor on a second screen,
  * and the code itself still has to be right.
  *
  * Sign-in events are recorded in the audit trail of every tenant the account
- * belongs to. `audit_events.tenant_id` is not nullable — deliberately, so that
- * reading a tenant's trail cannot surface another tenant's events — and a console
+ * belongs to. `audit_events.tenant_id` is not nullable - deliberately, so that
+ * reading a tenant's trail cannot surface another tenant's events - and a console
  * identity is not tenant-scoped, so there is no single tenant to attribute a login
  * to. Writing it to each of them is what makes "who signed in and could have
  * changed my configuration?" answerable from within a tenant. A refused sign-in for
  * an email that resolves to no account has no tenant at all, and so is recorded
  * only in the process log.
+ *
+ * Author: John Grimes
  */
 
 import { adminLoginSchema } from "@signet/contracts";
@@ -117,7 +119,7 @@ async function recordAuthenticationEvent(
 /**
  * Names why a sign-in was refused, for the audit trail only.
  *
- * The caller is told none of this — every refusal returns the same body — so this
+ * The caller is told none of this - every refusal returns the same body - so this
  * exists to make the trail useful to the operator reading it afterwards: "disabled
  * account" and "wrong password" call for quite different responses.
  *
@@ -284,8 +286,8 @@ export function adminLoginHandler(context: ServerContext) {
 /**
  * Handles `DELETE /api/v1/session`: signs out.
  *
- * Revoking is idempotent from the caller's point of view — the cookie is cleared
- * either way — but the data layer distinguishes the two, and only a session that
+ * Revoking is idempotent from the caller's point of view - the cookie is cleared
+ * either way - but the data layer distinguishes the two, and only a session that
  * was live produces an audit event.
  *
  * @param context - The server's dependencies.

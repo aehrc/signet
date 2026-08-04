@@ -4,6 +4,8 @@
  * The property under test is the one the module header claims: a caller cannot skip a
  * step, and cannot influence what was recorded at `/authorize`. Each negative case
  * here is an attempt to do one of those.
+ *
+ * Author: John Grimes
  */
 
 import { getAuthorizationSession, listConsentsForEndUser } from "@signet/db";
@@ -177,7 +179,7 @@ describeWithDatabase("the interaction API", () => {
     });
 
     // The harness endpoint is non-production, which permits an identifier outside the
-    // user's list — but not one that is not a FHIR id at all.
+    // user's list - but not one that is not a FHIR id at all.
     const malformed = await selectContext(stack, session, {
       patient: "not a patient id",
     });

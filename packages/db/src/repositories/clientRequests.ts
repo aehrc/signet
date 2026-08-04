@@ -7,6 +7,8 @@
  * and the transaction returns `already-decided`. A read-then-write would have
  * registered the app twice, with two client identifiers and two secrets, only one
  * of which the developer would ever be shown.
+ *
+ * Author: John Grimes
  */
 
 import { and, desc, eq } from "drizzle-orm";
@@ -103,8 +105,8 @@ export async function getClientRequest(
 /**
  * Reads a request by the token the developer was given for it.
  *
- * The developer portal is not an authenticated surface — somebody asking for a client has
- * no account yet — so this is how a submission is followed up: the identifier says which
+ * The developer portal is not an authenticated surface - somebody asking for a client has
+ * no account yet - so this is how a submission is followed up: the identifier says which
  * request, and the token proves it is the one the caller filed. Both are required, and the
  * token is compared as a digest, so a leaked identifier alone reveals nothing.
  *
@@ -156,7 +158,7 @@ export interface DecisionInput {
 /**
  * Claims a pending request for a decision.
  *
- * Returns the claimed row, or undefined when the guard did not hold — which is
+ * Returns the claimed row, or undefined when the guard did not hold - which is
  * the same statement doing the deciding and the acting, so no two callers can
  * both claim it.
  */

@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import {
   PERMISSION_ORDER,
   type Permission,
@@ -334,7 +338,7 @@ export interface ParseScopesResult {
  * Parses a space-delimited scope string, as sent in an OAuth `scope` parameter.
  *
  * Unparseable entries are collected in `rejected` rather than throwing, because
- * the spec allows a server to ignore scopes it does not understand — but Signet
+ * the spec allows a server to ignore scopes it does not understand - but Signet
  * still needs to audit what it dropped.
  *
  * @param raw - The raw `scope` parameter value.

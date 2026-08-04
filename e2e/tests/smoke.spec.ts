@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { expect, test } from "@playwright/test";
 
 // A deliberately thin suite for now: it proves the harness and the deployed

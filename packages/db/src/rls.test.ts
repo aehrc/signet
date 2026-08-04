@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { getTableName, is } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
@@ -114,7 +118,7 @@ describe("rowLevelSecurityStatements", () => {
 
   it("asks for the missing-setting case to yield null rather than raise", () => {
     // The `true` second argument is what makes an unset variable produce NULL,
-    // and a NULL comparison is not true — so a connection that forgot to set the
+    // and a NULL comparison is not true - so a connection that forgot to set the
     // tenant sees nothing instead of everything.
     const policies = statements.filter((statement) =>
       statement.startsWith("create policy"),

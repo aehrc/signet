@@ -4,7 +4,7 @@
  *
  * Everything else in Signet is reachable through the console or the admin API, and
  * both require a membership of a tenant. Creating the first one therefore cannot be a
- * tenant operation — there is no tenant yet, and no account to authenticate as — so
+ * tenant operation - there is no tenant yet, and no account to authenticate as - so
  * it is a command run against the database instead. That is also why it is not a
  * public signup route: a deployment fronting somebody's clinical data should not
  * accept a self-service tenant from anybody who can reach the port.
@@ -16,6 +16,8 @@
  *
  * The password is read from the environment rather than taken as an argument, because
  * an argument is visible in `ps` and in shell history.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -60,7 +62,7 @@ const MINIMUM_PASSWORD_LENGTH = 12;
  * @param env - The environment to read.
  * @param databaseUrl - The already-validated connection string.
  * @throws {Error} When a required variable is missing or the password is too short,
- *   naming the variable — a bootstrap that half-ran would leave a tenant nobody can
+ *   naming the variable - a bootstrap that half-ran would leave a tenant nobody can
  *   sign in to.
  */
 export function bootstrapOptionsFrom(
@@ -101,7 +103,7 @@ async function readTenant(
 ): Promise<Tenant | undefined> {
   const scope = await resolveTenantScope(db, slug);
   // The scope proves the row exists but carries only its identifiers, so the row
-  // itself is read through it — which is also the only way to obtain one here.
+  // itself is read through it - which is also the only way to obtain one here.
   return scope === undefined ? undefined : await getTenant(db, scope);
 }
 

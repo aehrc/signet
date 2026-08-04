@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({

@@ -13,6 +13,8 @@
  * because the callback URL is per-endpoint and a state presented to the wrong one
  * would otherwise complete a sign-in against a set of accounts it was never
  * authorised for.
+ *
+ * Author: John Grimes
  */
 
 import { and, eq, gt, isNull } from "drizzle-orm";

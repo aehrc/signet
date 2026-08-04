@@ -2,7 +2,7 @@
  * The integration harness: a real Postgres, the real Hono app, no socket.
  *
  * The unit tests cover every pure judgement the OAuth layer makes. What they cannot
- * cover is the wiring — that `/authorize` writes the session the token endpoint later
+ * cover is the wiring - that `/authorize` writes the session the token endpoint later
  * reads, that a replayed code is refused by the database rather than by an `if`, that
  * a policy version is resolved through a scope that proves which tenant asked. Those
  * are properties of the composition, so they are asserted against the composition:
@@ -16,6 +16,8 @@
  * afterwards, rather than by truncating. Vitest runs files in parallel, and a suite
  * that emptied shared tables would break whichever file happened to be running beside
  * it.
+ *
+ * Author: John Grimes
  */
 
 import { SMART_BASELINE_PRESET } from "@signet/core";
@@ -441,8 +443,8 @@ export async function createTestStack(
 /**
  * Recovers a generated private key as a JWK, for a test that must sign as a client.
  *
- * The harness stores client keys the same way an operator would register them —
- * public half inline, private half never persisted — so the private half has to come
+ * The harness stores client keys the same way an operator would register them -
+ * public half inline, private half never persisted - so the private half has to come
  * back out of the envelope it was generated into.
  */
 async function decryptedJwk(

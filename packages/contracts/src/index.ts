@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 export * from "./admin/index.js";
 export * from "./interaction.js";
 export * from "./launchContext.js";

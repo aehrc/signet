@@ -9,6 +9,8 @@
  * Rotating the secret invalidates the old one immediately. There is no overlap
  * window: two live secrets would mean a leaked one stays usable for as long as the
  * rollout takes.
+ *
+ * Author: John Grimes
  */
 
 import { useState } from "react";
@@ -55,7 +57,7 @@ import { changedFields, parseList, parseScopeList } from "../forms/lists.js";
  * @param hasSecret - Whether a secret is set.
  */
 function secretDescription(hasSecret: boolean): string {
-  return hasSecret ? " — secret set" : " — no secret set";
+  return hasSecret ? " - secret set" : " - no secret set";
 }
 
 /** One client's detail page. */
@@ -180,9 +182,9 @@ export function ClientDetailPage() {
               { value: "active", label: "Active" },
               {
                 value: "suspended",
-                label: "Suspended — revokes its live tokens",
+                label: "Suspended - revokes its live tokens",
               },
-              { value: "pending", label: "Pending — cannot obtain a token" },
+              { value: "pending", label: "Pending - cannot obtain a token" },
               { value: "rejected", label: "Rejected" },
             ]}
             hint="Suspending revokes the access and refresh tokens this client already holds, as well as refusing new ones."

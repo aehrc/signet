@@ -6,8 +6,8 @@
  * anything more modern because it needs no enrolment infrastructure: the
  * operator scans a QR code with an application they already have.
  *
- * The parameters are the interoperable ones — HMAC-SHA1, six digits, a
- * thirty-second step — because those are what every authenticator application
+ * The parameters are the interoperable ones - HMAC-SHA1, six digits, a
+ * thirty-second step - because those are what every authenticator application
  * actually implements. SHA-1 is not a weakness here: HMAC-SHA1 has no practical
  * break, and the value it protects is a six-digit code that expires in seconds.
  *
@@ -19,6 +19,8 @@
  * @see https://datatracker.ietf.org/doc/html/rfc6238
  * @see https://datatracker.ietf.org/doc/html/rfc4226
  * @see https://github.com/google/google-authenticator/wiki/Key-Uri-Format
+ *
+ * Author: John Grimes
  */
 
 import { createHmac } from "node:crypto";
@@ -39,7 +41,7 @@ const MODULUS = 10 ** DIGITS;
  * Length of a generated shared secret in bytes.
  *
  * 160 bits, which RFC 4226 section 4 recommends and which equals the HMAC-SHA1
- * block digest size — a longer secret would be hashed down and buy nothing.
+ * block digest size - a longer secret would be hashed down and buy nothing.
  * Base32-encodes to exactly 32 characters with no padding.
  */
 const SECRET_BYTES = 20;
@@ -57,7 +59,7 @@ const CODE_PATTERN = new RegExp(String.raw`^\d{${DIGITS}}$`);
 /**
  * Mints a shared secret for a new enrolment.
  *
- * @returns 160 bits of CSPRNG output as unpadded upper-case base32 — the form an
+ * @returns 160 bits of CSPRNG output as unpadded upper-case base32 - the form an
  *   authenticator application expects, whether scanned from a QR code or typed.
  */
 export function generateTotpSecret(): string {
@@ -109,7 +111,7 @@ function hotp(secret: Uint8Array, counter: number): string {
  * @param code - The code as typed by the user.
  * @param atSeconds - Unix time in seconds, supplied by the caller.
  * @param window - Steps of clock drift tolerated on each side. The default of 1
- *   accepts the previous, current and next code — RFC 6238 section 6's
+ *   accepts the previous, current and next code - RFC 6238 section 6's
  *   recommendation, and the smallest window that does not reject a user who
  *   started typing just before a step boundary. Pass 0 to accept only the
  *   current step.
@@ -146,7 +148,7 @@ export function verifyTotp(
       continue;
     }
     // Assigned unconditionally, and the comparison is evaluated first, so the
-    // whole window costs the same regardless of which step matched — or whether
+    // whole window costs the same regardless of which step matched - or whether
     // any did.
     matched = timingSafeEqual(hotp(secretBytes, counter), code) || matched;
   }

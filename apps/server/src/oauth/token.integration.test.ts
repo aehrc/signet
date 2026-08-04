@@ -7,6 +7,8 @@
  * travelled through a database row, a policy resolved through a scope that proves
  * which tenant asked, and a token signed by a key that was decrypted from its
  * envelope.
+ *
+ * Author: John Grimes
  */
 
 import { PATHLING_PRESET } from "@signet/core";
@@ -272,7 +274,7 @@ describeWithDatabase("the authorization_code grant", () => {
       await postForm(stack, "/token", {
         grant_type: "authorization_code",
         code,
-        // Registered, so it passes `/authorize`'s check — but not the one this code
+        // Registered, so it passes `/authorize`'s check - but not the one this code
         // was bound to.
         redirect_uri: "https://app.test/cb?x=1",
         code_verifier: verifier,
@@ -538,7 +540,7 @@ describeWithDatabase("the client_credentials grant", () => {
 
     // The whole point of the policy engine: SMART scopes in, vendor authorities out.
     // `pathling:export` comes with a system-context read, because `$export` is a
-    // whole-population read — see the preset's commentary.
+    // whole-population read - see the preset's commentary.
     expect(claims["authorities"]).toEqual([
       "pathling:read:Observation",
       "pathling:search",

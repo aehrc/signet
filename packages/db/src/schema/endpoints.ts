@@ -5,9 +5,11 @@
  * flags are stored as discrete boolean columns rather than a single JSONB blob,
  * deliberately: the set is closed by SMART App Launch 2.2.0, every flag is a
  * conformance claim published in `.well-known/smart-configuration`, and a
- * missing JSONB key would silently read as `false` — quietly withdrawing an
+ * missing JSONB key would silently read as `false` - quietly withdrawing an
  * advertised capability. Discrete columns make each flag a `NOT NULL DEFAULT`
  * with a visible migration, and let the console filter on them in SQL.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -240,7 +242,7 @@ export const idpConfigs = pgTable("idp_configs", {
   /**
    * AES-256-GCM envelope-encrypted under `SIGNET_MASTER_KEY`. Signet must be
    * able to present this credential upstream, so it is encrypted rather than
-   * hashed — the only category of secret here that is not one-way.
+   * hashed - the only category of secret here that is not one-way.
    */
   clientSecretEncrypted: text("client_secret_encrypted"),
   scopes: text("scopes").array().notNull().default(["openid", "profile"]),

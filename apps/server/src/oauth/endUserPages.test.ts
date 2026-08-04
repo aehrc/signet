@@ -1,3 +1,7 @@
+/**
+ * Author: John Grimes
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { END_USER_PAGES, isEndUserPagePath } from "./endUserPages.js";

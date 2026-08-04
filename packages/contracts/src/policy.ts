@@ -2,14 +2,16 @@
  * The policy document, as a Zod schema.
  *
  * The validation itself is not reimplemented here. `@signet/core` already owns it
- * — `validatePolicy` knows the scope-pattern grammar, the closed set of template
- * filters and which rule fields may appear together — and a second description of
+ * - `validatePolicy` knows the scope-pattern grammar, the closed set of template
+ * filters and which rule fields may appear together - and a second description of
  * the same document in Zod would be a second thing to keep in step, with the
  * failure mode that the API accepts a policy the evaluator then refuses.
  *
  * So this is an adapter: it runs the core validator and translates its issues
  * into Zod's, which is what lets a policy document sit inside a larger request
  * schema and produce one coherent error response.
+ *
+ * Author: John Grimes
  */
 
 import { validatePolicy } from "@signet/core";
@@ -18,8 +20,8 @@ import { z } from "zod";
 /**
  * Splits a core policy issue path into Zod path segments.
  *
- * Core reports paths in JavaScript accessor form — `claimRules[2].emit.patient_id`
- * — because that is what an operator sees in the code editor. Zod wants
+ * Core reports paths in JavaScript accessor form - `claimRules[2].emit.patient_id`
+ * - because that is what an operator sees in the code editor. Zod wants
  * `["claimRules", 2, "emit", "patient_id"]`, with array indices as numbers, so the
  * console can attach the message to the field the builder rendered.
  *

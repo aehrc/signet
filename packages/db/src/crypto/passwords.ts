@@ -14,6 +14,8 @@
  *
  * @see https://datatracker.ietf.org/doc/html/rfc9106
  * @see https://github.com/P-H-C/phc-string-format/blob/master/phc-sf-spec.md
+ *
+ * Author: John Grimes
  */
 
 import { argon2id } from "hash-wasm";
@@ -40,7 +42,7 @@ const VERSION = 19;
  * section 4's recommended configurations, and OWASP's current minimum for
  * Argon2id. `p=1` is deliberate: the WebAssembly build has no threads, so a
  * higher degree of parallelism costs the defender the same wall-clock time it
- * costs an attacker with real threads — it would weaken the ratio, not improve
+ * costs an attacker with real threads - it would weaken the ratio, not improve
  * it. Raising `m` or `t` is the way to buy more resistance, and
  * {@link needsRehash} exists so that raising them upgrades existing accounts on
  * their next successful login.
@@ -65,7 +67,7 @@ const HASH_BYTES = 32;
  *
  * `verifyPassword` has to honour whatever parameters a hash was minted with, but
  * it must not be turned into a weapon by them. Without an upper bound, a single
- * poisoned row — `m=4194304` — would make every login attempt against that
+ * poisoned row - `m=4194304` - would make every login attempt against that
  * account allocate four gibibytes; without a lower bound, a hash minted at
  * trivial cost would be verified as though it were sound. Anything outside these
  * bounds is treated as a malformed hash: verification fails and
@@ -187,7 +189,7 @@ function formatPhc(
  * Hashes a password for storage.
  *
  * @param password - The cleartext password. Never logged, never stored, and not
- *   length-limited here — password policy belongs to the caller.
+ *   length-limited here - password policy belongs to the caller.
  * @returns A self-describing PHC string carrying the variant, version,
  *   parameters and a fresh 16-byte random salt, so that the parameters can be
  *   raised later without invalidating a single existing hash.
@@ -243,7 +245,7 @@ export async function verifyPassword(
     return timingSafeEqual(encodeBase64(computed), parsed.hash);
   } catch {
     // The parameters are bounds-checked above, so reaching here means the
-    // WebAssembly module refused the input — an unusable hash, not a match.
+    // WebAssembly module refused the input - an unusable hash, not a match.
     return false;
   }
 }
@@ -258,7 +260,7 @@ export async function verifyPassword(
  * @param stored - The PHC string from the database.
  * @returns True when the hash is unparseable, uses a variant or version Signet
  *   no longer issues, or was minted with any cost parameter weaker than today's.
- *   A hash that is *stronger* than today's is left alone — this never downgrades
+ *   A hash that is *stronger* than today's is left alone - this never downgrades
  *   an account.
  */
 export function needsRehash(stored: string): boolean {

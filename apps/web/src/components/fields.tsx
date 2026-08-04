@@ -3,13 +3,15 @@
  *
  * Every field takes its error from the same place: the map of field paths the admin
  * API returns when a request fails validation. That is what lets the server own the
- * rules — a length limit, a URL format, the fact that a public client may not hold a
- * secret — and the form show them against the right input without restating any of
+ * rules - a length limit, a URL format, the fact that a public client may not hold a
+ * secret - and the form show them against the right input without restating any of
  * them in the browser.
  *
  * Accessibility is structural rather than added: the label is associated by `id`
  * from `useId`, and an error is linked with `aria-describedby` and marked
  * `aria-invalid`, so a screen reader reaches the message from the input.
+ *
+ * Author: John Grimes
  */
 
 import { useId } from "react";
@@ -276,8 +278,8 @@ interface ListFieldProps {
 /**
  * A list of values, one per line.
  *
- * A textarea rather than a repeating row of inputs, because these lists — redirect
- * URIs, allowed scopes — are usually pasted from somewhere else, and pasting five
+ * A textarea rather than a repeating row of inputs, because these lists - redirect
+ * URIs, allowed scopes - are usually pasted from somewhere else, and pasting five
  * lines into five separate inputs is worse than editing text. The parsing lives in
  * `../forms/lists.js`, where it is tested.
  */

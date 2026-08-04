@@ -6,6 +6,8 @@
  * consulted or a signature produced. Keeping the handlers to that shape is what
  * makes it possible to say, of all three grants, that they cannot disagree about
  * which policy governs a token.
+ *
+ * Author: John Grimes
  */
 
 import type { ResolvedIssuerContext } from "../../context.js";
@@ -19,7 +21,7 @@ import type { TokenResponse } from "@signet/core";
  *
  * Typed as `unknown` values rather than as Hono's own union, so that this module
  * needs no dependency on the framework and so that a body assembled by a test is
- * assignable. Every read narrows to `string` anyway — see {@link formField}.
+ * assignable. Every read narrows to `string` anyway - see {@link formField}.
  */
 export type FormBody = Readonly<Record<string, unknown>>;
 
@@ -44,7 +46,7 @@ export type GrantOutcome =
        * Overrides the status RFC 6749 §5.2 would imply.
        *
        * Only for a refusal that is the deployment's fault rather than the
-       * client's — see `./issuanceRefusals.ts`. A 400 there would send an app
+       * client's - see `./issuanceRefusals.ts`. A 400 there would send an app
        * developer looking for a bug they do not have.
        */
       readonly status?: 500;

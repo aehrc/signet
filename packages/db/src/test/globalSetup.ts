@@ -4,6 +4,8 @@
  * See `./schemaReady.ts` for why this is not done lazily. Skipped entirely when no
  * test database is configured, which is the case for a developer running only the
  * unit suites: the integration files check the same variable and skip themselves.
+ *
+ * Author: John Grimes
  */
 
 import { createDatabase } from "../client.js";

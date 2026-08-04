@@ -15,6 +15,8 @@
  * are both misconfigurations, and answering `invalid_grant` would tell the app to
  * stop retrying and blame its own credential. The one thing this module will never
  * do is invent a permissive default for a missing policy.
+ *
+ * Author: John Grimes
  */
 
 import {
@@ -73,7 +75,7 @@ export interface IssuanceRequest {
    * The digest of the refresh token being rotated, for a `refresh_token` grant.
    *
    * Its presence means the presented token is claimed here and its successor
-   * joins its family — which is what makes reuse of the predecessor detectable.
+   * joins its family - which is what makes reuse of the predecessor detectable.
    * The claim happens inside this module rather than in the grant handler so that
    * claiming and replacing are one transaction: a failure between them rolls the
    * claim back, and the client retries with the token it still holds instead of
@@ -131,8 +133,8 @@ function hasIdentityScope(
 /**
  * The refresh scope the policy granted, if it granted one.
  *
- * `offline_access` and `online_access` differ in intent — one survives the end of
- * the user's session and one does not — but both mean "issue a refresh token", so
+ * `offline_access` and `online_access` differ in intent - one survives the end of
+ * the user's session and one does not - but both mean "issue a refresh token", so
  * either is sufficient here. Which was granted is recorded on the token's scope
  * string, so the distinction survives for the management page to act on.
  */

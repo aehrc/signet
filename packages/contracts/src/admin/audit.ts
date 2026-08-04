@@ -11,6 +11,8 @@
  * drops a constraint it did not understand tells the operator that nothing
  * matched, which is a different and much worse answer than "that filter is not
  * valid".
+ *
+ * Author: John Grimes
  */
 
 import { z } from "zod";

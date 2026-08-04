@@ -1,10 +1,12 @@
 /**
  * The console's one table.
  *
- * Every list in the console is the same shape — columns, rows, a placeholder when
- * empty — and writing that out per page would be five copies of the same markup
+ * Every list in the console is the same shape - columns, rows, a placeholder when
+ * empty - and writing that out per page would be five copies of the same markup
  * with different padding. Columns are described as data so a page says what it
  * wants to show rather than how a `<td>` is styled.
+ *
+ * Author: John Grimes
  */
 
 import type { BadgeTone } from "../formatting/status.js";

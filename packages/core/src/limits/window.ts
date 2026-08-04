@@ -22,6 +22,8 @@
  * Nothing here is aware of processes or replicas. That is the caller's problem and
  * it is a real one: see the server's rate-limit middleware for what a deployment
  * with several replicas actually gets.
+ *
+ * Author: John Grimes
  */
 
 /** What a key's counters look like between requests. */

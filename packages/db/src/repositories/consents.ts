@@ -3,7 +3,7 @@
  *
  * A consent row lets an endpoint in `remember` mode skip the prompt for an app the
  * user has already approved. It is therefore a *permission* record, and the query
- * that reads it decides whether a user sees a consent screen — so the scope
+ * that reads it decides whether a user sees a consent screen - so the scope
  * comparison is the caller's responsibility and is deliberately not done here:
  * `@signet/core`'s `isSubsetOf` decides whether what is now being asked for falls
  * within what was consented to. A repository predicate matching on scope strings
@@ -13,6 +13,8 @@
  *
  * Revocation is never a delete: the end user's management page sets `revoked_at`,
  * so the record that consent once existed survives.
+ *
+ * Author: John Grimes
  */
 
 import { and, desc, eq, gt, isNull, lte, or } from "drizzle-orm";
@@ -53,7 +55,7 @@ export async function recordConsent(
 /**
  * Lists the live consents an end user has given the scoped client.
  *
- * Newest first, and only rows that are neither revoked nor expired — a null
+ * Newest first, and only rows that are neither revoked nor expired - a null
  * `expires_at` means a consent that does not expire, so the predicate is a
  * disjunction rather than a comparison against a default.
  *
@@ -141,7 +143,7 @@ export async function revokeConsent(
 /**
  * Revokes every live consent an end user gave the scoped client.
  *
- * This is the "disconnect this app" button. It does not revoke the app's tokens —
+ * This is the "disconnect this app" button. It does not revoke the app's tokens -
  * that is a separate call, and both are needed: withdrawing consent stops the next
  * authorization, revoking tokens stops the current one.
  *
@@ -172,7 +174,7 @@ export async function revokeConsentsForClient(
  * Deletes consents that have passed their own expiry.
  *
  * Rows with no expiry are never touched, and neither are revoked rows that have
- * not expired — a revoked consent is evidence of a decision the user made, and it
+ * not expired - a revoked consent is evidence of a decision the user made, and it
  * is the audit log's business how long that is kept, not the sweep's.
  *
  * @returns How many rows were deleted.

@@ -16,6 +16,8 @@
  * cookie to a cross-origin token request.
  *
  * @see https://hl7.org/fhir/smart-app-launch/app-launch.html#considerations-for-cross-origin-requests
+ *
+ * Author: John Grimes
  */
 
 import type { MiddlewareHandler } from "hono";

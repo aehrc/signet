@@ -1,11 +1,13 @@
 /**
  * Resolving the end user behind an interactive grant.
  *
- * Both interactive grants reach the same question from different directions — the
+ * Both interactive grants reach the same question from different directions - the
  * code grant holds a subject from its session, the refresh grant one from the token
- * it claimed — and must answer it the same way. A subject that no longer resolves
+ * it claimed - and must answer it the same way. A subject that no longer resolves
  * means the account was deleted since the authorization, and the right answer is to
  * refuse rather than to mint a token for a user who is gone.
+ *
+ * Author: John Grimes
  */
 
 import { getEndUser } from "@signet/db";

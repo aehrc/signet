@@ -4,8 +4,10 @@
  * The two that matter most are `allow` and `narrow`, and neither is obvious from its
  * name, so both are stated. `allow: false` is a deny that no later rule can override,
  * because the first match wins. `narrow` is what makes a read-only policy answer an app
- * asking for `patient/*.cruds` with `patient/*.rs` rather than with nothing — the spec
+ * asking for `patient/*.cruds` with `patient/*.rs` rather than with nothing - the spec
  * permits granting less than was requested, and real apps routinely ask for everything.
+ *
+ * Author: John Grimes
  */
 
 import { PatternField } from "./patternField.js";
@@ -55,8 +57,8 @@ export function GrantRuleFields({
         value={rule.allow ? "allow" : "deny"}
         disabled={disabled}
         options={[
-          { value: "allow", label: "Allow — grant this scope" },
-          { value: "deny", label: "Deny — refuse it, and stop looking" },
+          { value: "allow", label: "Allow - grant this scope" },
+          { value: "deny", label: "Deny - refuse it, and stop looking" },
         ]}
         hint="The first matching rule decides, so a deny placed above an allow wins and cannot be narrowed around."
         onChange={(decision) => {
@@ -68,7 +70,7 @@ export function GrantRuleFields({
         label="Narrow instead of refusing"
         checked={rule.narrow === true}
         disabled={disabled}
-        hint="When an app asks for more permissions than this rule permits, grant the overlap rather than nothing. Without it, a read-only policy answers a request for patient/*.cruds with no data access at all — which fails at the app's first API call rather than degrading to read."
+        hint="When an app asks for more permissions than this rule permits, grant the overlap rather than nothing. Without it, a read-only policy answers a request for patient/*.cruds with no data access at all - which fails at the app's first API call rather than degrading to read."
         onChange={(narrow) => {
           patch({ narrow });
         }}

@@ -6,7 +6,7 @@
  *
  * Version numbers are allocated under a lock on the endpoint row. Two
  * administrators saving at once would otherwise both compute `max(version) + 1`,
- * and one of them would lose the save to a unique violation — or, worse, the read
+ * and one of them would lose the save to a unique violation - or, worse, the read
  * would be non-repeatable and both would succeed with the same number were the
  * index ever relaxed. Locking a row that certainly exists (the endpoint) is the
  * standard way to serialise the allocation of a key that does not exist yet.
@@ -16,6 +16,8 @@
  * leave the previously published one alone; getting that order wrong would take
  * the endpoint's policy away and put nothing in its place, which stops the
  * endpoint issuing tokens at all.
+ *
+ * Author: John Grimes
  */
 
 import { and, asc, desc, eq, sql } from "drizzle-orm";
@@ -138,7 +140,7 @@ export async function getPolicyVersion(
  * Reads the scoped endpoint's published policy.
  *
  * At most one row can satisfy this, by partial unique index. The `limit` is
- * therefore belt and braces rather than a tie-break — if it ever mattered, the
+ * therefore belt and braces rather than a tie-break - if it ever mattered, the
  * index would already have been dropped and token issuance would be ambiguous.
  */
 export async function getPublishedPolicy(

@@ -3,7 +3,7 @@
  *
  * The mount path and the issuer identifier are derived from the same configured
  * public URL, so what the discovery document advertises and what the server serves
- * cannot diverge — see `./issuer.ts`.
+ * cannot diverge - see `./issuer.ts`.
  *
  * CORS is applied selectively. A browser-based public SMART app fetches the
  * discovery documents, the JWKS and the token endpoint from JavaScript, so those
@@ -11,6 +11,8 @@
  * the interaction API is called by Signet's own pages from the same origin;
  * neither gets CORS headers, because a script that could read those responses would
  * be able to read an authorization in progress.
+ *
+ * Author: John Grimes
  */
 
 import { Hono } from "hono";
@@ -64,7 +66,7 @@ export function createOAuthRouter(
   const router = new Hono<SignetEnvironment>();
 
   // Every route below resolves the endpoint first, so no handler can be reached
-  // without an `EndpointScope` — which is what stops any of them from querying
+  // without an `EndpointScope` - which is what stops any of them from querying
   // another tenant's rows.
   router.use(`${ISSUER_PATH_PREFIX}/*`, withIssuer(context));
 
@@ -134,7 +136,7 @@ export function createOAuthRouter(
 
   // The management endpoint, which SMART advertises as `management_endpoint`. Its own
   // session, because an end user reviewing their authorizations is not in the middle of
-  // one — see `./manage.js`.
+  // one - see `./manage.js`.
   // Signing in only: signing out must not be refused because somebody else on
   // the same address was guessing passwords.
   router.post(

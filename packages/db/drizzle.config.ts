@@ -5,6 +5,8 @@
  * database; the credentials below exist only for `migrate` and `studio`, and
  * fall back to a local development URL so that neither command silently targets
  * the wrong server when the variable is unset.
+ *
+ * Author: John Grimes
  */
 
 import { defineConfig } from "drizzle-kit";

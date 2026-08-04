@@ -7,6 +7,8 @@
  *
  * @see https://datatracker.ietf.org/doc/html/rfc7636
  * @see https://hl7.org/fhir/smart-app-launch/app-launch.html
+ *
+ * Author: John Grimes
  */
 
 /** The only code challenge method Signet accepts. */
