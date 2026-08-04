@@ -57,6 +57,8 @@ export const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
     "Turns the /t/{slug} segment into a scope, which is what establishes the tenant every later query binds to. Reads the tenant row inside a transaction declared for the identifier the slug routine returned, so the only thing it reaches unbound is that routine.",
   "repositories/scope.resolveIssuer":
     "Turns /t/{tenant}/e/{endpoint} into a scope, which every OAuth request begins with and therefore precedes any tenant being known. Reads both rows inside a transaction declared for the identifier the slug routine returned; the endpoint row, which holds a tenant's configuration, is deliberately read after binding rather than returned by a routine.",
+  "repositories/members.resolveTenantScopeForMember":
+    "The console's authorisation check, and the only way a browser request obtains a tenant scope, so it necessarily precedes having one. Reaches the slug routine for the identifier and then runs the membership join inside a transaction declared for it - the declaration makes the tenant reachable, the join makes it the caller's.",
   "repositories/tenants.createTenant":
     "The one write that brings a tenant into existence, so there is no established tenant for it to take. It generates the identifier itself and declares that before inserting, so the row it writes is one the policy on tenants permits - the insert is bound like every other, just to a tenant it chose rather than one it resolved.",
   "repositories/tenants.listTenantsForAdminUser":
@@ -94,7 +96,6 @@ export const MODULES_AWAITING_BINDING: readonly string[] = [
   "repositories/federationStates",
   "repositories/jtiReplay",
   "repositories/launchContexts",
-  "repositories/members",
   "repositories/policies",
   "repositories/refreshTokens",
 ];

@@ -101,7 +101,9 @@ export function registerTenantRoutes(
   /** Lists the tenant's members. */
   router.get(`${TENANT_PATH}/members`, requireRole("viewer"), async (c) => {
     const { scope } = c.get("tenant");
-    const members = await listTenantMembers(context.db, scope);
+    const members = await withTenantScope(context.db, scope, (bound) =>
+      listTenantMembers(bound),
+    );
     return c.json({
       members: members.map((row) => memberView(row.member, row.user)),
     });
@@ -143,11 +145,8 @@ export function registerTenantRoutes(
       );
     }
 
-    const change = await setTenantMemberRole(
-      context.db,
-      scope,
-      user.id,
-      body.role,
+    const change = await withTenantScope(context.db, scope, (bound) =>
+      setTenantMemberRole(bound, user.id, body.role),
     );
     if (!change.ok) {
       return c.json(
@@ -176,7 +175,9 @@ export function registerTenantRoutes(
       const { scope } = c.get("tenant");
       const adminUserId = c.req.param("adminUserId");
 
-      const change = await removeTenantMember(context.db, scope, adminUserId);
+      const change = await withTenantScope(context.db, scope, (bound) =>
+        removeTenantMember(bound, adminUserId),
+      );
       if (!change.ok) {
         return change.reason === "not-a-member"
           ? c.json(

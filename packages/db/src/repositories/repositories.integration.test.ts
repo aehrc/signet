@@ -91,7 +91,12 @@ import {
 import { isTestSchemaReady } from "../test/schemaReady.js";
 
 import type { Executor } from "./executor.js";
-import type { ClientScope, EndpointScope, TenantScope } from "./scope.js";
+import type {
+  BoundTenantScope,
+  ClientScope,
+  EndpointScope,
+  TenantScope,
+} from "./scope.js";
 import type { PolicyDocument } from "@signet/core";
 
 const databaseUrl = process.env.SIGNET_TEST_DATABASE_URL;
@@ -209,6 +214,22 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   afterAll(async () => {
     await sql_?.end();
   });
+
+  /**
+   * Runs a repository call in a transaction declared for its scope.
+   *
+   * Every function that touches tenant-owned data now takes a bound scope, and the
+   * fixtures hold unbound ones - a binding cannot outlive the transaction that made
+   * it, so it cannot be created once in `beforeAll` and reused. Binding per call is
+   * also what the server does, so the atomicity boundaries these tests assert on are
+   * the ones production has.
+   */
+  function inScope<S extends TenantScope, T>(
+    scope: S,
+    work: (bound: S & BoundTenantScope) => Promise<T>,
+  ): Promise<T> {
+    return withTenantScope(db, scope, work);
+  }
 
   /** A distinct suffix, so slugs and identifiers never collide across tests. */
   function unique(): string {
@@ -827,14 +848,22 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     it("refuses to remove or demote the last owner", async () => {
       const scope = await newTenant();
       const owner = await newAdmin(db, `admin-${unique()}@example.org`);
-      const invited = await setTenantMemberRole(db, scope, owner, "owner");
+      const invited = await inScope(scope, (bound) =>
+        setTenantMemberRole(bound, owner, "owner"),
+      );
       expect(invited.ok).toBe(true);
 
-      expect(await removeTenantMember(db, scope, owner)).toEqual({
+      expect(
+        await inScope(scope, (bound) => removeTenantMember(bound, owner)),
+      ).toEqual({
         ok: false,
         reason: "last-owner",
       });
-      expect(await setTenantMemberRole(db, scope, owner, "admin")).toEqual({
+      expect(
+        await inScope(scope, (bound) =>
+          setTenantMemberRole(bound, owner, "admin"),
+        ),
+      ).toEqual({
         ok: false,
         reason: "last-owner",
       });
@@ -844,12 +873,20 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const scope = await newTenant();
       const first = await newAdmin(db, `admin-${unique()}@example.org`);
       const second = await newAdmin(db, `admin-${unique()}@example.org`);
-      await setTenantMemberRole(db, scope, first, "owner");
-      await setTenantMemberRole(db, scope, second, "owner");
+      await inScope(scope, (bound) =>
+        setTenantMemberRole(bound, first, "owner"),
+      );
+      await inScope(scope, (bound) =>
+        setTenantMemberRole(bound, second, "owner"),
+      );
 
-      const removal = await removeTenantMember(db, scope, first);
+      const removal = await inScope(scope, (bound) =>
+        removeTenantMember(bound, first),
+      );
       expect(removal.ok).toBe(true);
-      expect(await removeTenantMember(db, scope, first)).toEqual({
+      expect(
+        await inScope(scope, (bound) => removeTenantMember(bound, first)),
+      ).toEqual({
         ok: false,
         reason: "not-a-member",
       });

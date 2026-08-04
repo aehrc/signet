@@ -326,11 +326,8 @@ export async function createTestStack(
     passwordHash: await hashPassword(TEST_PASSWORD),
     displayName: "Test Admin",
   });
-  const membership = await setTenantMemberRole(
-    db,
-    tenantScope,
-    admin.id,
-    "owner",
+  const membership = await withTenantScope(db, tenantScope, (bound) =>
+    setTenantMemberRole(bound, admin.id, "owner"),
   );
   if (!membership.ok) {
     throw new Error(`could not grant membership: ${membership.reason}`);

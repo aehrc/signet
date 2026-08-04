@@ -14,6 +14,7 @@ import {
   revokeApiToken,
   setAdminUserDisabled,
   setTenantMemberRole,
+  withTenantScope,
 } from "@signet/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -298,11 +299,10 @@ describe.skipIf(testDatabaseUrl === undefined)(
           });
           expect(before.status).toBe(404);
 
-          const granted = await setTenantMemberRole(
+          const granted = await withTenantScope(
             stack2.context.db,
             stack2.tenantScope,
-            stack2.outsider.id,
-            "viewer",
+            (bound) => setTenantMemberRole(bound, stack2.outsider.id, "viewer"),
           );
           expect(granted.ok).toBe(true);
 

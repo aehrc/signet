@@ -10,21 +10,30 @@
  * which are authenticated by client credentials rather than by membership; the
  * admin API must use this one instead.
  *
+ * The two membership writes deliberately do not open transactions of their own any
+ * more. They take a bound scope, so they are already inside the transaction that
+ * declared the tenant, and that is the transaction the `FOR UPDATE` lock they rely
+ * on is held for. Opening a nested one would only add a savepoint.
+ *
  * Author: John Grimes
  */
 
 import { and, eq } from "drizzle-orm";
 
 import { wouldRemoveLastOwner } from "./roles.js";
+import { tenantIdForSlug } from "./routines.js";
 import { requireRow } from "./rows.js";
-import { tenantScopeFromRow } from "./scope.js";
+import {
+  executorFor,
+  tenantScopeFromRow,
+  withDeclaredTenant,
+} from "./scope.js";
 import { adminUsers, tenantMembers, tenants } from "../schema/tenancy.js";
 
 import type { Executor } from "./executor.js";
 import type { MembershipSummary, TenantRole } from "./roles.js";
-import type { TenantScope } from "./scope.js";
+import type { BoundTenantScope, TenantScope } from "./scope.js";
 import type { AdminUser, TenantMember } from "../schema/tenancy.js";
-import type { SQL } from "drizzle-orm";
 
 /** A tenant scope together with the authority the caller holds in it. */
 export interface MemberTenantScope {
@@ -33,71 +42,62 @@ export interface MemberTenantScope {
 }
 
 /**
- * The one query that both public resolvers use.
- *
- * The join to `tenant_members` is the authorisation check, so it is written once:
- * a second copy differing by which column identifies the tenant would be a second
- * place for the membership predicate to be dropped from.
- *
- * @param db - The connection or transaction to use.
- * @param tenantPredicate - Identifies the tenant, by slug or by identifier.
- * @param adminUserId - The signed-in admin user.
- */
-async function resolveMembership(
-  db: Executor,
-  tenantPredicate: SQL,
-  adminUserId: string,
-): Promise<MemberTenantScope | undefined> {
-  const [row] = await db
-    .select({ tenant: tenants, role: tenantMembers.role })
-    .from(tenantMembers)
-    .innerJoin(tenants, eq(tenants.id, tenantMembers.tenantId))
-    .where(and(tenantPredicate, eq(tenantMembers.adminUserId, adminUserId)))
-    .limit(1);
-
-  return row === undefined
-    ? undefined
-    : { scope: tenantScopeFromRow(row.tenant), role: row.role };
-}
-
-/**
  * Resolves `/t/{slug}` for a signed-in admin user.
  *
- * One query does both jobs: it finds the tenant and proves the membership. There
- * is no intermediate state in which the tenant has been resolved but the
- * membership has not, so a handler cannot use the first without the second.
+ * Two steps, because the slug is all the request carries and both tables the
+ * authorisation check reads are tenant-owned: the routine turns the slug into a
+ * tenant identifier, and the membership join then runs inside a transaction
+ * declared for it. The join is still one query, so there remains no intermediate
+ * state in which the tenant has been resolved but the membership has not - a
+ * handler cannot use the first without the second.
  *
- * @param db - The connection or transaction to use.
+ * The declaration is what makes the tenant reachable, and the membership predicate
+ * is what makes it *the caller's*. Both are needed: declaring a tenant an operator
+ * is not a member of yields a scope only if this join finds a row, and it will not.
+ *
+ * @param db - The connection to resolve on. No tenant need be declared.
  * @param tenantSlug - The `/t/{slug}` path segment.
  * @param adminUserId - The signed-in admin user.
  * @returns The scope and role, or undefined when the tenant does not exist *or*
  *   the user is not a member - deliberately indistinguishable, so that the
- *   console cannot be used to enumerate tenant slugs.
+ *   console cannot be used to enumerate tenant slugs. Unbound, for the reason
+ *   `resolveTenantScope` gives.
  */
 export async function resolveTenantScopeForMember(
   db: Executor,
   tenantSlug: string,
   adminUserId: string,
 ): Promise<MemberTenantScope | undefined> {
-  return await resolveMembership(db, eq(tenants.slug, tenantSlug), adminUserId);
-}
+  const tenantId = await tenantIdForSlug(db, tenantSlug);
+  if (tenantId === undefined) {
+    return undefined;
+  }
 
-/** Resolves a tenant scope for a member by tenant identifier. */
-export async function resolveTenantScopeForMemberById(
-  db: Executor,
-  tenantId: string,
-  adminUserId: string,
-): Promise<MemberTenantScope | undefined> {
-  return await resolveMembership(db, eq(tenants.id, tenantId), adminUserId);
+  return await withDeclaredTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({ tenant: tenants, role: tenantMembers.role })
+      .from(tenantMembers)
+      .innerJoin(tenants, eq(tenants.id, tenantMembers.tenantId))
+      .where(
+        and(
+          eq(tenantMembers.tenantId, tenantId),
+          eq(tenantMembers.adminUserId, adminUserId),
+        ),
+      )
+      .limit(1);
+
+    return row === undefined
+      ? undefined
+      : { scope: tenantScopeFromRow(row.tenant), role: row.role };
+  });
 }
 
 /** Reads one membership within the scoped tenant. */
 export async function getTenantMembership(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
   adminUserId: string,
 ): Promise<TenantMember | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(tenantMembers)
     .where(
@@ -118,10 +118,9 @@ export interface TenantMemberRow {
 
 /** Lists the scoped tenant's members. */
 export async function listTenantMembers(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
 ): Promise<readonly TenantMemberRow[]> {
-  return await db
+  return await executorFor(scope)
     .select({ member: tenantMembers, user: adminUsers })
     .from(tenantMembers)
     .innerJoin(adminUsers, eq(adminUsers.id, tenantMembers.adminUserId))
@@ -135,13 +134,14 @@ export async function listTenantMembers(
  * The lock is what makes the last-owner invariant hold under concurrency: two
  * simultaneous requests each demoting a different one of the tenant's two owners
  * would both see a second owner and both succeed, leaving none. Taking `FOR
- * UPDATE` over the tenant's membership rows serialises them.
+ * UPDATE` over the tenant's membership rows serialises them, and it holds until
+ * the transaction the scope was declared on commits - which is what the two
+ * callers below rely on rather than opening a transaction of their own.
  */
 async function lockMemberships(
-  tx: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
 ): Promise<readonly MembershipSummary[]> {
-  return await tx
+  return await executorFor(scope)
     .select({
       adminUserId: tenantMembers.adminUserId,
       role: tenantMembers.role,
@@ -168,28 +168,25 @@ export type MembershipChange<T> =
  * {@link wouldRemoveLastOwner}.
  */
 export async function setTenantMemberRole(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
   adminUserId: string,
   role: TenantRole,
 ): Promise<MembershipChange<TenantMember>> {
-  return await db.transaction(async (tx) => {
-    const members = await lockMemberships(tx, scope);
-    if (wouldRemoveLastOwner(members, adminUserId, role)) {
-      return { ok: false, reason: "last-owner" };
-    }
+  const members = await lockMemberships(scope);
+  if (wouldRemoveLastOwner(members, adminUserId, role)) {
+    return { ok: false, reason: "last-owner" };
+  }
 
-    const rows = await tx
-      .insert(tenantMembers)
-      .values({ tenantId: scope.tenantId, adminUserId, role })
-      .onConflictDoUpdate({
-        target: [tenantMembers.tenantId, tenantMembers.adminUserId],
-        set: { role },
-      })
-      .returning();
+  const rows = await executorFor(scope)
+    .insert(tenantMembers)
+    .values({ tenantId: scope.tenantId, adminUserId, role })
+    .onConflictDoUpdate({
+      target: [tenantMembers.tenantId, tenantMembers.adminUserId],
+      set: { role },
+    })
+    .returning();
 
-    return { ok: true, value: requireRow(rows, "upsert into tenant_members") };
-  });
+  return { ok: true, value: requireRow(rows, "upsert into tenant_members") };
 }
 
 /**
@@ -200,28 +197,25 @@ export async function setTenantMemberRole(
  * @returns What happened, so the console can explain a refusal.
  */
 export async function removeTenantMember(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
   adminUserId: string,
 ): Promise<MembershipChange<void>> {
-  return await db.transaction(async (tx) => {
-    const members = await lockMemberships(tx, scope);
-    if (!members.some((member) => member.adminUserId === adminUserId)) {
-      return { ok: false, reason: "not-a-member" };
-    }
-    if (wouldRemoveLastOwner(members, adminUserId, null)) {
-      return { ok: false, reason: "last-owner" };
-    }
+  const members = await lockMemberships(scope);
+  if (!members.some((member) => member.adminUserId === adminUserId)) {
+    return { ok: false, reason: "not-a-member" };
+  }
+  if (wouldRemoveLastOwner(members, adminUserId, null)) {
+    return { ok: false, reason: "last-owner" };
+  }
 
-    await tx
-      .delete(tenantMembers)
-      .where(
-        and(
-          eq(tenantMembers.tenantId, scope.tenantId),
-          eq(tenantMembers.adminUserId, adminUserId),
-        ),
-      );
+  await executorFor(scope)
+    .delete(tenantMembers)
+    .where(
+      and(
+        eq(tenantMembers.tenantId, scope.tenantId),
+        eq(tenantMembers.adminUserId, adminUserId),
+      ),
+    );
 
-    return { ok: true, value: undefined };
-  });
+  return { ok: true, value: undefined };
 }

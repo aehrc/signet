@@ -218,14 +218,13 @@ export async function runBootstrapCommand(
     );
 
     const scope = tenantScopeFromRow(tenant);
-    const membership = await getTenantMembership(handle.db, scope, user.id);
+    const membership = await withTenantScope(handle.db, scope, (bound) =>
+      getTenantMembership(bound, user.id),
+    );
     let membershipGranted = false;
     if (membership === undefined) {
-      const change = await setTenantMemberRole(
-        handle.db,
-        scope,
-        user.id,
-        "owner",
+      const change = await withTenantScope(handle.db, scope, (bound) =>
+        setTenantMemberRole(bound, user.id, "owner"),
       );
       if (!change.ok) {
         throw new Error(`could not grant ownership: ${change.reason}`);

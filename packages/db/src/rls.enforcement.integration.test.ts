@@ -206,7 +206,9 @@ describeWithDatabase("row-level security as the serving role", () => {
       passwordHash: "$argon2id$placeholder",
       displayName: "Admin",
     });
-    await setTenantMemberRole(owner, tenantScope, admin.id, "owner");
+    await withTenantScope(owner, tenantScope, (bound) =>
+      setTenantMemberRole(bound, admin.id, "owner"),
+    );
     await createApiToken(owner, tenantScope, {
       name: "Personal access token",
       tokenHash: `api-${unique()}`,
