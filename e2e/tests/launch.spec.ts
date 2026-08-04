@@ -1,7 +1,13 @@
+/**
+ * Author: John Grimes
+ */
+
 import { expect, test } from "@playwright/test";
 
 import {
+  accessTokenClaims,
   choosePatient,
+  completedTokenResponse,
   decideConsent,
   signIn,
   startLaunch,
@@ -32,13 +38,7 @@ test.describe("a standalone launch", () => {
     await decideConsent(page, "Allow");
 
     // Back at the app, with a token.
-    await expect(page.getByTestId("status")).toHaveText("Launch complete.", {
-      timeout: 20_000,
-    });
-
-    const tokenResponse = JSON.parse(
-      (await page.getByTestId("token-response").textContent()) ?? "{}",
-    ) as Record<string, unknown>;
+    const tokenResponse = await completedTokenResponse(page);
     expect(tokenResponse["token_type"]).toBe("Bearer");
     expect(tokenResponse["patient"]).toBe("pat-9");
     expect(String(tokenResponse["scope"])).toContain("patient/");
@@ -48,9 +48,7 @@ test.describe("a standalone launch", () => {
     expect(String(tokenResponse["scope"])).not.toContain("offline_access");
     expect(tokenResponse["refresh_token"]).toBeUndefined();
 
-    const claims = JSON.parse(
-      (await page.getByTestId("access-token-claims").textContent()) ?? "{}",
-    ) as Record<string, unknown>;
+    const claims = await accessTokenClaims(page);
     expect(claims["iss"]).toBe(ISSUER);
     expect(claims["aud"]).toBe(FHIR);
     expect(claims["fhirUser"]).toBe("Practitioner/clinician-1");

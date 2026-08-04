@@ -8,6 +8,8 @@
  * Each helper waits for the page it acts on before acting. Without that, a test
  * that raced ahead would fill a field on the page it was leaving and fail
  * somewhere else entirely.
+ *
+ * Author: John Grimes
  */
 
 import { expect } from "@playwright/test";
@@ -55,4 +57,39 @@ export async function decideConsent(
     page.getByRole("heading", { name: "Allow access?" }),
   ).toBeVisible();
   await page.getByRole("button", { name: decision, exact: true }).click();
+}
+
+/**
+ * Waits for the stub app to finish, and returns the token response it received.
+ *
+ * The wait and the parse belong together: reading the panel before the exchange
+ * has finished returns the previous render, and a test that did so would assert
+ * against an empty object and pass for the wrong reason.
+ *
+ * @param page - The page the launch is running in.
+ * @returns The parsed token response.
+ */
+export async function completedTokenResponse(
+  page: Page,
+): Promise<Record<string, unknown>> {
+  await expect(page.getByTestId("status")).toHaveText("Launch complete.", {
+    timeout: 20_000,
+  });
+  return JSON.parse(
+    (await page.getByTestId("token-response").textContent()) ?? "{}",
+  ) as Record<string, unknown>;
+}
+
+/**
+ * The decoded access token claims the stub app is displaying.
+ *
+ * @param page - The page the launch ran in.
+ * @returns The parsed claims.
+ */
+export async function accessTokenClaims(
+  page: Page,
+): Promise<Record<string, unknown>> {
+  return JSON.parse(
+    (await page.getByTestId("access-token-claims").textContent()) ?? "{}",
+  ) as Record<string, unknown>;
 }

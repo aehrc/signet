@@ -13,6 +13,8 @@
  *
  * No dependencies: plain `fetch` against a stack that is already up. Run
  * `bun run stack:up` first.
+ *
+ * Author: John Grimes
  */
 
 const BASE = process.env["SIGNET_BASE_URL"] ?? "http://localhost:3000";
@@ -186,6 +188,96 @@ await ensure("a backend service client", "POST", `${endpointPath}/clients`, {
   secret: "stub-backend-secret-value-0000",
   grantTypes: ["client_credentials"],
   allowedScopes: ["system/*.rs"],
+});
+
+/**
+ * A confidential client that holds a shared secret.
+ *
+ * It exists so the suite can cover the parts of SMART a public client cannot
+ * reach. `offline_access` is granted to confidential clients only, so refresh -
+ * and therefore refresh rotation, introspection of a live token, and revocation -
+ * needs a client of this type. It also mints the launch handles for the EHR
+ * launch, because the launch-context endpoint authenticates its caller as a
+ * client registered for `authorization_code`.
+ */
+await ensure("a confidential client", "POST", `${endpointPath}/clients`, {
+  clientId: "stub-confidential",
+  name: "Stub confidential app",
+  clientType: "confidential-symmetric",
+  secret: "stub-confidential-secret-value-0000",
+  redirectUris: [`${APP_ORIGIN}/`],
+  launchUri: `${APP_ORIGIN}/`,
+  grantTypes: ["authorization_code", "refresh_token"],
+  allowedScopes: [
+    "openid",
+    "fhirUser",
+    "launch",
+    "launch/patient",
+    "offline_access",
+    "patient/*.rs",
+    "user/*.rs",
+  ],
+});
+
+/**
+ * A second confidential client, for the refresh-token reuse scenario alone.
+ *
+ * Reuse detection revokes every token the *client* holds, not merely the family
+ * the replayed token belonged to - the conservative response, since at that point
+ * Signet knows one of two holders is an attacker but not which. That makes the
+ * scenario destructive to anything else using the same client, so it gets its own
+ * rather than making the suite run serially to accommodate it.
+ */
+await ensure("a reuse-detection client", "POST", `${endpointPath}/clients`, {
+  clientId: "stub-reuse",
+  name: "Stub confidential app (reuse detection)",
+  clientType: "confidential-symmetric",
+  secret: "stub-reuse-secret-value-0000",
+  redirectUris: [`${APP_ORIGIN}/`],
+  launchUri: `${APP_ORIGIN}/`,
+  grantTypes: ["authorization_code", "refresh_token"],
+  allowedScopes: [
+    "openid",
+    "fhirUser",
+    "launch",
+    "launch/patient",
+    "offline_access",
+    "patient/*.rs",
+    "user/*.rs",
+  ],
+});
+
+/**
+ * A confidential client that authenticates with `private_key_jwt`.
+ *
+ * This is the SMART Backend Services credential proper: the client signs an
+ * assertion rather than presenting a shared secret, so nothing reusable crosses
+ * the wire. The public key is inline rather than behind a `jwks_uri` because the
+ * suite is asserting the credential, not the key-fetching path.
+ *
+ * The key pair is fixed and lives in `e2e/support/keys.ts`. It is a test fixture
+ * for a stack seeded with well-known passwords; it authenticates nothing anybody
+ * would want.
+ */
+await ensure("an asymmetric client", "POST", `${endpointPath}/clients`, {
+  clientId: "stub-asymmetric",
+  name: "Stub asymmetric backend service",
+  clientType: "confidential-asymmetric",
+  grantTypes: ["client_credentials"],
+  allowedScopes: ["system/*.rs"],
+  jwks: {
+    keys: [
+      {
+        kty: "EC",
+        crv: "P-384",
+        x: "Nu9Nk903rbfzH-6LCN_8clmcRHFRfub-o6mepu51nEaafbnS0ZmjlzWCQYSk2c4m",
+        y: "2Je25QiKuJGBGAoeNZXU5Ax-qrXbLDYMXgAkTTOOM3zqCtD98J2JEScC7UufEcNz",
+        alg: "ES384",
+        use: "sig",
+        kid: "stub-asymmetric-1",
+      },
+    ],
+  },
 });
 
 await ensure("the clinician account", "POST", `${endpointPath}/users`, {
