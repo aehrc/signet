@@ -4,7 +4,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ConfigError, loadConfig, type Environment } from "./config.js";
+import {
+  ConfigError,
+  loadConfig,
+  resolveMigrationIdentities,
+  type Environment,
+} from "./config.js";
 
 const MASTER_KEY = "0123456789abcdef0123456789abcdef";
 
@@ -214,6 +219,177 @@ describe("loadConfig - master key", () => {
     expect(
       loadConfig(env({ SIGNET_MASTER_KEY: "a".repeat(32) })).masterKey,
     ).toHaveLength(32);
+  });
+});
+
+describe("resolveMigrationIdentities", () => {
+  // `migrate` is the only command that needs two identities: it applies DDL as
+  // the owner, and grants the serving role its access. It never uses the serving
+  // password, so the migration job holds no credential it has no use for.
+  const identities: Environment = {
+    SIGNET_DATABASE_URL: "postgres://signet_app:p@db:5432/signet",
+    SIGNET_DATABASE_OWNER_URL: "postgres://signet:owner-p@db:5432/signet",
+  };
+
+  it("resolves the owner connection and the role to grant to", () => {
+    expect(resolveMigrationIdentities(identities)).toEqual({
+      ownerUrl: "postgres://signet:owner-p@db:5432/signet",
+      servingRole: "signet_app",
+    });
+  });
+
+  it("takes the serving role from discrete parts too", () => {
+    // The shape the Helm chart uses with the bundled PostgreSQL subchart. The
+    // role to grant to is the same question whichever way the connection was
+    // configured.
+    expect(
+      resolveMigrationIdentities({
+        SIGNET_DATABASE_HOST: "release-postgresql",
+        SIGNET_DATABASE_NAME: "signet",
+        SIGNET_DATABASE_USER: "signet_app",
+        SIGNET_DATABASE_PASSWORD: "s3cret",
+        SIGNET_DATABASE_OWNER_URL: identities["SIGNET_DATABASE_OWNER_URL"],
+      }).servingRole,
+    ).toBe("signet_app");
+  });
+
+  it("decodes a percent-encoded serving username", () => {
+    // The composed URL percent-encodes the username, and the grant must name the
+    // role the database actually has. Granting to `signet%20app` would succeed
+    // as a statement and leave the real role with nothing.
+    expect(
+      resolveMigrationIdentities({
+        ...identities,
+        SIGNET_DATABASE_URL: "postgres://signet%20app:p@db:5432/signet",
+      }).servingRole,
+    ).toBe("signet app");
+  });
+
+  it("requires the owner URL, naming it", () => {
+    expect(() =>
+      resolveMigrationIdentities({
+        ...identities,
+        SIGNET_DATABASE_OWNER_URL: undefined,
+      }),
+    ).toThrow(ConfigError);
+    expect(() =>
+      resolveMigrationIdentities({
+        ...identities,
+        SIGNET_DATABASE_OWNER_URL: undefined,
+      }),
+    ).toThrow(/SIGNET_DATABASE_OWNER_URL/);
+  });
+
+  it("treats a blank owner URL as absent", () => {
+    expect(() =>
+      resolveMigrationIdentities({
+        ...identities,
+        SIGNET_DATABASE_OWNER_URL: "   ",
+      }),
+    ).toThrow(/SIGNET_DATABASE_OWNER_URL/);
+  });
+
+  it("refuses two URLs naming the same role", () => {
+    // The refusal that matters. A deployment configured this way applies its
+    // migrations and starts a server that owns its tables, which Postgres
+    // exempts from the policies - so it would run believing it enforces
+    // something it does not.
+    expect(() =>
+      resolveMigrationIdentities({
+        SIGNET_DATABASE_URL: "postgres://signet:p@db:5432/signet",
+        SIGNET_DATABASE_OWNER_URL: "postgres://signet:owner-p@db:5432/signet",
+      }),
+    ).toThrow(/SIGNET_DATABASE_OWNER_URL/);
+    expect(() =>
+      resolveMigrationIdentities({
+        SIGNET_DATABASE_URL: "postgres://signet:p@db:5432/signet",
+        SIGNET_DATABASE_OWNER_URL: "postgres://signet:owner-p@db:5432/signet",
+      }),
+    ).toThrow(/SIGNET_DATABASE_URL/);
+  });
+
+  it("refuses a serving URL with no username, naming it", () => {
+    // Without one there is nothing to grant to, and the failure would otherwise
+    // present much later as a serving role that cannot reach any table.
+    expect(() =>
+      resolveMigrationIdentities({
+        ...identities,
+        SIGNET_DATABASE_URL: "postgres://db:5432/signet",
+      }),
+    ).toThrow(/SIGNET_DATABASE_URL/);
+  });
+
+  it("refuses an owner URL with no username, naming it", () => {
+    // A connection URL without a username falls back to the operating system
+    // user, which cannot be compared against the serving role - so the check
+    // above would pass without having checked anything.
+    expect(() =>
+      resolveMigrationIdentities({
+        ...identities,
+        SIGNET_DATABASE_OWNER_URL: "postgres://db:5432/signet",
+      }),
+    ).toThrow(/SIGNET_DATABASE_OWNER_URL/);
+  });
+
+  it("refuses an owner URL it cannot parse, naming it", () => {
+    expect(() =>
+      resolveMigrationIdentities({
+        ...identities,
+        SIGNET_DATABASE_OWNER_URL: "not a url",
+      }),
+    ).toThrow(/SIGNET_DATABASE_OWNER_URL/);
+  });
+
+  it("refuses a serving URL it cannot parse, naming it", () => {
+    expect(() =>
+      resolveMigrationIdentities({
+        ...identities,
+        SIGNET_DATABASE_URL: "not a url",
+      }),
+    ).toThrow(/SIGNET_DATABASE_URL/);
+  });
+
+  it("still requires a serving connection at all", () => {
+    expect(() =>
+      resolveMigrationIdentities({
+        SIGNET_DATABASE_OWNER_URL: identities["SIGNET_DATABASE_OWNER_URL"],
+      }),
+    ).toThrow(/SIGNET_DATABASE_URL or SIGNET_DATABASE_HOST is required/);
+  });
+
+  it("puts no credential in any refusal", () => {
+    // A role name is what an operator needs in order to act and is not a
+    // credential. A password is neither, and this is a path whose messages reach
+    // a Job's logs.
+    const failures = [
+      () =>
+        resolveMigrationIdentities({
+          ...identities,
+          SIGNET_DATABASE_OWNER_URL: "postgres://db:5432/signet",
+        }),
+      () =>
+        resolveMigrationIdentities({
+          SIGNET_DATABASE_URL: "postgres://signet:p@db:5432/signet",
+          SIGNET_DATABASE_OWNER_URL: "postgres://signet:owner-p@db:5432/signet",
+        }),
+      () =>
+        resolveMigrationIdentities({
+          ...identities,
+          SIGNET_DATABASE_URL: "postgres://db:5432/signet",
+        }),
+    ];
+
+    for (const failing of failures) {
+      expect(failing).toThrow(ConfigError);
+      let message = "";
+      try {
+        failing();
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      expect(message).not.toContain("owner-p");
+      expect(message).not.toContain("postgres://");
+    }
   });
 });
 

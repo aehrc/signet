@@ -7,7 +7,12 @@ import { createAuditRecorder, createDatabase } from "@signet/db";
 
 import { createApp } from "./app.js";
 import { bootstrapOptionsFrom, runBootstrapCommand } from "./bootstrap.js";
-import { ConfigError, loadConfig, resolveDatabaseUrl } from "./config.js";
+import {
+  ConfigError,
+  loadConfig,
+  resolveDatabaseUrl,
+  resolveMigrationIdentities,
+} from "./config.js";
 import { createRateLimitStore } from "./http/rateLimit.js";
 import { runMigrateCommand } from "./migrate.js";
 
@@ -31,7 +36,12 @@ const command = process.argv[2];
 // off by name for omitting something the command never reads.
 if (command === "migrate") {
   try {
-    await runMigrateCommand(resolveDatabaseUrl(process.env));
+    // The only command that needs two identities: it applies DDL as the owner and
+    // grants the serving role the access the server needs. It never uses the
+    // serving password, so the migration job holds no credential it has no use
+    // for.
+    const identities = resolveMigrationIdentities(process.env);
+    await runMigrateCommand(identities.ownerUrl, identities.servingRole);
   } catch (error) {
     if (error instanceof ConfigError) {
       reportConfigError(error);

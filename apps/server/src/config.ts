@@ -165,6 +165,102 @@ export function resolveDatabaseUrl(env: Environment): string {
   return databaseUrl;
 }
 
+/** The two identities the `migrate` command needs. */
+export interface MigrationIdentities {
+  /**
+   * The connection the migrations are applied with.
+   *
+   * The owning identity: migrations are DDL, and the grants below are issued by
+   * the role that owns the objects being granted.
+   */
+  readonly ownerUrl: string;
+  /**
+   * The role the grants are issued to, parsed out of the serving connection.
+   *
+   * A name, not a connection. `migrate` never uses the serving password, so the
+   * migration job holds no credential it has no use for and rotating that
+   * password is not a migration concern.
+   */
+  readonly servingRole: string;
+}
+
+/**
+ * The username in a connection URL, decoded.
+ *
+ * @throws {ConfigError} When the URL cannot be parsed or carries no username,
+ *   naming the variable it came from and quoting no part of it - a connection
+ *   URL contains a password and these messages reach a Job's logs.
+ */
+function usernameOf(url: string, variable: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new ConfigError(`${variable} is not a valid connection URL`);
+  }
+  if (parsed.username.length === 0) {
+    throw new ConfigError(
+      `${variable} must name the role it connects as; it carries no username`,
+    );
+  }
+  // Percent-decoded, because the grant has to name the role the database
+  // actually has. Granting to `signet%20app` is a statement that succeeds and
+  // leaves the real role with nothing.
+  return decodeURIComponent(parsed.username);
+}
+
+/**
+ * Resolves the two identities the `migrate` command acts with.
+ *
+ * `migrate` is the only command that needs more than one. It connects as the
+ * owning identity, because migrations are DDL, and it grants the serving role
+ * the access the server needs - so it has to know that role's name, which it
+ * takes from the serving connection the server itself is configured with.
+ *
+ * Every refusal here is a deployment that could not enforce tenant isolation,
+ * and the worst of them is the quiet one: two URLs naming the same role means
+ * the server owns its tables, and Postgres exempts a table's owner from its
+ * policies, so that deployment would serve while believing itself protected.
+ * Signet is pre-release, so such a configuration is refused rather than
+ * accommodated.
+ *
+ * @param env - The environment to read.
+ * @returns The owner connection and the serving role's name.
+ * @throws {ConfigError} When the owner URL is absent, either URL is unparseable
+ *   or carries no username, or the two name the same role. Each message names
+ *   the variable at fault and contains no part of a connection string.
+ * @example
+ * ```ts
+ * const { ownerUrl, servingRole } = resolveMigrationIdentities(process.env);
+ * await runMigrateCommand(ownerUrl, servingRole);
+ * ```
+ */
+export function resolveMigrationIdentities(
+  env: Environment,
+): MigrationIdentities {
+  // Resolved first, so that a deployment missing the connection every command
+  // needs is told about that rather than about the one only `migrate` needs.
+  const servingUrl = resolveDatabaseUrl(env);
+
+  const ownerUrl = read(env, "SIGNET_DATABASE_OWNER_URL");
+  if (ownerUrl === undefined) {
+    throw new ConfigError(
+      "SIGNET_DATABASE_OWNER_URL is required to migrate; it names the identity that owns the schema, which SIGNET_DATABASE_URL must not",
+    );
+  }
+
+  const servingRole = usernameOf(servingUrl, "SIGNET_DATABASE_URL");
+  const ownerRole = usernameOf(ownerUrl, "SIGNET_DATABASE_OWNER_URL");
+
+  if (servingRole === ownerRole) {
+    throw new ConfigError(
+      `SIGNET_DATABASE_URL and SIGNET_DATABASE_OWNER_URL both name the role "${servingRole}". The serving role must be non-owning: Postgres exempts a table's owner from that table's policies, so a server connecting as the owner is not constrained by them.`,
+    );
+  }
+
+  return { ownerUrl, servingRole };
+}
+
 /**
  * Resolves configuration from an environment, throwing {@link ConfigError} with
  * an actionable message rather than starting up in a half-configured state.

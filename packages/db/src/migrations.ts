@@ -90,10 +90,44 @@ export async function applyMigrations(
 }
 
 /**
- * Applies migrations while holding a session-level advisory lock.
+ * Runs work while holding the session-level migration advisory lock.
  *
  * The lock is released in a `finally`, and a crash releases it with the session, so
- * a failed migration cannot leave the next one waiting forever.
+ * failed work cannot leave the next migration waiting forever.
+ *
+ * Exported so that the `migrate` command can hold one lock across applying the
+ * migrations *and* issuing the serving role's grants. Those are two steps of one
+ * operation: a second process that observed the schema between them would see
+ * tables the serving role cannot reach, which is indistinguishable from a
+ * migration that shipped a table ungranted.
+ *
+ * @param db - An open connection. Must be a single connection rather than a pool:
+ *   a session-level advisory lock belongs to the session that took it, and a
+ *   pooled `unlock` issued on a different connection releases nothing.
+ * @param work - What to do under the lock.
+ * @returns Whatever `work` returns.
+ * @example
+ * ```ts
+ * await withMigrationLock(handle.db, async () => {
+ *   await applyMigrations(handle.db);
+ *   await applyServingRolePrivileges(handle.db, role);
+ * });
+ * ```
+ */
+export async function withMigrationLock<T>(
+  db: Executor,
+  work: () => Promise<T>,
+): Promise<T> {
+  await db.execute(sql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`);
+  try {
+    return await work();
+  } finally {
+    await db.execute(sql`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`);
+  }
+}
+
+/**
+ * Applies migrations while holding a session-level advisory lock.
  *
  * @param db - An open connection.
  * @param migrationsFolder - Where the migrations live.
@@ -102,10 +136,7 @@ export async function applyMigrationsWithLock(
   db: Executor,
   migrationsFolder: string = resolveMigrationsFolder(),
 ): Promise<void> {
-  await db.execute(sql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`);
-  try {
+  await withMigrationLock(db, async () => {
     await applyMigrations(db, migrationsFolder);
-  } finally {
-    await db.execute(sql`select pg_advisory_unlock(${MIGRATION_LOCK_KEY})`);
-  }
+  });
 }

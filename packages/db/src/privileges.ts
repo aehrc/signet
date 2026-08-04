@@ -33,6 +33,10 @@
  * Author: John Grimes
  */
 
+import { sql } from "drizzle-orm";
+
+import type { Executor } from "./repositories/executor.js";
+
 /**
  * The routines the serving role may execute without having declared a tenant.
  *
@@ -130,4 +134,34 @@ export function servingRolePrivilegeStatements(
       (routine) => `grant execute on function ${routine} to ${target}`,
     ),
   ];
+}
+
+/**
+ * Grants a serving role its access.
+ *
+ * Issued by the owning identity, immediately after the migrations and under the
+ * same advisory lock, because the grants and the tables they name are two halves
+ * of one operation. Must run after migration `0007_serving_role_privileges`,
+ * which creates the routines the last statements grant `execute` on.
+ *
+ * Not wrapped in a transaction. `grant` and `revoke` are individually atomic, the
+ * whole set is idempotent, and a partial application is repaired by the next run
+ * rather than needing to be rolled back - whereas holding one transaction open
+ * across a `grant ... on all tables` on a busy database is a lock nobody asked
+ * for.
+ *
+ * @param db - A connection with authority to grant on the tables, which in
+ *   practice means the identity that owns them.
+ * @param role - The serving role's name, as parsed from its connection URL.
+ * @throws {Error} When the role name is blank, or when a statement fails - a
+ *   migration that reported success while leaving the serving role unable to
+ *   reach a table would present later as an empty result.
+ */
+export async function applyServingRolePrivileges(
+  db: Executor,
+  role: string,
+): Promise<void> {
+  for (const statement of servingRolePrivilegeStatements(role)) {
+    await db.execute(sql.raw(statement));
+  }
 }
