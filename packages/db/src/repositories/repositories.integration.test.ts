@@ -765,18 +765,28 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     it("allocates versions in sequence, including concurrently", async () => {
       const fixture = await newFixture();
 
-      const first = await createPolicyVersion(db, fixture.endpointScope, {
-        document: POLICY,
-      });
+      const first = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createPolicyVersion(bound, {
+          document: POLICY,
+        }),
+      );
       expect(expectOk(first).policy.version).toBe(1);
 
       const concurrent = await Promise.all([
-        createPolicyVersion(db, fixture.endpointScope, { document: POLICY }),
-        createPolicyVersion(db, fixture.endpointScope, { document: POLICY }),
+        withTenantScope(db, fixture.endpointScope, (bound) =>
+          createPolicyVersion(bound, { document: POLICY }),
+        ),
+        withTenantScope(db, fixture.endpointScope, (bound) =>
+          createPolicyVersion(bound, { document: POLICY }),
+        ),
       ]);
       expect(concurrent.map((result) => result.ok)).toEqual([true, true]);
 
-      const allVersions = await listPolicyVersions(db, fixture.endpointScope);
+      const allVersions = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) => listPolicyVersions(bound),
+      );
       const versions = allVersions
         .map((policy) => policy.version)
         .toSorted((a, b) => a - b);
@@ -785,56 +795,101 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
     it("publishes exactly one version at a time", async () => {
       const fixture = await newFixture();
-      await createPolicyVersion(db, fixture.endpointScope, {
-        document: POLICY,
-      });
-      await createPolicyVersion(db, fixture.endpointScope, {
-        document: POLICY,
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createPolicyVersion(bound, {
+          document: POLICY,
+        }),
+      );
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createPolicyVersion(bound, {
+          document: POLICY,
+        }),
+      );
 
-      const publishedFirst = await publishPolicy(db, fixture.endpointScope, 1);
+      const publishedFirst = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) => publishPolicy(bound, 1),
+      );
       expect(publishedFirst.ok).toBe(true);
-      const afterFirst = await getPublishedPolicy(db, fixture.endpointScope);
+      const afterFirst = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) => getPublishedPolicy(bound),
+      );
       expect(afterFirst?.version).toBe(1);
 
-      const publishedSecond = await publishPolicy(db, fixture.endpointScope, 2);
+      const publishedSecond = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) => publishPolicy(bound, 2),
+      );
       expect(publishedSecond.ok).toBe(true);
-      const versions = await listPolicyVersions(db, fixture.endpointScope);
+      const versions = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) => listPolicyVersions(bound),
+      );
       expect(versions.filter((policy) => policy.published)).toHaveLength(1);
-      const afterSecond = await getPublishedPolicy(db, fixture.endpointScope);
+      const afterSecond = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) => getPublishedPolicy(bound),
+      );
       expect(afterSecond?.version).toBe(2);
     });
 
     it("leaves the published version alone when the target does not exist", async () => {
       const fixture = await newFixture();
-      await createPolicyVersion(db, fixture.endpointScope, {
-        document: POLICY,
-      });
-      await publishPolicy(db, fixture.endpointScope, 1);
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createPolicyVersion(bound, {
+          document: POLICY,
+        }),
+      );
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        publishPolicy(bound, 1),
+      );
 
-      expect(await publishPolicy(db, fixture.endpointScope, 99)).toEqual({
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          publishPolicy(bound, 99),
+        ),
+      ).toEqual({
         ok: false,
         reason: "version-not-found",
       });
 
       // The endpoint must not have been left with nothing published.
-      const stillPublished = await getPublishedPolicy(
+      const stillPublished = await withTenantScope(
         db,
         fixture.endpointScope,
+        (bound) => getPublishedPolicy(bound),
       );
       expect(stillPublished?.version).toBe(1);
     });
 
     it("prefers a client override over the endpoint's published policy", async () => {
       const fixture = await newFixture();
-      expect(await getEffectivePolicy(db, fixture.clientScope)).toBeUndefined();
+      expect(
+        await withTenantScope(db, fixture.clientScope, (bound) =>
+          getEffectivePolicy(bound),
+        ),
+      ).toBeUndefined();
 
-      await createPolicyVersion(db, fixture.endpointScope, {
-        document: POLICY,
-      });
-      await publishPolicy(db, fixture.endpointScope, 1);
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createPolicyVersion(bound, {
+          document: POLICY,
+        }),
+      );
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        publishPolicy(bound, 1),
+      );
 
-      const endpointPolicy = await getEffectivePolicy(db, fixture.clientScope);
+      const endpointPolicy = await withTenantScope(
+        db,
+        fixture.clientScope,
+        (bound) => getEffectivePolicy(bound),
+      );
       expect(endpointPolicy?.source).toBe("endpoint");
       expect(endpointPolicy?.version).toBe(1);
 
@@ -842,9 +897,15 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         ...POLICY,
         scopeGrants: [{ match: "system/*.rs", allow: true }],
       };
-      await setClientPolicyOverride(db, fixture.clientScope, override);
+      await withTenantScope(db, fixture.clientScope, (bound) =>
+        setClientPolicyOverride(bound, override),
+      );
 
-      const effective = await getEffectivePolicy(db, fixture.clientScope);
+      const effective = await withTenantScope(
+        db,
+        fixture.clientScope,
+        (bound) => getEffectivePolicy(bound),
+      );
       expect(effective?.source).toBe("client-override");
       expect(effective?.document.scopeGrants[0]?.match).toBe("system/*.rs");
     });

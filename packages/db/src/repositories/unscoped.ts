@@ -93,6 +93,5 @@ export const MODULES_AWAITING_BINDING: readonly string[] = [
   "repositories/federationStates",
   "repositories/jtiReplay",
   "repositories/launchContexts",
-  "repositories/policies",
   "repositories/refreshTokens",
 ];

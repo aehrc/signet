@@ -253,15 +253,19 @@ export async function createTestStack(
     }
   }
 
-  const version = await createPolicyVersion(db, scope, {
-    document: options.policy ?? SMART_BASELINE_PRESET,
-    createdBy: null,
-    note: "harness",
-  });
+  const version = await withTenantScope(db, scope, (bound) =>
+    createPolicyVersion(bound, {
+      document: options.policy ?? SMART_BASELINE_PRESET,
+      createdBy: null,
+      note: "harness",
+    }),
+  );
   if (!version.ok) {
     throw new Error(`could not create a policy version: ${version.reason}`);
   }
-  const published = await publishPolicy(db, scope, version.policy.version);
+  const published = await withTenantScope(db, scope, (bound) =>
+    publishPolicy(bound, version.policy.version),
+  );
   if (!published.ok) {
     throw new Error(`could not publish the policy: ${published.reason}`);
   }

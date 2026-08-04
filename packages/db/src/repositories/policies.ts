@@ -24,11 +24,11 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { nextPolicyVersion } from "./predicates.js";
 import { firstRow, requireRow } from "./rows.js";
+import { executorFor } from "./scope.js";
 import { endpoints } from "../schema/endpoints.js";
 import { clientPolicyOverrides, policies } from "../schema/policies.js";
 
-import type { Executor } from "./executor.js";
-import type { ClientScope, EndpointScope } from "./scope.js";
+import type { BoundClientScope, BoundEndpointScope } from "./scope.js";
 import type {
   ClientPolicyOverride,
   NewPolicy,
@@ -44,11 +44,8 @@ export type PolicyInput = Pick<NewPolicy, "document" | "createdBy" | "note">;
  *
  * @returns Whether the endpoint still exists.
  */
-async function lockEndpoint(
-  tx: Executor,
-  scope: EndpointScope,
-): Promise<boolean> {
-  const rows = await tx
+async function lockEndpoint(scope: BoundEndpointScope): Promise<boolean> {
+  const rows = await executorFor(scope)
     .select({ id: endpoints.id })
     .from(endpoints)
     .where(
@@ -78,39 +75,35 @@ export type PolicyWrite =
  * token contents.
  */
 export async function createPolicyVersion(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   input: PolicyInput,
 ): Promise<PolicyWrite> {
-  return await db.transaction(async (tx) => {
-    if (!(await lockEndpoint(tx, scope))) {
-      return { ok: false, reason: "endpoint-not-found" };
-    }
+  if (!(await lockEndpoint(scope))) {
+    return { ok: false, reason: "endpoint-not-found" };
+  }
 
-    const [highest] = await tx
-      .select({ version: sql<number | null>`max(${policies.version})` })
-      .from(policies)
-      .where(eq(policies.endpointId, scope.endpointId));
+  const [highest] = await executorFor(scope)
+    .select({ version: sql<number | null>`max(${policies.version})` })
+    .from(policies)
+    .where(eq(policies.endpointId, scope.endpointId));
 
-    const rows = await tx
-      .insert(policies)
-      .values({
-        ...input,
-        endpointId: scope.endpointId,
-        version: nextPolicyVersion(highest?.version ?? null),
-      })
-      .returning();
+  const rows = await executorFor(scope)
+    .insert(policies)
+    .values({
+      ...input,
+      endpointId: scope.endpointId,
+      version: nextPolicyVersion(highest?.version ?? null),
+    })
+    .returning();
 
-    return { ok: true, policy: requireRow(rows, "insert into policies") };
-  });
+  return { ok: true, policy: requireRow(rows, "insert into policies") };
 }
 
 /** Lists the scoped endpoint's policy versions, newest first. */
 export async function listPolicyVersions(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<readonly Policy[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(policies)
     .where(eq(policies.endpointId, scope.endpointId))
@@ -119,11 +112,10 @@ export async function listPolicyVersions(
 
 /** Reads one version of the scoped endpoint's policy. */
 export async function getPolicyVersion(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   version: number,
 ): Promise<Policy | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(policies)
     .where(
@@ -144,10 +136,9 @@ export async function getPolicyVersion(
  * index would already have been dropped and token issuance would be ambiguous.
  */
 export async function getPublishedPolicy(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<Policy | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(policies)
     .where(
@@ -167,50 +158,47 @@ export async function getPublishedPolicy(
  * Exactly one version is published when this returns successfully: the previous
  * one is unpublished and the target published, in a single transaction, with the
  * endpoint row locked so that two concurrent publishes cannot interleave into a
- * state the partial unique index would reject.
+ * state the partial unique index would reject. That transaction is the one the
+ * bound scope declared its tenant on, which is what the lock is held for.
  */
 export async function publishPolicy(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   version: number,
 ): Promise<PolicyWrite> {
-  return await db.transaction(async (tx) => {
-    if (!(await lockEndpoint(tx, scope))) {
-      return { ok: false, reason: "endpoint-not-found" };
-    }
+  if (!(await lockEndpoint(scope))) {
+    return { ok: false, reason: "endpoint-not-found" };
+  }
 
-    // Checked before anything is unpublished; see the module header.
-    const target = await getPolicyVersion(tx, scope, version);
-    if (target === undefined) {
-      return { ok: false, reason: "version-not-found" };
-    }
+  // Checked before anything is unpublished; see the module header.
+  const target = await getPolicyVersion(scope, version);
+  if (target === undefined) {
+    return { ok: false, reason: "version-not-found" };
+  }
 
-    await tx
-      .update(policies)
-      .set({ published: false })
-      .where(
-        and(
-          eq(policies.endpointId, scope.endpointId),
-          eq(policies.published, true),
-        ),
-      );
+  await executorFor(scope)
+    .update(policies)
+    .set({ published: false })
+    .where(
+      and(
+        eq(policies.endpointId, scope.endpointId),
+        eq(policies.published, true),
+      ),
+    );
 
-    const rows = await tx
-      .update(policies)
-      .set({ published: true })
-      .where(eq(policies.id, target.id))
-      .returning();
+  const rows = await executorFor(scope)
+    .update(policies)
+    .set({ published: true })
+    .where(eq(policies.id, target.id))
+    .returning();
 
-    return { ok: true, policy: requireRow(rows, "publish policies row") };
-  });
+  return { ok: true, policy: requireRow(rows, "publish policies row") };
 }
 
 /** Reads the scoped client's policy override, if it has one. */
 export async function getClientPolicyOverride(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
 ): Promise<ClientPolicyOverride | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(clientPolicyOverrides)
     .where(eq(clientPolicyOverrides.clientId, scope.clientRowId))
@@ -227,11 +215,10 @@ export async function getClientPolicyOverride(
  * Signet does not invent one.
  */
 export async function setClientPolicyOverride(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   document: PolicyDocument,
 ): Promise<ClientPolicyOverride> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(clientPolicyOverrides)
     .values({ clientId: scope.clientRowId, document })
     .onConflictDoUpdate({
@@ -248,10 +235,9 @@ export async function setClientPolicyOverride(
  * @returns Whether an override was removed.
  */
 export async function deleteClientPolicyOverride(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .delete(clientPolicyOverrides)
     .where(eq(clientPolicyOverrides.clientId, scope.clientRowId))
     .returning({ clientId: clientPolicyOverrides.clientId });
@@ -281,10 +267,9 @@ export interface EffectivePolicy {
  *   single worst failure mode available to this codebase.
  */
 export async function getEffectivePolicy(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
 ): Promise<EffectivePolicy | undefined> {
-  const override = await getClientPolicyOverride(db, scope);
+  const override = await getClientPolicyOverride(scope);
   if (override !== undefined) {
     return {
       source: "client-override",
@@ -294,7 +279,7 @@ export async function getEffectivePolicy(
     };
   }
 
-  const published = await getPublishedPolicy(db, scope);
+  const published = await getPublishedPolicy(scope);
   if (published === undefined) {
     return undefined;
   }
@@ -313,10 +298,9 @@ export async function getEffectivePolicy(
  * Exposed for the console, which shows "version 7 of 7" beside the editor.
  */
 export async function getLatestPolicyVersion(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<Policy | undefined> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .select()
     .from(policies)
     .where(eq(policies.endpointId, scope.endpointId))

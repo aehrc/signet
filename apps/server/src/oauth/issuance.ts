@@ -34,6 +34,7 @@ import {
   recordAccessToken,
   redeemAndRotateRefreshToken,
   redeemRefreshToken,
+  withTenantScope,
 } from "@signet/db";
 
 import { loadSigningKey, signClaims } from "../keys/signing.js";
@@ -154,7 +155,9 @@ export async function issueTokens(
 ): Promise<IssuanceResult> {
   const { issuerContext, clientScope } = request;
 
-  const policy = await getEffectivePolicy(context.db, clientScope);
+  const policy = await withTenantScope(context.db, clientScope, (bound) =>
+    getEffectivePolicy(bound),
+  );
   if (policy === undefined) {
     return { ok: false, reason: "no-policy" };
   }

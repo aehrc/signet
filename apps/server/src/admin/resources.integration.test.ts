@@ -469,7 +469,11 @@ describe.skipIf(testDatabaseUrl === undefined)(
 
     describe("policies", () => {
       it("creates a version without publishing it", async () => {
-        const before = await listPolicyVersions(stack.context.db, stack.scope);
+        const before = await withTenantScope(
+          stack.context.db,
+          stack.scope,
+          (bound) => listPolicyVersions(bound),
+        );
 
         const created = await adminJson<{
           policy: { version: number; published: boolean };
@@ -557,9 +561,10 @@ describe.skipIf(testDatabaseUrl === undefined)(
       });
 
       it("simulates an unsaved document without storing it", async () => {
-        const versionsBefore = await listPolicyVersions(
+        const versionsBefore = await withTenantScope(
           stack.context.db,
           stack.scope,
+          (bound) => listPolicyVersions(bound),
         );
 
         const result = await adminJson<{
@@ -598,9 +603,10 @@ describe.skipIf(testDatabaseUrl === undefined)(
         expect(result.accessTokenClaims["authorities"]).toEqual(["read:pat-1"]);
         expect(result.denied.length).toBeGreaterThan(0);
 
-        const versionsAfter = await listPolicyVersions(
+        const versionsAfter = await withTenantScope(
           stack.context.db,
           stack.scope,
+          (bound) => listPolicyVersions(bound),
         );
         expect(versionsAfter).toHaveLength(versionsBefore.length);
       });

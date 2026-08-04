@@ -87,7 +87,9 @@ export function registerPolicyRoutes(
   /** Lists every version, newest first, with the published one flagged. */
   router.get(`${ENDPOINT_PATH}/policies`, requireRole("viewer"), async (c) => {
     const { scope } = c.get("endpoint");
-    const versions = await listPolicyVersions(context.db, scope);
+    const versions = await withTenantScope(context.db, scope, (bound) =>
+      listPolicyVersions(bound),
+    );
     return c.json({ policies: versions.map(policyView) });
   });
 
@@ -104,11 +106,13 @@ export function registerPolicyRoutes(
       return body;
     }
 
-    const created = await createPolicyVersion(context.db, scope, {
-      document: body.document,
-      createdBy: principalAdminUserId(c.get("principal")),
-      note: body.note ?? null,
-    });
+    const created = await withTenantScope(context.db, scope, (bound) =>
+      createPolicyVersion(bound, {
+        document: body.document,
+        createdBy: principalAdminUserId(c.get("principal")),
+        note: body.note ?? null,
+      }),
+    );
     if (!created.ok) {
       return c.json(
         adminErrorBody("not_found", "No such endpoint"),
@@ -128,10 +132,8 @@ export function registerPolicyRoutes(
 
     let policy = created.policy;
     if (body.publish === true) {
-      const published = await publishPolicy(
-        context.db,
-        scope,
-        created.policy.version,
+      const published = await withTenantScope(context.db, scope, (bound) =>
+        publishPolicy(bound, created.policy.version),
       );
       if (!published.ok) {
         return c.json(
@@ -161,7 +163,9 @@ export function registerPolicyRoutes(
         return version;
       }
 
-      const policy = await getPolicyVersion(context.db, scope, version);
+      const policy = await withTenantScope(context.db, scope, (bound) =>
+        getPolicyVersion(bound, version),
+      );
       if (policy === undefined) {
         return c.json(
           adminErrorBody("not_found", "No such policy version"),
@@ -189,7 +193,9 @@ export function registerPolicyRoutes(
         return version;
       }
 
-      const published = await publishPolicy(context.db, scope, version);
+      const published = await withTenantScope(context.db, scope, (bound) =>
+        publishPolicy(bound, version),
+      );
       if (!published.ok) {
         return c.json(
           adminErrorBody(
@@ -255,9 +261,10 @@ export function registerPolicyRoutes(
       let document = body.document;
       let simulatedVersion: number | null = null;
       if (document === undefined) {
-        const effective = await getEffectivePolicy(
+        const effective = await withTenantScope(
           context.db,
           clientScopeFromRow(scope, client),
+          (bound) => getEffectivePolicy(bound),
         );
         if (effective === undefined) {
           return c.json(
@@ -269,7 +276,9 @@ export function registerPolicyRoutes(
           );
         }
         document = effective.document;
-        const published = await getPublishedPolicy(context.db, scope);
+        const published = await withTenantScope(context.db, scope, (bound) =>
+          getPublishedPolicy(bound),
+        );
         simulatedVersion = published?.version ?? null;
       }
 

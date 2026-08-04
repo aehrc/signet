@@ -194,18 +194,20 @@ export function registerEndpointRoutes(
       );
     }
 
-    const version = await createPolicyVersion(context.db, endpointScope, {
-      document: SMART_BASELINE_PRESET,
-      createdBy: principalAdminUserId(c.get("principal")),
-      note: "SMART baseline, created with the endpoint",
-    });
+    const version = await withTenantScope(context.db, endpointScope, (bound) =>
+      createPolicyVersion(bound, {
+        document: SMART_BASELINE_PRESET,
+        createdBy: principalAdminUserId(c.get("principal")),
+        note: "SMART baseline, created with the endpoint",
+      }),
+    );
     if (!version.ok) {
       throw new Error(`could not create a policy version: ${version.reason}`);
     }
-    const published = await publishPolicy(
+    const published = await withTenantScope(
       context.db,
       endpointScope,
-      version.policy.version,
+      (bound) => publishPolicy(bound, version.policy.version),
     );
     if (!published.ok) {
       throw new Error(`could not publish the policy: ${published.reason}`);

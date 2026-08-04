@@ -272,12 +272,12 @@ describeWithDatabase("row-level security as the serving role", () => {
       }),
     );
 
-    await createPolicyVersion(owner, endpointScope, {
+    await withTenantScope(owner, endpointScope, (bound) => createPolicyVersion(bound, {
       document: POLICY,
       createdBy: admin.id,
       note: "Seeded",
-    });
-    await setClientPolicyOverride(owner, clientScope, POLICY);
+    }));
+    await withTenantScope(owner, clientScope, (bound) => setClientPolicyOverride(bound, POLICY));
 
     await createLaunchContext(owner, endpointScope, {
       handleHash: `launch-${unique()}`,
