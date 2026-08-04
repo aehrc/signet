@@ -1,30 +1,39 @@
 /**
  * Postgres row-level security - the second of the two layers that bind Signet.
  *
- * Tenant isolation is a property of the type system first. Every data-layer
- * function demands a `BoundTenantScope`, `BoundEndpointScope` or
- * `BoundClientScope`, none of which can be written down by hand, so a query that
- * has not proved which tenant it belongs to does not compile. That layer is first
- * because it fails at build time, in every environment, whether or not anybody
- * remembered to configure anything, and because a compiler naming a file and a
- * line is a better diagnostic than a query that quietly returns nothing.
+ * Tenant isolation is a property of the type system first. A data-layer function
+ * demands a scope - and, as this feature converts them, a scope bound to the
+ * transaction that declared its tenant - none of which can be written down by
+ * hand, so a query that has not proved which tenant it belongs to does not
+ * compile. That layer is first because it fails at build time, in every
+ * environment, whether or not anybody remembered to configure anything, and
+ * because a compiler naming a file and a line is a better diagnostic than a query
+ * that quietly returns nothing.
  *
  * The policies below are what make the database refuse the same query rather than
  * trust that the types prevented it from being written. They bind every connection
- * the role of which is not exempt - a `psql` session, a reporting job, an analytics
- * tool, a service added later, none of which passes through the compiler at all -
- * and, since this feature, Signet's own. Signet connects as a non-owning serving
- * role, because Postgres exempts a table's owner from its policies; the owning
- * identity is used only where it is unavoidable, which is `migrate` and the
- * cross-tenant expiry sweep. `../enforcement.ts` refuses to start a server whose
- * role turns out to be exempt after all, since that is a configuration mistake no
- * code review could catch.
+ * whose role is not exempt - a `psql` session, a reporting job, an analytics tool,
+ * a service added later, none of which passes through the compiler at all - and
+ * Signet's own, which is the change this feature is making.
+ *
+ * That requires Signet to connect as a role that owns none of these tables, since
+ * Postgres exempts a table's owner from its policies. The owning identity is used
+ * only where it is unavoidable: `migrate`, which is DDL, and the cross-tenant
+ * expiry sweep. `./enforcement.ts` refuses to start a server whose role turns out
+ * to be exempt after all, because that is a configuration mistake no code review
+ * could catch.
  *
  * Three reads cannot declare a tenant, because they are what establishes one:
  * resolving `/t/{slug}`, resolving a personal access token's digest, and answering
  * which tenants a signed-in console user may see. They reach past the policies
  * through the `security definer` routines declared in `./privileges.ts`, so the
  * process holds no handle that can read an arbitrary tenant.
+ *
+ * What is *not* yet true at this commit is that every tenant-owned read and write
+ * declares its tenant: the data layer still takes an unbound executor in the
+ * modules listed in `./repositories/unscoped.ts`, and the suite still connects as
+ * the owning identity. Converting them is the next step, and this paragraph goes
+ * with it.
  *
  * Neither layer substitutes for the other, and neither may be dropped because the
  * other exists. See the second principle in `CLAUDE.md`.
