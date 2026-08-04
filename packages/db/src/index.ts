@@ -32,6 +32,13 @@ export {
   SERVING_TEST_ROLE,
 } from "./test/servingRole.js";
 
+// Activity observation, for the assertion that no transaction is held across an
+// outbound request. See `./test/activityProbe.ts`.
+export {
+  createActivityProbe,
+  type ActivityProbe,
+} from "./test/activityProbe.js";
+
 // Privilege observation, exported for the same reason `schemaReady` is: a suite
 // in `apps/server` needs it and cannot write raw SQL, because only this package
 // depends on Drizzle. See `./test/privilegeProbe.ts`.

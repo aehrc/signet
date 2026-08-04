@@ -14,6 +14,15 @@ export interface DatabaseOptions {
   readonly url: string;
   /** Maximum pooled connections. */
   readonly maxConnections?: number;
+  /**
+   * What this connection calls itself in `pg_stat_activity`.
+   *
+   * Ordinary operational hygiene - an operator looking at a busy database should be
+   * able to tell Signet's backends from a reporting job's - and it is also what lets
+   * a test observe the transactions one particular application is holding while
+   * other test workers hold their own.
+   */
+  readonly applicationName?: string;
 }
 
 /**
@@ -48,6 +57,9 @@ export function createDatabase(options: DatabaseOptions): DatabaseHandle {
     // Connection and notice output must never surface the credentials embedded
     // in the connection URL.
     onnotice: () => {},
+    ...(options.applicationName === undefined
+      ? {}
+      : { connection: { application_name: options.applicationName } }),
   });
 
   return {

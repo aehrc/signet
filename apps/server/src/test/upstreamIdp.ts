@@ -37,6 +37,15 @@ export interface UpstreamIdpOptions {
   readonly metadata?: Readonly<Record<string, unknown>>;
   /** Answers the token endpoint with this status instead of issuing anything. */
   readonly tokenStatus?: number;
+  /**
+   * Runs while a request to the provider is being handled, before it is answered.
+   *
+   * The only moment at which "the outbound request is in flight" is observable from
+   * inside the test process: Signet is blocked on this socket, so whatever the
+   * database says about Signet's connections now is what it says for the duration of
+   * the call.
+   */
+  readonly whileHandling?: (pathname: string) => Promise<void>;
 }
 
 /** A running stub provider. */
@@ -82,6 +91,7 @@ export async function startUpstreamIdp(
 
   const server = await listen(async (request, issuer) => {
     const url = new URL(request.url);
+    await options.whileHandling?.(url.pathname);
 
     if (url.pathname === "/.well-known/openid-configuration") {
       return json({

@@ -105,6 +105,14 @@ export interface TestStack {
   readonly tenantScope: TenantScope;
   readonly scope: EndpointScope;
   readonly issuer: string;
+  /**
+   * What this stack's database connections call themselves.
+   *
+   * Vitest runs files in parallel and every worker connects as the same role, so a
+   * test observing `pg_stat_activity` has to be able to tell this stack's backends
+   * from everybody else's.
+   */
+  readonly applicationName: string;
   /** A public client with PKCE, registered for the code and refresh grants. */
   readonly publicClient: Client;
   /** A confidential client authenticating with {@link TEST_CLIENT_SECRET}. */
@@ -191,7 +199,7 @@ let sequence = 0;
  * @param ownerUrl - The owning identity's URL, as configured by the developer.
  * @returns A handle on the same database, reached as the serving role.
  */
-async function connect(ownerUrl: string) {
+async function connect(ownerUrl: string, applicationName: string) {
   if (!migrated && !isTestSchemaReady()) {
     const owner = createDatabase({ url: ownerUrl, maxConnections: 1 });
     try {
@@ -206,6 +214,9 @@ async function connect(ownerUrl: string) {
   return createDatabase({
     url: servingRoleUrl(ownerUrl),
     maxConnections: 5,
+    // Names this stack's backends in `pg_stat_activity`, so a test can observe what
+    // *this* application is holding while other workers hold their own.
+    applicationName,
   });
 }
 
@@ -223,11 +234,12 @@ export async function createTestStack(
     throw new Error("SIGNET_TEST_DATABASE_URL is not set");
   }
 
-  const handle = await connect(testDatabaseUrl);
-  const db = handle.db;
-
   sequence += 1;
   const suffix = `${String(process.pid)}-${String(sequence)}`;
+  const applicationName = `signet-test-${suffix}`;
+
+  const handle = await connect(testDatabaseUrl, applicationName);
+  const db = handle.db;
 
   const tenant = await createTenant(db, {
     slug: `t-${suffix}`,
@@ -429,6 +441,7 @@ export async function createTestStack(
     tenantScope,
     scope,
     issuer: `${TEST_PUBLIC_URL}/t/${tenant.slug}/e/${endpoint.slug}`,
+    applicationName,
     publicClient,
     symmetricClient,
     asymmetricClient: {

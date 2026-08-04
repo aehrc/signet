@@ -15,7 +15,12 @@
  * Author: John Grimes
  */
 
-import { listEndUsers, withTenantScope } from "@signet/db";
+import {
+  createActivityProbe,
+  listEndUsers,
+  servingRoleUrl,
+  withTenantScope,
+} from "@signet/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { adminRequest, endpointPath, tenantPath } from "../test/adminApi.js";
@@ -25,6 +30,47 @@ import { startUpstreamIdp, UPSTREAM_SUBJECT } from "../test/upstreamIdp.js";
 
 import type { TestStack } from "../test/harness.js";
 import type { UpstreamIdp, UpstreamIdpOptions } from "../test/upstreamIdp.js";
+import type { ActivityProbe } from "@signet/db";
+
+/**
+ * Points a stack's endpoint at a stub provider.
+ *
+ * Configured through the admin API rather than by inserting a row, so the suite
+ * exercises the route an operator actually uses - including the secret being
+ * encrypted on the way in.
+ */
+async function configureProvider(
+  stack: TestStack,
+  idp: UpstreamIdp,
+): Promise<void> {
+  const cookie = await stack.signIn();
+  const response = await adminRequest(
+    stack,
+    "PUT",
+    `${endpointPath(stack)}/idp`,
+    {
+      credential: { cookie },
+      body: {
+        issuer: idp.issuer,
+        displayName: "Test Hospital SSO",
+        clientId: idp.clientId,
+        clientSecret: "upstream-secret",
+        scopes: ["openid", "profile"],
+        claimMappings: {
+          fhirUser: "fhir_user",
+          roles: "groups",
+          displayName: "name",
+          attributes: ["department"],
+        },
+      },
+    },
+  );
+  if (response.status !== 200) {
+    throw new Error(
+      `could not configure the provider: ${String(response.status)} ${await response.text()}`,
+    );
+  }
+}
 
 describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
   let stack: TestStack;
@@ -37,36 +83,7 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
       allowPrivateOutboundFetches: true,
     });
 
-    // Configured through the admin API rather than by inserting a row, so the suite
-    // exercises the route an operator actually uses - including the secret being
-    // encrypted on the way in.
-    const cookie = await stack.signIn();
-    const response = await adminRequest(
-      stack,
-      "PUT",
-      `${endpointPath(stack)}/idp`,
-      {
-        credential: { cookie },
-        body: {
-          issuer: idp.issuer,
-          displayName: "Test Hospital SSO",
-          clientId: idp.clientId,
-          clientSecret: "upstream-secret",
-          scopes: ["openid", "profile"],
-          claimMappings: {
-            fhirUser: "fhir_user",
-            roles: "groups",
-            displayName: "name",
-            attributes: ["department"],
-          },
-        },
-      },
-    );
-    if (response.status !== 200) {
-      throw new Error(
-        `could not configure the provider: ${String(response.status)} ${await response.text()}`,
-      );
-    }
+    await configureProvider(stack, idp);
   });
 
   afterAll(async () => {
@@ -433,6 +450,87 @@ describe.skipIf(testDatabaseUrl === undefined)(
         (bound) => listEndUsers(bound),
       );
       expect(after).toHaveLength(before.length);
+    });
+  },
+);
+
+describe.skipIf(testDatabaseUrl === undefined)(
+  "transactions across an outbound request",
+  () => {
+    let stack: TestStack;
+    let idp: UpstreamIdp;
+    let observer: ActivityProbe;
+
+    beforeAll(async () => {
+      idp = await startUpstreamIdp();
+      stack = await createTestStack({
+        endpoint: { authMode: "oidc", consentMode: "auto" },
+        allowPrivateOutboundFetches: true,
+      });
+      await configureProvider(stack, idp);
+
+      // A connection of its own, as the same role, so that `pg_stat_activity`
+      // reports the state of that role's other backends rather than nulling it.
+      observer = createActivityProbe(servingRoleUrl(testDatabaseUrl ?? ""));
+    });
+
+    afterAll(async () => {
+      await observer.close();
+      await stack.close();
+      await idp.close();
+    });
+
+    it("holds none while a discovery, token or userinfo request is in flight", async () => {
+      // FR-025. Every data-layer call now runs inside a transaction, and federation
+      // interleaves three of those with three outbound requests to a server Signet
+      // does not control. A transaction held across one of them holds a pooled
+      // connection for as long as the other end takes to answer, which is a
+      // denial-of-service surface handed to a third party.
+      const observed: { readonly path: string; readonly states: string[] }[] =
+        [];
+      idp.configure({
+        idTokenClaims: { name: "Dr Upstream" },
+        userinfo: { name: "Dr Upstream" },
+        whileHandling: async (pathname) => {
+          observed.push({
+            path: pathname,
+            states: [...(await observer.statesOf(stack.applicationName))],
+          });
+        },
+      });
+
+      const session = await startAuthorization(stack, {
+        clientId: stack.publicClient.clientId,
+        scope: "openid fhirUser",
+        challenge: (await pkcePair()).challenge,
+      });
+      const started = await stack.app.request(
+        `${issuerPath(stack)}/federation/start?session=${session}`,
+      );
+      expect(started.status).toBe(302);
+      const location = started.headers.get("location") ?? "";
+      await fetch(location);
+      const state = new URL(location).searchParams.get("state") ?? "";
+      const finished = await stack.app.request(
+        `${issuerPath(stack)}/federation/callback?${new URLSearchParams({
+          state,
+          code: "upstream-code",
+        }).toString()}`,
+      );
+      expect(finished.status).toBe(302);
+
+      // Guards the guard: an observation list that came back empty, or that never
+      // saw the fetches that matter, would make the assertion below vacuous.
+      const paths = observed.map((entry) => entry.path);
+      expect(paths).toContain("/.well-known/openid-configuration");
+      expect(paths).toContain("/token");
+
+      for (const entry of observed) {
+        expect(
+          entry.states,
+          `a transaction was open while ${entry.path} was in flight`,
+        ).not.toContain("idle in transaction");
+      }
     });
   },
 );

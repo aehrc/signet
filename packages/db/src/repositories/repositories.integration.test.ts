@@ -1299,6 +1299,47 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     });
   });
 
+  describe("the redemption boundary", () => {
+    it("keeps a redeemed token revoked when its successor cannot be issued", async () => {
+      // SC-007. Claiming a refresh token and issuing its successor are separate
+      // units, and the ordering is what makes theft detectable: the token is spent
+      // the instant it is accepted, so a second presentation cannot claim it
+      // whatever happens next. Sharing one transaction would undo that - a failure
+      // during issuance would roll the claim back and leave the token unspent - so
+      // this fails if anybody consolidates the two.
+      const fixture = await newFixture();
+      const presented = `refresh-boundary-${unique()}`;
+      await issueRefresh(db, fixture, presented);
+
+      const redemption = await inScope(fixture.endpointScope, (bound) =>
+        redeemRefreshToken(bound, presented),
+      );
+      const claimed = expectOk(redemption);
+
+      // The successor reuses the predecessor's digest, which the unique index
+      // refuses. A forced failure rather than a mocked one: what is being asserted
+      // is the transaction boundary, and only a real statement can cross it.
+      await expect(
+        inScope(fixture.clientScope, (bound) =>
+          rotateRefreshToken(bound, claimed.token, {
+            tokenHash: presented,
+            scope: "patient/Observation.rs",
+            expiresAt: new Date(Date.now() + 600_000),
+          }),
+        ),
+      ).rejects.toThrow();
+
+      const after = await inScope(fixture.endpointScope, (bound) =>
+        findRefreshToken(bound, presented),
+      );
+
+      // A revoked leaf and no successor. The user must reauthorise, which is
+      // inconvenient and correct; an unspent token would be neither.
+      expect(after?.revokedAt).not.toBeNull();
+      expect(after?.replacedById).toBeNull();
+    });
+  });
+
   describe("the expiry sweep", () => {
     // The sweep is the one thing in this file that needs the owning identity, and
     // `db` is deliberately not it: the suite connects as the serving role, so a
