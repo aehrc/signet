@@ -125,3 +125,48 @@ jobs:
             --set masterKey.existingSecret=external-key \
             --set ingress.enabled=true \
             --set autoscaling.enabled=true > /dev/null
+
+  e2e:
+    name: End to end
+    runs-on: ubuntu-latest
+    # Twenty minutes: the stack builds Signet's image and waits for Pathling to
+    # start a Spark session. A run that takes longer than this has hung rather
+    # than been slow.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Install the browser
+        run: bunx playwright install --with-deps chromium
+        working-directory: e2e
+
+      # Builds the production image and brings up Postgres, Signet, Pathling and
+      # the stub SMART app. `--wait` blocks on the health checks, so a service
+      # that never becomes healthy fails here with its own logs rather than as a
+      # confusing test failure.
+      - name: Bring up the stack
+        run: bun run stack:up
+
+      - name: Run the suite
+        run: bun run test:e2e
+
+      - name: Collect the stack's logs
+        if: failure()
+        run: docker compose -f deploy/compose/docker-compose.yml logs --no-color
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
+
+      - name: Tear down
+        if: always()
+        run: bun run stack:down

@@ -35,10 +35,12 @@ each server wants, and for the two servers that get no preset and why.
 
 ## Status
 
-In progress. The OAuth server, the admin API, the console, the policy editor and
-its simulator, and the end-user surfaces all work end to end. Still to come:
-upstream OIDC federation, rate limiting, the Playwright conformance suite, and the
-Helm chart's finishing touches.
+Complete and exercised end to end. A Playwright suite drives a real SMART launch
+in a browser against a docker-compose stack of Signet, Pathling and a stub app,
+and asserts that Pathling accepts the token Signet minted.
+
+See [docs/operations.md](docs/operations.md) for configuration, key rotation and
+deployment.
 
 ## Layout
 
@@ -50,7 +52,8 @@ Helm chart's finishing touches.
 | `apps/server`        | Hono: OAuth endpoints and admin API.                                                                     |
 | `apps/web`           | React console, end-user auth pages, developer portal.                                                    |
 | `e2e`                | Playwright suite against Signet + Pathling.                                                              |
-| `deploy`             | Dockerfile and Helm chart.                                                                               |
+| `deploy`             | Dockerfile, Helm chart, and the docker-compose stack the end-to-end suite runs against.                  |
+| `docs`               | What each resource server wants in a token, and how to run Signet.                                       |
 
 `packages/core` holds anything with real logic, as plain functions with no I/O,
 so it can be tested directly and reused unchanged by the UI's policy simulator.
@@ -73,6 +76,22 @@ Run the server and the console:
 bun run --filter @signet/server dev     # http://localhost:3000
 bun run --filter @signet/web dev        # http://localhost:5173
 ```
+
+## The end-to-end stack
+
+Signet, Pathling, Postgres and a stub SMART app, built from the production image:
+
+```sh
+bun run stack:up      # build and start; waits for health
+bun run stack:seed    # create the endpoint, policy, clients and accounts
+bun run test:e2e      # drive a launch through a browser
+bun run stack:down
+```
+
+Then open `http://localhost:4000/?iss=http://localhost:3000/t/demo/e/pathling` to
+run a launch by hand, or `http://localhost:3000/console` to look at the endpoint
+that served it. If port 3000 is taken, set `SIGNET_PORT` - it moves the stack and
+every issuer identifier with it.
 
 ## Container image
 
