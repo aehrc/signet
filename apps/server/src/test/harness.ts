@@ -266,49 +266,58 @@ export async function createTestStack(
     throw new Error(`could not publish the policy: ${published.reason}`);
   }
 
-  const publicClient = await createClient(db, scope, {
-    clientId: `public-${suffix}`,
-    name: "Public app",
-    clientType: "public",
-    redirectUris: ["https://app.test/cb"],
-    grantTypes: ["authorization_code", "refresh_token"],
-    allowedScopes: ALLOWED_SCOPES,
-    status: "active",
-  });
+  const publicClient = await withTenantScope(db, scope, (bound) =>
+    createClient(bound, {
+      clientId: `public-${suffix}`,
+      name: "Public app",
+      clientType: "public",
+      redirectUris: ["https://app.test/cb"],
+      grantTypes: ["authorization_code", "refresh_token"],
+      allowedScopes: ALLOWED_SCOPES,
+      status: "active",
+    }),
+  );
 
-  const symmetricClient = await createClient(db, scope, {
-    clientId: `symmetric-${suffix}`,
-    name: "Confidential app",
-    clientType: "confidential-symmetric",
-    secretHash: await hashPassword(TEST_CLIENT_SECRET),
-    redirectUris: ["https://app.test/cb"],
-    grantTypes: ["authorization_code", "refresh_token"],
-    allowedScopes: ALLOWED_SCOPES,
-    status: "active",
-  });
+  const symmetricSecretHash = await hashPassword(TEST_CLIENT_SECRET);
+  const symmetricClient = await withTenantScope(db, scope, (bound) =>
+    createClient(bound, {
+      clientId: `symmetric-${suffix}`,
+      name: "Confidential app",
+      clientType: "confidential-symmetric",
+      secretHash: symmetricSecretHash,
+      redirectUris: ["https://app.test/cb"],
+      grantTypes: ["authorization_code", "refresh_token"],
+      allowedScopes: ALLOWED_SCOPES,
+      status: "active",
+    }),
+  );
 
   const asymmetricKey = await generateEndpointKey("RS384", TEST_MASTER_KEY);
-  const asymmetricClient = await createClient(db, scope, {
-    clientId: `asymmetric-${suffix}`,
-    name: "Asymmetric app",
-    clientType: "confidential-asymmetric",
-    jwks: { keys: [asymmetricKey.publicJwk] },
-    redirectUris: ["https://app.test/cb"],
-    grantTypes: ["authorization_code", "refresh_token"],
-    allowedScopes: ALLOWED_SCOPES,
-    status: "active",
-  });
+  const asymmetricClient = await withTenantScope(db, scope, (bound) =>
+    createClient(bound, {
+      clientId: `asymmetric-${suffix}`,
+      name: "Asymmetric app",
+      clientType: "confidential-asymmetric",
+      jwks: { keys: [asymmetricKey.publicJwk] },
+      redirectUris: ["https://app.test/cb"],
+      grantTypes: ["authorization_code", "refresh_token"],
+      allowedScopes: ALLOWED_SCOPES,
+      status: "active",
+    }),
+  );
 
   const backendKey = await generateEndpointKey("RS384", TEST_MASTER_KEY);
-  const backendClient = await createClient(db, scope, {
-    clientId: `backend-${suffix}`,
-    name: "Backend service",
-    clientType: "confidential-asymmetric",
-    jwks: { keys: [backendKey.publicJwk] },
-    grantTypes: ["client_credentials"],
-    allowedScopes: ALLOWED_SCOPES,
-    status: "active",
-  });
+  const backendClient = await withTenantScope(db, scope, (bound) =>
+    createClient(bound, {
+      clientId: `backend-${suffix}`,
+      name: "Backend service",
+      clientType: "confidential-asymmetric",
+      jwks: { keys: [backendKey.publicJwk] },
+      grantTypes: ["client_credentials"],
+      allowedScopes: ALLOWED_SCOPES,
+      status: "active",
+    }),
+  );
 
   const user = await createEndUser(db, scope, {
     username: "clinician",

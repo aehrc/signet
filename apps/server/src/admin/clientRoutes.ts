@@ -41,6 +41,7 @@ import {
   revokeRefreshTokensForClient,
   setClientCredentials,
   updateClient,
+  withTenantScope,
 } from "@signet/db";
 
 import { recordAdminEvent } from "./auditTrail.js";
@@ -196,10 +197,10 @@ async function loadClient(
   context: ServerContext,
   endpointContext: AdminEndpointContext,
 ) {
-  const client = await getClientByClientId(
+  const client = await withTenantScope(
     context.db,
     endpointContext.scope,
-    c.req.param("clientId") ?? "",
+    (bound) => getClientByClientId(bound, c.req.param("clientId") ?? ""),
   );
   if (client === undefined) {
     return c.json(
@@ -223,7 +224,9 @@ export function registerClientRoutes(
   /** Lists the endpoint's clients. */
   router.get(`${ENDPOINT_PATH}/clients`, requireRole("viewer"), async (c) => {
     const { scope } = c.get("endpoint");
-    const clients = await listClients(context.db, scope);
+    const clients = await withTenantScope(context.db, scope, (bound) =>
+      listClients(bound),
+    );
     return c.json({ clients: clients.map(clientView) });
   });
 
@@ -251,10 +254,12 @@ export function registerClientRoutes(
       const prepared = await prepareClient(body);
       let client;
       try {
-        client = await createClient(context.db, scope, {
-          ...prepared.input,
-          createdBy: principalAdminUserId(c.get("principal")),
-        });
+        client = await withTenantScope(context.db, scope, (bound) =>
+          createClient(bound, {
+            ...prepared.input,
+            createdBy: principalAdminUserId(c.get("principal")),
+          }),
+        );
       } catch (error) {
         if (isUniqueViolation(error)) {
           // `client_id` is unique across the deployment, not per endpoint, so a
@@ -332,11 +337,10 @@ export function registerClientRoutes(
       const patch = Object.fromEntries(
         Object.entries(body).filter(([, value]) => value !== undefined),
       );
-      const updated = await updateClient(
+      const updated = await withTenantScope(
         context.db,
         clientScopeFromRow(endpointContext.scope, existing),
-        patch,
-        context.clock(),
+        (bound) => updateClient(bound, patch, context.clock()),
       );
       if (updated === undefined) {
         return c.json(
@@ -404,16 +408,24 @@ export function registerClientRoutes(
       }
 
       const secret = body.secret ?? generateClientSecret();
-      const updated = await setClientCredentials(
+      // Argon2id before the transaction opens, not inside it: hashing a password
+      // deliberately takes a hundred milliseconds or more, and a transaction
+      // holding a pooled connection for that long is a cost with no benefit.
+      const secretHash = await hashPassword(secret);
+      const updated = await withTenantScope(
         context.db,
         clientScopeFromRow(endpointContext.scope, existing),
-        {
-          secretHash: await hashPassword(secret),
-          secretExpiresAt: body.secretExpiresAt ?? null,
-          jwks: existing.jwks,
-          jwksUri: existing.jwksUri,
-        },
-        context.clock(),
+        (bound) =>
+          setClientCredentials(
+            bound,
+            {
+              secretHash,
+              secretExpiresAt: body.secretExpiresAt ?? null,
+              jwks: existing.jwks,
+              jwksUri: existing.jwksUri,
+            },
+            context.clock(),
+          ),
       );
       if (updated === undefined) {
         return c.json(
@@ -455,9 +467,10 @@ export function registerClientRoutes(
         detail: { name: existing.name },
       });
 
-      await deleteClient(
+      await withTenantScope(
         context.db,
         clientScopeFromRow(endpointContext.scope, existing),
+        (bound) => deleteClient(bound),
       );
       return c.body(null, 204);
     },
@@ -483,7 +496,9 @@ export function registerClientRoutes(
         );
       }
 
-      const requests = await listClientRequests(context.db, scope, status);
+      const requests = await withTenantScope(context.db, scope, (bound) =>
+        listClientRequests(bound, status),
+      );
       return c.json({ requests: requests.map(clientRequestView) });
     },
   );
@@ -506,7 +521,9 @@ export function registerClientRoutes(
         return body;
       }
 
-      const request = await getClientRequest(context.db, scope, requestId);
+      const request = await withTenantScope(context.db, scope, (bound) =>
+        getClientRequest(bound, requestId),
+      );
       if (request === undefined) {
         return c.json(
           adminErrorBody("not_found", "No such registration request"),
@@ -544,16 +561,17 @@ export function registerClientRoutes(
       }
 
       const prepared = await prepareClient(desired);
-      const decision = await approveClientRequest(
-        context.db,
-        scope,
-        requestId,
-        decisionFrom(c, body.decisionNote),
-        {
-          ...prepared.input,
-          createdBy: principalAdminUserId(c.get("principal")),
-        },
-        context.clock(),
+      const decision = await withTenantScope(context.db, scope, (bound) =>
+        approveClientRequest(
+          bound,
+          requestId,
+          decisionFrom(c, body.decisionNote),
+          {
+            ...prepared.input,
+            createdBy: principalAdminUserId(c.get("principal")),
+          },
+          context.clock(),
+        ),
       );
 
       if (!decision.ok) {
@@ -590,12 +608,13 @@ export function registerClientRoutes(
         return body;
       }
 
-      const decision = await rejectClientRequest(
-        context.db,
-        scope,
-        requestId,
-        decisionFrom(c, body.decisionNote),
-        context.clock(),
+      const decision = await withTenantScope(context.db, scope, (bound) =>
+        rejectClientRequest(
+          bound,
+          requestId,
+          decisionFrom(c, body.decisionNote),
+          context.clock(),
+        ),
       );
 
       if (!decision.ok) {

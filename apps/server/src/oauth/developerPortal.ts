@@ -32,6 +32,7 @@ import {
   getClient,
   getClientByClientId,
   hashToken,
+  withTenantScope,
 } from "@signet/db";
 
 import { bearerToken } from "../http/bearer.js";
@@ -100,30 +101,38 @@ export function submitClientRequestHandler(context: ServerContext) {
     }
 
     const trackingToken = generateOpaqueToken();
-    const request = await createClientRequest(context.db, issuerContext.scope, {
-      requestedByEmail: parsed.data.contactEmail,
-      // The optional fields are dropped rather than stored as undefined: the payload is
-      // retained verbatim as the record of what was asked for, and a key holding nothing
-      // is not something anybody asked for.
-      payload: {
-        name: parsed.data.name,
-        clientType: parsed.data.clientType,
-        redirectUris: parsed.data.redirectUris,
-        requestedScopes: parsed.data.requestedScopes,
-        contactEmail: parsed.data.contactEmail,
-        ...(parsed.data.description === undefined
-          ? {}
-          : { description: parsed.data.description }),
-        ...(parsed.data.logoUrl === undefined
-          ? {}
-          : { logoUrl: parsed.data.logoUrl }),
-        ...(parsed.data.launchUri === undefined
-          ? {}
-          : { launchUri: parsed.data.launchUri }),
-        ...(parsed.data.note === undefined ? {} : { note: parsed.data.note }),
-      },
-      trackingTokenHash: await hashToken(trackingToken),
-    });
+    const trackingTokenHash = await hashToken(trackingToken);
+    const request = await withTenantScope(
+      context.db,
+      issuerContext.scope,
+      (bound) =>
+        createClientRequest(bound, {
+          requestedByEmail: parsed.data.contactEmail,
+          // The optional fields are dropped rather than stored as undefined: the payload is
+          // retained verbatim as the record of what was asked for, and a key holding nothing
+          // is not something anybody asked for.
+          payload: {
+            name: parsed.data.name,
+            clientType: parsed.data.clientType,
+            redirectUris: parsed.data.redirectUris,
+            requestedScopes: parsed.data.requestedScopes,
+            contactEmail: parsed.data.contactEmail,
+            ...(parsed.data.description === undefined
+              ? {}
+              : { description: parsed.data.description }),
+            ...(parsed.data.logoUrl === undefined
+              ? {}
+              : { logoUrl: parsed.data.logoUrl }),
+            ...(parsed.data.launchUri === undefined
+              ? {}
+              : { launchUri: parsed.data.launchUri }),
+            ...(parsed.data.note === undefined
+              ? {}
+              : { note: parsed.data.note }),
+          },
+          trackingTokenHash,
+        }),
+    );
 
     await context.audit.record(context.db, {
       tenantId: issuerContext.tenant.id,
@@ -187,11 +196,19 @@ export function clientRequestStatusHandler(context: ServerContext) {
       );
     }
 
-    const request = await findClientRequestByTrackingToken(
+    // Hashed before the transaction opens. Nothing that takes measurable CPU
+    // belongs inside one: a transaction holds a pooled connection, and hashing is
+    // not a database operation.
+    const presentedHash = await hashToken(presented);
+    const request = await withTenantScope(
       context.db,
       issuerContext.scope,
-      c.req.param("requestId") ?? "",
-      await hashToken(presented),
+      (bound) =>
+        findClientRequestByTrackingToken(
+          bound,
+          c.req.param("requestId") ?? "",
+          presentedHash,
+        ),
     );
     if (request === undefined) {
       // One answer for an unknown request and a wrong token: distinguishing them
@@ -206,14 +223,15 @@ export function clientRequestStatusHandler(context: ServerContext) {
     }
 
     let clientId: string | undefined;
-    if (request.resultingClientId !== null) {
+    const resultingClientId = request.resultingClientId;
+    if (resultingClientId !== null) {
       // The row references the client by surrogate key and the developer needs the
       // OAuth identifier. Read through the endpoint scope, which is what proves the
       // client belongs to the endpoint the request was filed against.
-      const client = await getClient(
+      const client = await withTenantScope(
         context.db,
         issuerContext.scope,
-        request.resultingClientId,
+        (bound) => getClient(bound, resultingClientId),
       );
       clientId = client?.clientId;
     }
@@ -247,10 +265,10 @@ export function clientRequestStatusHandler(context: ServerContext) {
 export function clientRegistrationHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
-    const client = await getClientByClientId(
+    const client = await withTenantScope(
       context.db,
       issuerContext.scope,
-      c.req.param("clientId") ?? "",
+      (bound) => getClientByClientId(bound, c.req.param("clientId") ?? ""),
     );
     if (client === undefined) {
       return c.json(

@@ -14,11 +14,11 @@
 import { and, asc, eq } from "drizzle-orm";
 
 import { requireRow } from "./rows.js";
+import { executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { clients } from "../schema/clients.js";
 
-import type { Executor } from "./executor.js";
-import type { ClientScope, EndpointScope } from "./scope.js";
+import type { BoundClientScope, BoundEndpointScope } from "./scope.js";
 import type { Client, NewClient } from "../schema/clients.js";
 
 /** The caller-supplied half of a client registration. */
@@ -41,11 +41,10 @@ export type ClientCredentialPatch = Pick<
 
 /** Registers a client on the scoped endpoint. */
 export async function createClient(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   input: ClientInput,
 ): Promise<Client> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(clients)
     .values({ ...input, endpointId: scope.endpointId })
     .returning();
@@ -54,10 +53,9 @@ export async function createClient(
 
 /** Lists the scoped endpoint's clients, by name. */
 export async function listClients(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<readonly Client[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(clients)
     .where(eq(clients.endpointId, scope.endpointId))
@@ -66,11 +64,10 @@ export async function listClients(
 
 /** Reads one of the scoped endpoint's clients by surrogate identifier. */
 export async function getClient(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   id: string,
 ): Promise<Client | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(clients)
     .where(and(eq(clients.endpointId, scope.endpointId), eq(clients.id, id)))
@@ -84,11 +81,10 @@ export async function getClient(
  * See the module header for why the endpoint predicate is not optional here.
  */
 export async function getClientByClientId(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   clientId: string,
 ): Promise<Client | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(clients)
     .where(
@@ -103,20 +99,18 @@ export async function getClientByClientId(
 
 /** Reads the client the scope refers to. */
 export async function getScopedClient(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
 ): Promise<Client | undefined> {
-  return await getClient(db, scope, scope.clientRowId);
+  return await getClient(scope, scope.clientRowId);
 }
 
 /** Applies a patch to the scoped client's registration. */
 export async function updateClient(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   patch: Partial<Omit<ClientInput, "clientId">>,
   now?: Date,
 ): Promise<Client | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .update(clients)
     .set({ ...patch, updatedAt: nowValue(now) })
     .where(
@@ -137,12 +131,11 @@ export async function updateClient(
  * authentication, while the client's tokens and audit history survive.
  */
 export async function setClientStatus(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   status: Client["status"],
   now?: Date,
 ): Promise<Client | undefined> {
-  return await updateClient(db, scope, { status }, now);
+  return await updateClient(scope, { status }, now);
 }
 
 /**
@@ -153,12 +146,11 @@ export async function setClientStatus(
  * an operator who has lost a client secret issues a new one.
  */
 export async function setClientCredentials(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   patch: ClientCredentialPatch,
   now?: Date,
 ): Promise<Client | undefined> {
-  return await updateClient(db, scope, patch, now);
+  return await updateClient(scope, patch, now);
 }
 
 /**
@@ -170,11 +162,10 @@ export async function setClientCredentials(
  * rather than a store.
  */
 export async function recordClientJwksFetch(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   now?: Date,
 ): Promise<void> {
-  await db
+  await executorFor(scope)
     .update(clients)
     .set({ jwksCachedAt: nowValue(now) })
     .where(
@@ -195,11 +186,8 @@ export async function recordClientJwksFetch(
  *
  * @returns Whether a client was deleted.
  */
-export async function deleteClient(
-  db: Executor,
-  scope: ClientScope,
-): Promise<boolean> {
-  const rows = await db
+export async function deleteClient(scope: BoundClientScope): Promise<boolean> {
+  const rows = await executorFor(scope)
     .delete(clients)
     .where(
       and(

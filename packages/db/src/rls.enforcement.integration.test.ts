@@ -248,25 +248,29 @@ describeWithDatabase("row-level security as the serving role", () => {
       displayName: "End user",
     });
 
-    const client = await createClient(owner, endpointScope, {
-      clientId: `client-${unique()}`,
-      name: "Test app",
-      clientType: "public",
-      grantTypes: ["authorization_code", "refresh_token"],
-    });
+    const client = await withTenantScope(owner, endpointScope, (bound) =>
+      createClient(bound, {
+        clientId: `client-${unique()}`,
+        name: "Test app",
+        clientType: "public",
+        grantTypes: ["authorization_code", "refresh_token"],
+      }),
+    );
     const clientScope = clientScopeFromRow(endpointScope, client);
 
-    await createClientRequest(owner, endpointScope, {
-      requestedByEmail: "dev@example.org",
-      trackingTokenHash: `track-${unique()}`,
-      payload: {
-        name: "Requested app",
-        clientType: "public",
-        redirectUris: ["https://app.example.org/callback"],
-        requestedScopes: ["patient/Observation.rs"],
-        contactEmail: "dev@example.org",
-      },
-    });
+    await withTenantScope(owner, endpointScope, (bound) =>
+      createClientRequest(bound, {
+        requestedByEmail: "dev@example.org",
+        trackingTokenHash: `track-${unique()}`,
+        payload: {
+          name: "Requested app",
+          clientType: "public",
+          redirectUris: ["https://app.example.org/callback"],
+          requestedScopes: ["patient/Observation.rs"],
+          contactEmail: "dev@example.org",
+        },
+      }),
+    );
 
     await createPolicyVersion(owner, endpointScope, {
       document: POLICY,

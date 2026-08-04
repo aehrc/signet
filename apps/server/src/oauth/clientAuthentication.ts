@@ -171,7 +171,9 @@ async function loadClientKeySet(
     };
   }
 
-  await recordClientJwksFetch(context.db, scope, context.clock());
+  await withTenantScope(context.db, scope, (bound) =>
+    recordClientJwksFetch(bound, context.clock()),
+  );
   return { ok: true, keys };
 }
 

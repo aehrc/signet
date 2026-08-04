@@ -262,12 +262,14 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     );
     const endpointScope = endpointScopeFromRow(tenantScope, endpoint);
 
-    const client = await createClient(db, endpointScope, {
-      clientId: `client-${unique()}`,
-      name: "Test app",
-      clientType: "public",
-      grantTypes: ["authorization_code", "refresh_token"],
-    });
+    const client = await withTenantScope(db, endpointScope, (bound) =>
+      createClient(bound, {
+        clientId: `client-${unique()}`,
+        name: "Test app",
+        clientType: "public",
+        grantTypes: ["authorization_code", "refresh_token"],
+      }),
+    );
 
     return {
       tenantScope,
@@ -368,10 +370,8 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       expect(resolved).toBeUndefined();
 
       expect(
-        await getClientByClientId(
-          db,
-          mine.endpointScope,
-          theirs.clientScope.clientId,
+        await withTenantScope(db, mine.endpointScope, (bound) =>
+          getClientByClientId(bound, theirs.clientScope.clientId),
         ),
       ).toBeUndefined();
     });
@@ -502,12 +502,14 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
     it("refuses the wrong client and leaves the handle unconsumed", async () => {
       const fixture = await newFixture();
-      const other = await createClient(db, fixture.endpointScope, {
-        clientId: `client-${unique()}`,
-        name: "Another app",
-        clientType: "public",
-        grantTypes: ["authorization_code"],
-      });
+      const other = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createClient(bound, {
+          clientId: `client-${unique()}`,
+          name: "Another app",
+          clientType: "public",
+          grantTypes: ["authorization_code"],
+        }),
+      );
       const otherScope = clientScopeFromRow(fixture.endpointScope, other);
 
       await createLaunchContext(db, fixture.endpointScope, {
@@ -722,12 +724,14 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
     it("keeps a separate ledger per client", async () => {
       const fixture = await newFixture();
-      const other = await createClient(db, fixture.endpointScope, {
-        clientId: `client-${unique()}`,
-        name: "Second app",
-        clientType: "confidential-asymmetric",
-        grantTypes: ["client_credentials"],
-      });
+      const other = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createClient(bound, {
+          clientId: `client-${unique()}`,
+          name: "Second app",
+          clientType: "confidential-asymmetric",
+          grantTypes: ["client_credentials"],
+        }),
+      );
       const otherScope = clientScopeFromRow(fixture.endpointScope, other);
       const expiresAt = new Date(Date.now() + 300_000);
 
@@ -953,46 +957,56 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   describe("client registration requests", () => {
     it("approves once, creating and linking one client", async () => {
       const fixture = await newFixture();
-      const request = await createClientRequest(db, fixture.endpointScope, {
-        requestedByEmail: "dev@example.org",
-        payload: {
-          name: "Requested app",
-          clientType: "public",
-          redirectUris: ["https://app.example.org/cb"],
-          requestedScopes: ["patient/*.rs"],
-          contactEmail: "dev@example.org",
-        },
-      });
-
-      const approval = await approveClientRequest(
+      const request = await withTenantScope(
         db,
         fixture.endpointScope,
-        request.id,
-        { reviewerId: null, decisionNote: "Looks fine" },
-        {
-          clientId: `client-${unique()}`,
-          name: "Requested app",
-          clientType: "public",
-          grantTypes: ["authorization_code"],
-          redirectUris: ["https://app.example.org/cb"],
-        },
+        (bound) =>
+          createClientRequest(bound, {
+            requestedByEmail: "dev@example.org",
+            payload: {
+              name: "Requested app",
+              clientType: "public",
+              redirectUris: ["https://app.example.org/cb"],
+              requestedScopes: ["patient/*.rs"],
+              contactEmail: "dev@example.org",
+            },
+          }),
+      );
+
+      const approval = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) =>
+          approveClientRequest(
+            bound,
+            request.id,
+            { reviewerId: null, decisionNote: "Looks fine" },
+            {
+              clientId: `client-${unique()}`,
+              name: "Requested app",
+              clientType: "public",
+              grantTypes: ["authorization_code"],
+              redirectUris: ["https://app.example.org/cb"],
+            },
+          ),
       );
 
       const approved = expectOk(approval);
       expect(approved.request.status).toBe("approved");
       expect(approved.request.resultingClientId).toBe(approved.client.id);
 
-      const again = await approveClientRequest(
-        db,
-        fixture.endpointScope,
-        request.id,
-        { reviewerId: null },
-        {
-          clientId: `client-${unique()}`,
-          name: "Duplicate",
-          clientType: "public",
-          grantTypes: ["authorization_code"],
-        },
+      const again = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        approveClientRequest(
+          bound,
+          request.id,
+          { reviewerId: null },
+          {
+            clientId: `client-${unique()}`,
+            name: "Duplicate",
+            clientType: "public",
+            grantTypes: ["authorization_code"],
+          },
+        ),
       );
       expect(again).toEqual({ ok: false, reason: "already-decided" });
     });

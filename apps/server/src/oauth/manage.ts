@@ -38,6 +38,7 @@ import {
   revokeConsentsForClient,
   revokeEndUserSession,
   revokeRefreshTokensForSubjectAndClient,
+  withTenantScope,
 } from "@signet/db";
 
 import {
@@ -344,17 +345,18 @@ export function manageRevokeHandler(context: ServerContext) {
     const body = (await c.req.json().catch(() => ({}))) as {
       clientId?: unknown;
     };
-    if (typeof body.clientId !== "string") {
+    const requestedClientId = body.clientId;
+    if (typeof requestedClientId !== "string") {
       return c.json(
         { error: "invalid_request", error_description: "clientId is required" },
         400,
       );
     }
 
-    const client = await getClientByClientId(
+    const client = await withTenantScope(
       context.db,
       issuerContext.scope,
-      body.clientId,
+      (bound) => getClientByClientId(bound, requestedClientId),
     );
     if (client === undefined) {
       return c.json(

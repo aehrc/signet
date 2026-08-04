@@ -161,10 +161,10 @@ async function resolveClientScopeForSession(
   issuerContext: ResolvedIssuerContext,
   session: AuthorizationSession,
 ): Promise<{ scope: ClientScope; client: Client } | undefined> {
-  const client = await getClient(
+  const client = await withTenantScope(
     context.db,
     issuerContext.scope,
-    session.clientId,
+    (bound) => getClient(bound, session.clientId),
   );
   if (client === undefined) {
     return undefined;

@@ -27,18 +27,19 @@ import {
 } from "@signet/contracts";
 import { parseScopes, simulateIssuance, toLaunchContext } from "@signet/core";
 import {
+  clientScopeFromRow,
+  createPolicyVersion,
   getClientByClientId,
   getEffectivePolicy,
   getEndUser,
   getPolicyVersion,
   getPublishedPolicy,
   listPolicyVersions,
+  publishPolicy,
   toEvaluationClient,
   toEvaluationEndpoint,
   toEvaluationUser,
-  clientScopeFromRow,
-  createPolicyVersion,
-  publishPolicy,
+  withTenantScope,
 } from "@signet/db";
 
 import { recordAdminEvent } from "./auditTrail.js";
@@ -227,10 +228,8 @@ export function registerPolicyRoutes(
         return body;
       }
 
-      const client = await getClientByClientId(
-        context.db,
-        scope,
-        body.clientId,
+      const client = await withTenantScope(context.db, scope, (bound) =>
+        getClientByClientId(bound, body.clientId),
       );
       if (client === undefined) {
         return c.json(

@@ -161,7 +161,9 @@ describeWithDatabase("the authorization endpoint", () => {
       stack.scope,
       (bound) => resolveClientScope(bound, stack.symmetricClient.clientId),
     );
-    await setClientStatus(stack.context.db, resolved!.scope, "suspended");
+    await withTenantScope(stack.context.db, resolved!.scope, (bound) =>
+      setClientStatus(bound, "suspended"),
+    );
     try {
       const response = await authorize(stack, {
         clientId: stack.symmetricClient.clientId,
@@ -171,7 +173,9 @@ describeWithDatabase("the authorization endpoint", () => {
       const url = new URL(response.headers.get("location") ?? "");
       expect(url.searchParams.get("error")).toBe("unauthorized_client");
     } finally {
-      await setClientStatus(stack.context.db, resolved!.scope, "active");
+      await withTenantScope(stack.context.db, resolved!.scope, (bound) =>
+        setClientStatus(bound, "active"),
+      );
     }
   });
 

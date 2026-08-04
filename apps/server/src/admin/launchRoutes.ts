@@ -80,10 +80,8 @@ export function registerLaunchRoutes(
         return body;
       }
 
-      const client = await getClientByClientId(
-        context.db,
-        scope,
-        body.clientId,
+      const client = await withTenantScope(context.db, scope, (bound) =>
+        getClientByClientId(bound, body.clientId),
       );
       if (client === undefined || !isClientUsable(client)) {
         return c.json(

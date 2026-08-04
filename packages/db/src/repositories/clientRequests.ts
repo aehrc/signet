@@ -4,9 +4,14 @@
  * A decision is claimed with a conditional `UPDATE ... WHERE status = 'pending'`
  * before the client is created. Two administrators pressing Approve at the same
  * moment therefore produce one client, not two: the second update matches no row
- * and the transaction returns `already-decided`. A read-then-write would have
+ * and the decision returns `already-decided`. A read-then-write would have
  * registered the app twice, with two client identifiers and two secrets, only one
  * of which the developer would ever be shown.
+ *
+ * Claiming and registering share one transaction, so an approval that failed to
+ * create the client leaves the request pending rather than decided-but-empty. That
+ * transaction is the caller's now: it is the one the bound scope declared its tenant
+ * on, rather than a nested one opened here.
  *
  * Author: John Grimes
  */
@@ -15,12 +20,12 @@ import { and, desc, eq } from "drizzle-orm";
 
 import { createClient } from "./clients.js";
 import { firstRow, requireRow } from "./rows.js";
+import { executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { clientRequests } from "../schema/clients.js";
 
 import type { ClientInput } from "./clients.js";
-import type { Executor } from "./executor.js";
-import type { EndpointScope } from "./scope.js";
+import type { BoundEndpointScope } from "./scope.js";
 import type {
   Client,
   ClientRequest,
@@ -36,11 +41,10 @@ export type ClientRequestInput = Pick<
 
 /** Files a registration request against the scoped endpoint. */
 export async function createClientRequest(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   input: ClientRequestInput,
 ): Promise<ClientRequest> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(clientRequests)
     .values({ ...input, endpointId: scope.endpointId })
     .returning();
@@ -50,13 +54,11 @@ export async function createClientRequest(
 /**
  * Lists the scoped endpoint's registration requests, newest first.
  *
- * @param db - The connection or transaction to use.
  * @param scope - The endpoint whose queue is being read.
  * @param status - Restricts to one review state; omit for all of them.
  */
 export async function listClientRequests(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   status?: ClientRequest["status"],
 ): Promise<readonly ClientRequest[]> {
   const predicate =
@@ -67,7 +69,7 @@ export async function listClientRequests(
           eq(clientRequests.status, status),
         );
 
-  return await db
+  return await executorFor(scope)
     .select()
     .from(clientRequests)
     .where(predicate)
@@ -76,10 +78,10 @@ export async function listClientRequests(
 
 /** Reads the one request a predicate selects, or undefined. */
 async function selectClientRequest(
-  db: Executor,
+  scope: BoundEndpointScope,
   predicate: SQL | undefined,
 ): Promise<ClientRequest | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(clientRequests)
     .where(predicate)
@@ -89,12 +91,11 @@ async function selectClientRequest(
 
 /** Reads one of the scoped endpoint's registration requests. */
 export async function getClientRequest(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   requestId: string,
 ): Promise<ClientRequest | undefined> {
   return await selectClientRequest(
-    db,
+    scope,
     and(
       eq(clientRequests.endpointId, scope.endpointId),
       eq(clientRequests.id, requestId),
@@ -110,19 +111,18 @@ export async function getClientRequest(
  * request, and the token proves it is the one the caller filed. Both are required, and the
  * token is compared as a digest, so a leaked identifier alone reveals nothing.
  *
- * @param db - The connection or transaction to use.
- * @param scope - The endpoint the request was filed against.
+ * @param scope - The endpoint the request was filed against, bound to the
+ *   transaction that declared its tenant.
  * @param requestId - The identifier from the submission response.
  * @param trackingTokenHash - SHA-256 of the token from the submission response.
  */
 export async function findClientRequestByTrackingToken(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   requestId: string,
   trackingTokenHash: string,
 ): Promise<ClientRequest | undefined> {
   return await selectClientRequest(
-    db,
+    scope,
     and(
       eq(clientRequests.endpointId, scope.endpointId),
       eq(clientRequests.id, requestId),
@@ -163,14 +163,13 @@ export interface DecisionInput {
  * both claim it.
  */
 async function claimRequest(
-  tx: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   requestId: string,
   status: ClientRequest["status"],
   decision: DecisionInput,
   now?: Date,
 ): Promise<ClientRequest | undefined> {
-  const rows = await tx
+  const rows = await executorFor(scope)
     .update(clientRequests)
     .set({
       status,
@@ -198,11 +197,10 @@ async function claimRequest(
  * reviewed this" rather than "not found", which would look like a bug.
  */
 async function explainRefusal(
-  tx: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   requestId: string,
 ): Promise<DecisionRefusal> {
-  const existing = await getClientRequest(tx, scope, requestId);
+  const existing = await getClientRequest(scope, requestId);
   return existing === undefined ? "not-found" : "already-decided";
 }
 
@@ -215,62 +213,54 @@ async function explainRefusal(
  * was asked for and what was granted stays visible.
  */
 export async function approveClientRequest(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   requestId: string,
   decision: DecisionInput,
   client: ClientInput,
   now?: Date,
 ): Promise<ApprovalResult> {
-  return await db.transaction(async (tx) => {
-    const claimed = await claimRequest(
-      tx,
-      scope,
-      requestId,
-      "approved",
-      decision,
-      now,
-    );
-    if (claimed === undefined) {
-      return { ok: false, reason: await explainRefusal(tx, scope, requestId) };
-    }
+  const claimed = await claimRequest(
+    scope,
+    requestId,
+    "approved",
+    decision,
+    now,
+  );
+  if (claimed === undefined) {
+    return { ok: false, reason: await explainRefusal(scope, requestId) };
+  }
 
-    const created = await createClient(tx, scope, client);
+  const created = await createClient(scope, client);
 
-    const linked = await tx
-      .update(clientRequests)
-      .set({ resultingClientId: created.id })
-      .where(eq(clientRequests.id, claimed.id))
-      .returning();
+  const linked = await executorFor(scope)
+    .update(clientRequests)
+    .set({ resultingClientId: created.id })
+    .where(eq(clientRequests.id, claimed.id))
+    .returning();
 
-    return {
-      ok: true,
-      request: requireRow(linked, "link client_requests to client"),
-      client: created,
-    };
-  });
+  return {
+    ok: true,
+    request: requireRow(linked, "link client_requests to client"),
+    client: created,
+  };
 }
 
 /** Rejects a request, leaving the payload as the record of what was asked. */
 export async function rejectClientRequest(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   requestId: string,
   decision: DecisionInput,
   now?: Date,
 ): Promise<RejectionResult> {
-  return await db.transaction(async (tx) => {
-    const claimed = await claimRequest(
-      tx,
-      scope,
-      requestId,
-      "rejected",
-      decision,
-      now,
-    );
-    if (claimed === undefined) {
-      return { ok: false, reason: await explainRefusal(tx, scope, requestId) };
-    }
-    return { ok: true, request: claimed };
-  });
+  const claimed = await claimRequest(
+    scope,
+    requestId,
+    "rejected",
+    decision,
+    now,
+  );
+  if (claimed === undefined) {
+    return { ok: false, reason: await explainRefusal(scope, requestId) };
+  }
+  return { ok: true, request: claimed };
 }

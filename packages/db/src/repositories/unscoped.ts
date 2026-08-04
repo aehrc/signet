@@ -87,8 +87,6 @@ export const MODULES_AWAITING_BINDING: readonly string[] = [
   "repositories/accessTokens",
   "repositories/authorizationCodes",
   "repositories/authorizationSessions",
-  "repositories/clientRequests",
-  "repositories/clients",
   "repositories/consents",
   "repositories/endUserSessions",
   "repositories/endUsers",
