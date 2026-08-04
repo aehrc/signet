@@ -35,6 +35,7 @@ import {
   roleAtLeast,
   setTenantMemberRole,
   updateTenant,
+  withTenantScope,
 } from "@signet/db";
 
 import { recordAdminEvent } from "./auditTrail.js";
@@ -78,11 +79,8 @@ export function registerTenantRoutes(
     const patch = Object.fromEntries(
       Object.entries(body).filter(([, value]) => value !== undefined),
     );
-    const updated = await updateTenant(
-      context.db,
-      scope,
-      patch,
-      context.clock(),
+    const updated = await withTenantScope(context.db, scope, (bound) =>
+      updateTenant(bound, patch, context.clock()),
     );
     if (updated === undefined) {
       return c.json(
@@ -286,7 +284,9 @@ export function registerTenantRoutes(
   /** Reads the tenant itself. */
   router.get(TENANT_PATH, requireRole("viewer"), async (c) => {
     const { scope, role } = c.get("tenant");
-    const tenant = await getTenant(context.db, scope);
+    const tenant = await withTenantScope(context.db, scope, (bound) =>
+      getTenant(bound),
+    );
     if (tenant === undefined) {
       return c.json(
         adminErrorBody("not_found", "No such tenant"),

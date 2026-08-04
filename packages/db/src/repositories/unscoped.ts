@@ -57,6 +57,10 @@ export const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
     "Turns the /t/{slug} segment into a scope, which is what establishes the tenant every later query binds to. Reads the tenant row inside a transaction declared for the identifier the slug routine returned, so the only thing it reaches unbound is that routine.",
   "repositories/scope.resolveIssuer":
     "Turns /t/{tenant}/e/{endpoint} into a scope, which every OAuth request begins with and therefore precedes any tenant being known. Reads both rows inside a transaction declared for the identifier the slug routine returned; the endpoint row, which holds a tenant's configuration, is deliberately read after binding rather than returned by a routine.",
+  "repositories/tenants.createTenant":
+    "The one write that brings a tenant into existence, so there is no established tenant for it to take. It generates the identifier itself and declares that before inserting, so the row it writes is one the policy on tenants permits - the insert is bound like every other, just to a tenant it chose rather than one it resolved.",
+  "repositories/tenants.listTenantsForAdminUser":
+    "The console's tenant switcher, which answers which tenants a signed-in operator may see and therefore precedes choosing one. Reaches the admin routine for the identifiers and then reads each tenant's row inside a transaction declared for that tenant, so no query it issues sees more than one tenant.",
   "repositories/scope.databaseNow":
     "Reads the transaction clock and no table at all, so there is no tenant for it to be scoped to. Exists so that a caller needing the instant a conditional update compared against gets it from the same source rather than from the process clock.",
   "repositories/sweep.sweepExpiredRuntimeRows":
@@ -93,5 +97,4 @@ export const MODULES_AWAITING_BINDING: readonly string[] = [
   "repositories/members",
   "repositories/policies",
   "repositories/refreshTokens",
-  "repositories/tenants",
 ];

@@ -10,7 +10,12 @@
  * Author: John Grimes
  */
 
-import { deleteAdminUser, deleteTenant, resolveTenantScope } from "@signet/db";
+import {
+  deleteAdminUser,
+  deleteTenant,
+  resolveTenantScope,
+  withTenantScope,
+} from "@signet/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { bootstrapOptionsFrom, runBootstrapCommand } from "./bootstrap.js";
@@ -104,7 +109,9 @@ describe.skipIf(testDatabaseUrl === undefined)("the bootstrap command", () => {
       options.tenantSlug,
     );
     if (scope !== undefined) {
-      await deleteTenant(stack.context.db, scope);
+      await withTenantScope(stack.context.db, scope, (bound) =>
+        deleteTenant(bound),
+      );
     }
     const { findAdminUserByEmail } = await import("@signet/db");
     const user = await findAdminUserByEmail(stack.context.db, options.email);

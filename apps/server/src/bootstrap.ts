@@ -32,6 +32,7 @@ import {
   resolveTenantScope,
   setTenantMemberRole,
   tenantScopeFromRow,
+  withTenantScope,
 } from "@signet/db";
 
 import type { AdminUser, Database, Tenant } from "@signet/db";
@@ -104,7 +105,9 @@ async function readTenant(
   const scope = await resolveTenantScope(db, slug);
   // The scope proves the row exists but carries only its identifiers, so the row
   // itself is read through it - which is also the only way to obtain one here.
-  return scope === undefined ? undefined : await getTenant(db, scope);
+  return scope === undefined
+    ? undefined
+    : await withTenantScope(db, scope, (bound) => getTenant(bound));
 }
 
 /**

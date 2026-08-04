@@ -45,6 +45,7 @@ import {
   publishPolicy,
   setTenantMemberRole,
   tenantScopeFromRow,
+  withTenantScope,
 } from "@signet/db";
 
 import { createApp } from "../app.js";
@@ -432,7 +433,7 @@ export async function createTestStack(
       // Deleting the tenant cascades to everything the fixtures created, audit
       // events included. Console identities are not tenant-owned, so they are
       // removed explicitly; their sessions and memberships cascade from them.
-      await deleteTenant(db, tenantScope);
+      await withTenantScope(db, tenantScope, (bound) => deleteTenant(bound));
       await deleteAdminUser(db, admin.id);
       await deleteAdminUser(db, outsider.id);
       await handle.close();
