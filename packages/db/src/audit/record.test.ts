@@ -20,6 +20,7 @@ import {
   type AuditEventFilter,
 } from "./record.js";
 import { REDACTED_MARKER } from "./redact.js";
+import { boundScopeOver } from "../test/boundScope.js";
 
 import type { AuditEventInput } from "./events.js";
 import type { Executor } from "../repositories/executor.js";
@@ -51,8 +52,15 @@ function anEvent(overrides: Partial<AuditEventInput> = {}): AuditEventInput {
 function insertingExecutor(sink: {
   rows: NewAuditEvent[];
   fail?: Error;
+  /** Values bound by every statement the handle was asked to issue. */
+  declared?: unknown[][];
 }): Executor {
-  return {
+  const dialect = new PgDialect();
+  const transaction = {
+    execute: (query: SQL) => {
+      sink.declared?.push([...dialect.sqlToQuery(query).params]);
+      return Promise.resolve([]);
+    },
     insert: () => ({
       values: (row: NewAuditEvent) => {
         if (sink.fail !== undefined) {
@@ -62,6 +70,13 @@ function insertingExecutor(sink: {
         return Promise.resolve();
       },
     }),
+  };
+
+  // The insert opens its own transaction to declare the event's tenant, so a
+  // handle that cannot open one is not a handle `recordAuditEvent` accepts.
+  return {
+    transaction: (work: (tx: Executor) => Promise<unknown>) =>
+      work(transaction as unknown as Executor),
   } as unknown as Executor;
 }
 
@@ -92,7 +107,22 @@ function selectingExecutor(
     },
   };
 
-  return { select: () => chain } as unknown as Executor;
+  return {
+    select: () => chain,
+    // Present so that a bound scope can be declared over this handle; see
+    // `../test/boundScope.ts`.
+    execute: () => Promise.resolve([]),
+  } as unknown as Executor;
+}
+
+/** A bound scope over a stubbing handle, for the read paths. */
+async function selecting(
+  rows: readonly AuditEvent[],
+  capture: SelectCapture = {},
+) {
+  return await boundScopeOver(selectingExecutor(rows, capture), {
+    id: TENANT_ID,
+  });
 }
 
 /** A stored row, for the read paths. */
@@ -230,6 +260,20 @@ describe("recordAuditEvent", () => {
     expect(sink.rows).toHaveLength(1);
     expect(sink.rows[0]?.action).toBe("client.secret-rotated");
     expect(sink.rows[0]?.detail).toEqual({ secret: REDACTED_MARKER });
+  });
+
+  it("declares the event's own tenant before inserting", async () => {
+    // The write is tenant-owned, so it needs a declared tenant, and it must not
+    // borrow the audited operation's transaction - a failed insert aborts the
+    // transaction that issued it, which is the one thing this function exists to
+    // avoid. So it declares for itself, from the tenant the event names.
+    const sink = { rows: [] as NewAuditEvent[], declared: [] as unknown[][] };
+
+    await recordAuditEvent(insertingExecutor(sink), anEvent());
+
+    expect(sink.declared).toHaveLength(1);
+    expect(sink.declared[0]).toContain(TENANT_ID);
+    expect(sink.rows).toHaveLength(1);
   });
 
   it("never fails the operation being audited", async () => {
@@ -469,8 +513,7 @@ describe("queryAuditEvents", () => {
   it("asks for one row more than the page, to know whether there is another", async () => {
     const capture: SelectCapture = {};
 
-    await queryAuditEvents(selectingExecutor(rows(3), capture), {
-      tenantId: TENANT_ID,
+    await queryAuditEvents(await selecting(rows(3), capture), {
       limit: 2,
     });
 
@@ -478,8 +521,7 @@ describe("queryAuditEvents", () => {
   });
 
   it("returns a full page and a cursor onto the next one", async () => {
-    const page = await queryAuditEvents(selectingExecutor(rows(3), {}), {
-      tenantId: TENANT_ID,
+    const page = await queryAuditEvents(await selecting(rows(3), {}), {
       limit: 2,
     });
 
@@ -491,8 +533,7 @@ describe("queryAuditEvents", () => {
   });
 
   it("reports the end of the trail with a null cursor", async () => {
-    const page = await queryAuditEvents(selectingExecutor(rows(2), {}), {
-      tenantId: TENANT_ID,
+    const page = await queryAuditEvents(await selecting(rows(2), {}), {
       limit: 5,
     });
 
@@ -501,9 +542,7 @@ describe("queryAuditEvents", () => {
   });
 
   it("handles an empty trail", async () => {
-    const page = await queryAuditEvents(selectingExecutor([], {}), {
-      tenantId: TENANT_ID,
-    });
+    const page = await queryAuditEvents(await selecting([], {}), {});
 
     expect(page.events).toEqual([]);
     expect(page.nextCursor).toBeNull();
@@ -512,9 +551,7 @@ describe("queryAuditEvents", () => {
   it("orders on both cursor columns, newest first by default", async () => {
     const capture: SelectCapture = {};
 
-    await queryAuditEvents(selectingExecutor(rows(1), capture), {
-      tenantId: TENANT_ID,
-    });
+    await queryAuditEvents(await selecting(rows(1), capture), {});
 
     expect(capture.order).toHaveLength(2);
     expect(render(capture.order?.[0] as SQL).text).toContain("desc");
@@ -524,8 +561,7 @@ describe("queryAuditEvents", () => {
   it("orders ascending when asked to read forwards", async () => {
     const capture: SelectCapture = {};
 
-    await queryAuditEvents(selectingExecutor(rows(1), capture), {
-      tenantId: TENANT_ID,
+    await queryAuditEvents(await selecting(rows(1), capture), {
       order: "oldest-first",
     });
 
@@ -535,8 +571,7 @@ describe("queryAuditEvents", () => {
   it("applies the filter it was given", async () => {
     const capture: SelectCapture = {};
 
-    await queryAuditEvents(selectingExecutor(rows(1), capture), {
-      tenantId: TENANT_ID,
+    await queryAuditEvents(await selecting(rows(1), capture), {
       actions: ["token.revoked"],
     });
 
@@ -546,8 +581,7 @@ describe("queryAuditEvents", () => {
   it("clamps an oversized page request", async () => {
     const capture: SelectCapture = {};
 
-    await queryAuditEvents(selectingExecutor([], capture), {
-      tenantId: TENANT_ID,
+    await queryAuditEvents(await selecting([], capture), {
       limit: 10_000,
     });
 

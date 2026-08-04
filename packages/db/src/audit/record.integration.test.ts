@@ -20,12 +20,15 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { queryAuditEvents, recordAuditEvent } from "./record.js";
+import { tenantScopeFromRow } from "../repositories/scope.js";
+import { withTenantScope } from "../rls.js";
 import { auditEvents } from "../schema/audit.js";
 import { tenants } from "../schema/tenancy.js";
 import { isTestSchemaReady } from "../test/schemaReady.js";
 
 import type { AuditEventCursor } from "./record.js";
 import type { Executor } from "../repositories/executor.js";
+import type { TenantScope } from "../repositories/scope.js";
 
 const databaseUrl = process.env.SIGNET_TEST_DATABASE_URL;
 
@@ -50,6 +53,7 @@ describeWithDatabase("the audit log against Postgres", () => {
   let connection: ReturnType<typeof drizzle>;
   let db: Executor;
   let tenantId: string | undefined;
+  let tenantScope: TenantScope | undefined;
 
   beforeAll(async () => {
     sql = postgres(databaseUrl ?? "", { max: 2, onnotice: () => {} });
@@ -75,12 +79,13 @@ describeWithDatabase("the audit log against Postgres", () => {
     const inserted = await connection
       .insert(tenants)
       .values({ slug: `audit-${Date.now()}`, name: "Audit test tenant" })
-      .returning({ id: tenants.id });
+      .returning();
     const [tenant] = inserted;
     if (tenant === undefined) {
       throw new Error("failed to create the test tenant");
     }
     tenantId = tenant.id;
+    tenantScope = tenantScopeFromRow(tenant);
   }, 60_000);
 
   afterAll(async () => {
@@ -107,6 +112,22 @@ describeWithDatabase("the audit log against Postgres", () => {
     return tenantId;
   }
 
+  /**
+   * Reads a page of the test tenant's trail.
+   *
+   * `queryAuditEvents` takes the tenant from a bound scope rather than from the
+   * filter, so every read here goes through one, and the filter cannot name a
+   * tenant of its own.
+   */
+  async function readAudit(filter: Parameters<typeof queryAuditEvents>[1]) {
+    if (tenantScope === undefined) {
+      throw new Error("the test tenant was not created");
+    }
+    return await withTenantScope(db, tenantScope, (bound) =>
+      queryAuditEvents(bound, filter),
+    );
+  }
+
   it("persists a redacted row that reads back as the domain shape", async () => {
     await recordAuditEvent(db, {
       tenantId: testTenantId(),
@@ -120,8 +141,7 @@ describeWithDatabase("the audit log against Postgres", () => {
       at: new Date("2026-05-01T09:00:00.000Z"),
     });
 
-    const page = await queryAuditEvents(db, {
-      tenantId: testTenantId(),
+    const page = await readAudit({
       actions: ["client.secret-rotated"],
     });
 
@@ -147,8 +167,7 @@ describeWithDatabase("the audit log against Postgres", () => {
       action: "key.rotated",
     });
 
-    const page = await queryAuditEvents(db, {
-      tenantId: testTenantId(),
+    const page = await readAudit({
       actions: ["key.rotated"],
     });
 
@@ -176,8 +195,7 @@ describeWithDatabase("the audit log against Postgres", () => {
     let pages = 0;
 
     do {
-      const page = await queryAuditEvents(db, {
-        tenantId: testTenantId(),
+      const page = await readAudit({
         actions: ["token.introspected"],
         limit: 3,
         ...(cursor === undefined ? {} : { after: cursor }),
@@ -193,13 +211,11 @@ describeWithDatabase("the audit log against Postgres", () => {
   });
 
   it("reads the trail forwards as well as backwards", async () => {
-    const forwards = await queryAuditEvents(db, {
-      tenantId: testTenantId(),
+    const forwards = await readAudit({
       order: "oldest-first",
       limit: 200,
     });
-    const backwards = await queryAuditEvents(db, {
-      tenantId: testTenantId(),
+    const backwards = await readAudit({
       limit: 200,
     });
 
@@ -209,8 +225,7 @@ describeWithDatabase("the audit log against Postgres", () => {
   });
 
   it("filters by half-open time range", async () => {
-    const page = await queryAuditEvents(db, {
-      tenantId: testTenantId(),
+    const page = await readAudit({
       from: new Date("2026-06-01T00:00:00.000Z"),
       until: new Date("2026-06-01T00:00:00.001Z"),
       limit: 200,
@@ -238,8 +253,7 @@ describeWithDatabase("the audit log against Postgres", () => {
         action: "tenant.created",
       });
 
-      const mine = await queryAuditEvents(db, {
-        tenantId: testTenantId(),
+      const mine = await readAudit({
         limit: 200,
       });
       expect(

@@ -161,20 +161,23 @@ export function registerAuditRoutes(
       }
     }
 
-    const page = await queryAuditEvents(context.db, {
-      tenantId: scope.tenantId,
-      ...(endpointId === undefined ? {} : { endpointId }),
-      ...(query.actorType === undefined ? {} : { actorType: query.actorType }),
-      ...(query.actorId === undefined ? {} : { actorId: query.actorId }),
-      ...(actions.length === 0 ? {} : { actions }),
-      ...(targetType === undefined ? {} : { targetType }),
-      ...(query.targetId === undefined ? {} : { targetId: query.targetId }),
-      ...(query.from === undefined ? {} : { from: query.from }),
-      ...(query.until === undefined ? {} : { until: query.until }),
-      ...(query.limit === undefined ? {} : { limit: query.limit }),
-      ...(after === undefined ? {} : { after }),
-      ...(query.order === undefined ? {} : { order: query.order }),
-    });
+    const page = await withTenantScope(context.db, scope, (bound) =>
+      queryAuditEvents(bound, {
+        ...(endpointId === undefined ? {} : { endpointId }),
+        ...(query.actorType === undefined
+          ? {}
+          : { actorType: query.actorType }),
+        ...(query.actorId === undefined ? {} : { actorId: query.actorId }),
+        ...(actions.length === 0 ? {} : { actions }),
+        ...(targetType === undefined ? {} : { targetType }),
+        ...(query.targetId === undefined ? {} : { targetId: query.targetId }),
+        ...(query.from === undefined ? {} : { from: query.from }),
+        ...(query.until === undefined ? {} : { until: query.until }),
+        ...(query.limit === undefined ? {} : { limit: query.limit }),
+        ...(after === undefined ? {} : { after }),
+        ...(query.order === undefined ? {} : { order: query.order }),
+      }),
+    );
 
     return c.json({
       events: page.events.map(auditEventView),

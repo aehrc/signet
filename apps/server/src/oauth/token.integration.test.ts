@@ -370,10 +370,11 @@ describeWithDatabase("the authorization_code grant", () => {
       client_id: stack.publicClient.clientId,
     });
 
-    const page = await queryAuditEvents(stack.context.db, {
-      tenantId: stack.tenant.id,
-      actions: ["token.issued"],
-    });
+    const page = await withTenantScope(
+      stack.context.db,
+      stack.tenantScope,
+      (bound) => queryAuditEvents(bound, { actions: ["token.issued"] }),
+    );
     expect(page.events[0]?.detail).toMatchObject({
       grantType: "authorization_code",
       policySource: "endpoint",
@@ -574,10 +575,12 @@ describeWithDatabase("the client_credentials grant", () => {
       ((await replay.json()) as TokenResponseBody).error_description,
     ).toContain("already been presented");
 
-    const page = await queryAuditEvents(stack.context.db, {
-      tenantId: stack.tenant.id,
-      actions: ["token.jti-replay-detected"],
-    });
+    const page = await withTenantScope(
+      stack.context.db,
+      stack.tenantScope,
+      (bound) =>
+        queryAuditEvents(bound, { actions: ["token.jti-replay-detected"] }),
+    );
     expect(page.events).toHaveLength(1);
   });
 

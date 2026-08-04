@@ -65,6 +65,8 @@ export const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
     "The one write that brings a tenant into existence, so there is no established tenant for it to take. It generates the identifier itself and declares that before inserting, so the row it writes is one the policy on tenants permits - the insert is bound like every other, just to a tenant it chose rather than one it resolved.",
   "repositories/tenants.listTenantsForAdminUser":
     "The console's tenant switcher, which answers which tenants a signed-in operator may see and therefore precedes choosing one. Reaches the admin routine for the identifiers and then reads each tenant's row inside a transaction declared for that tenant, so no query it issues sees more than one tenant.",
+  "audit/record.recordAuditEvent":
+    "Declares the tenant its event names, on its own transaction, so it takes a connection rather than a bound scope. The write must not borrow the audited operation's transaction: audit_events is tenant-owned so the insert needs a declared tenant, and a failed statement in Postgres aborts the transaction that issued it - which would let a failure to record abort the operation being recorded.",
   "repositories/scope.databaseNow":
     "Reads the transaction clock and no table at all, so there is no tenant for it to be scoped to. Exists so that a caller needing the instant a conditional update compared against gets it from the same source rather than from the process clock.",
   "repositories/sweep.sweepExpiredRuntimeRows":

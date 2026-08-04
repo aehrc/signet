@@ -192,10 +192,14 @@ describeWithDatabase("the authorization endpoint", () => {
       challenge,
     });
 
-    const page = await queryAuditEvents(stack.context.db, {
-      tenantId: stack.tenant.id,
-      actions: ["authorize.requested", "authorize.denied"],
-    });
+    const page = await withTenantScope(
+      stack.context.db,
+      stack.tenantScope,
+      (bound) =>
+        queryAuditEvents(bound, {
+          actions: ["authorize.requested", "authorize.denied"],
+        }),
+    );
     const actions = page.events.map((event) => event.action);
     expect(actions).toContain("authorize.requested");
     expect(actions).toContain("authorize.denied");

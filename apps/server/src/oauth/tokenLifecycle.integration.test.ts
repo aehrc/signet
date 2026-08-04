@@ -165,10 +165,12 @@ describeWithDatabase("the refresh_token grant", () => {
     expect(successor?.revokedAt).not.toBeNull();
     expect((await refresh(second.refresh_token as string)).status).toBe(400);
 
-    const page = await queryAuditEvents(stack.context.db, {
-      tenantId: stack.tenant.id,
-      actions: ["token.refresh-reuse-detected"],
-    });
+    const page = await withTenantScope(
+      stack.context.db,
+      stack.tenantScope,
+      (bound) =>
+        queryAuditEvents(bound, { actions: ["token.refresh-reuse-detected"] }),
+    );
     expect(page.events).toHaveLength(1);
     // One, not two: the presented token was already revoked when it was rotated, so
     // the live member the reuse response had to revoke is its successor. The key is

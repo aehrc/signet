@@ -28,6 +28,7 @@ import {
   type AuditTargetType,
 } from "./events.js";
 import { redactAuditDetail, redactAuditText } from "./redact.js";
+import { executorFor, withDeclaredTenant } from "../repositories/scope.js";
 import {
   auditEvents,
   type AuditEvent,
@@ -35,6 +36,7 @@ import {
 } from "../schema/audit.js";
 
 import type { Executor } from "../repositories/executor.js";
+import type { BoundTenantScope } from "../repositories/scope.js";
 import type { SQL } from "drizzle-orm";
 
 /**
@@ -198,13 +200,20 @@ export function buildAuditEventRow(event: AuditEventInput): NewAuditEvent {
  * Deployments that need the stronger guarantee must alert on the reporter, which
  * is why it is injectable and why nothing here defaults to silence.
  *
- * **Transactions.** Passing a transaction as `db` enlists the event in it, so an
- * event describing work that later rolls back rolls back too. That is usually
- * what you want for configuration changes. It is *not* what you want for a
- * refusal: audit a rejected credential on the connection, not inside the
- * transaction that is about to abort.
+ * **Transactions.** The insert opens its own transaction, declaring the tenant the
+ * event names, and `db` must therefore be a connection rather than a transaction.
+ * That is not a detail: `audit_events` is tenant-owned, so the write needs a
+ * declared tenant, and a failed statement in Postgres aborts the transaction that
+ * issued it. Enlisting the event in the audited operation's transaction would mean
+ * a failure to record could abort the operation being recorded - exactly the
+ * outcome the whole function is written to avoid - so the two are kept apart by
+ * construction rather than by the caller remembering to.
  *
- * @param db - Connection or transaction to insert through.
+ * The tenant comes from the event itself. An event is required to name its tenant,
+ * and that is the tenant the policy on `audit_events` compares against, so there
+ * is no way for the row written and the tenant declared to disagree.
+ *
+ * @param db - Connection to insert through. Must not be a transaction; see above.
  * @param event - The event to record. Its detail blob is redacted first.
  * @param reportFailure - Where to send a failed insert. Defaults to
  *   `console.error`.
@@ -217,7 +226,9 @@ export async function recordAuditEvent(
   const row = buildAuditEventRow(event);
 
   try {
-    await db.insert(auditEvents).values(row);
+    await withDeclaredTenant(db, event.tenantId, (tx) =>
+      tx.insert(auditEvents).values(row),
+    );
   } catch (error) {
     try {
       reportFailure({
@@ -244,7 +255,8 @@ export interface AuditRecorder {
   /**
    * Records one event.
    *
-   * @param db - Connection or transaction to insert through.
+   * @param db - Connection to insert through. Must not be a transaction; see
+   *   {@link recordAuditEvent}.
    * @param event - The event to record.
    */
   record(db: Executor, event: AuditEventInput): Promise<void>;
@@ -475,21 +487,25 @@ export function auditEventCursorOf(record: AuditEventRecord): AuditEventCursor {
  * there is genuinely more to read rather than guessing from a full page. The
  * extra row is discarded.
  *
- * @param db - Connection or transaction to read through.
+ * The tenant is taken from the scope rather than from the filter, so a page cannot
+ * be asked for on behalf of one tenant while the transaction has declared another.
+ *
+ * @param scope - The tenant whose trail to read, bound to the transaction that
+ *   declared it.
  * @param filter - What to select and where to resume from.
  */
 export async function queryAuditEvents(
-  db: Executor,
-  filter: AuditEventFilter,
+  scope: BoundTenantScope,
+  filter: Omit<AuditEventFilter, "tenantId">,
 ): Promise<AuditEventPage> {
   const pageSize = normaliseAuditPageSize(filter.limit);
   const order = filter.order ?? "newest-first";
   const direction = order === "newest-first" ? desc : asc;
 
-  const rows = await db
+  const rows = await executorFor(scope)
     .select()
     .from(auditEvents)
-    .where(buildAuditEventPredicate(filter))
+    .where(buildAuditEventPredicate({ ...filter, tenantId: scope.tenantId }))
     .orderBy(direction(auditEvents.at), direction(auditEvents.id))
     .limit(pageSize + 1);
 
