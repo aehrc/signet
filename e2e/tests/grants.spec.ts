@@ -201,31 +201,42 @@ test.describe("an EHR launch", () => {
     const { launch } = (await minted.json()) as { launch: string };
     expect(launch).toBeTruthy();
 
-    // The handle is consumed at `/authorize`, before anybody signs in, so both
-    // presentations are plain requests and neither spends a sign-in.
-    const present = async (handle: string) =>
-      await request.get(
+    /**
+     * Presents a handle to `/authorize` and returns where it redirected to.
+     *
+     * The handle is consumed here, before anybody signs in, so both
+     * presentations are plain requests and neither spends a sign-in.
+     *
+     * The `location` header is asserted rather than defaulted. Reading it as
+     * `?? ""` would resolve to the issuer itself, which carries no `error` - so
+     * a build that stopped redirecting at all would make the first assertion
+     * below pass by having nothing to say.
+     */
+    const present = async (handle: string): Promise<URL> => {
+      const response = await request.get(
         `${ISSUER}/authorize?response_type=code&client_id=${SEED.publicClientId}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent("openid launch patient/*.rs")}&state=x&aud=${encodeURIComponent(FHIR)}&code_challenge=${CHALLENGE}&code_challenge_method=S256&launch=${encodeURIComponent(handle)}`,
         { maxRedirects: 0 },
       );
+      const location = response.headers()["location"];
+      expect(location, "every outcome here is a redirect").toBeTruthy();
+      return new URL(location ?? "", ISSUER);
+    };
 
-    // The first presentation is accepted. Asserted by the *absence* of an OAuth
-    // error on the redirect rather than by its status, because a refusal is also
-    // a redirect - to the app, carrying `error` - and a status check alone could
-    // not tell the two apart.
+    // The first presentation is accepted, and goes on to ask the user to sign
+    // in. Asserted by where it went rather than by its status, because a refusal
+    // is also a 302 - to the app, carrying `error` - so a status check could not
+    // tell the two apart. That is what the previous version of this test got
+    // wrong.
     const first = await present(launch);
-    expect(
-      new URL(first.headers()["location"] ?? "", ISSUER).searchParams.get(
-        "error",
-      ),
-    ).toBeNull();
+    expect(first.searchParams.get("error")).toBeNull();
+    expect(first.pathname).toContain("/login");
 
     // The second is refused, and says why. A handle that could be redeemed twice
     // would let anybody who saw it in an EHR's logs open the app as that patient.
     const second = await present(launch);
-    const refusal = new URL(second.headers()["location"] ?? "", ISSUER);
-    expect(refusal.searchParams.get("error")).toBe("invalid_request");
-    expect(refusal.searchParams.get("error_description")).toContain(
+    expect(second.origin).toBe(new URL(REDIRECT_URI).origin);
+    expect(second.searchParams.get("error")).toBe("invalid_request");
+    expect(second.searchParams.get("error_description")).toContain(
       "already been used",
     );
 
@@ -233,11 +244,7 @@ test.describe("an EHR launch", () => {
     // ignored - ignoring it would silently downgrade an EHR launch to a
     // standalone one, with no patient in context and nobody any the wiser.
     const bogus = await present("not-a-real-handle");
-    expect(
-      new URL(bogus.headers()["location"] ?? "", ISSUER).searchParams.get(
-        "error",
-      ),
-    ).toBe("invalid_request");
+    expect(bogus.searchParams.get("error")).toBe("invalid_request");
   });
 });
 
