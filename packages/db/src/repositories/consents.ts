@@ -20,12 +20,13 @@
 import { and, desc, eq, gt, isNull, lte, or } from "drizzle-orm";
 
 import { requireRow } from "./rows.js";
+import { executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { clients } from "../schema/clients.js";
 import { consents } from "../schema/runtime.js";
 
 import type { Executor } from "./executor.js";
-import type { ClientScope, EndpointScope } from "./scope.js";
+import type { BoundClientScope, BoundEndpointScope } from "./scope.js";
 import type { Client } from "../schema/clients.js";
 import type { Consent, NewConsent } from "../schema/runtime.js";
 
@@ -37,11 +38,10 @@ export type ConsentInput = Pick<
 
 /** Records that an end user consented to the scoped client's scopes. */
 export async function recordConsent(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   input: ConsentInput,
 ): Promise<Consent> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(consents)
     .values({
       ...input,
@@ -64,12 +64,11 @@ export async function recordConsent(
  * able to test the request against all of them.
  */
 export async function listLiveConsents(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   endUserId: string,
   now?: Date,
 ): Promise<readonly Consent[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(consents)
     .where(
@@ -98,11 +97,10 @@ export interface ConsentWithClient {
  * record rather than ended it.
  */
 export async function listConsentsForEndUser(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   endUserId: string,
 ): Promise<readonly ConsentWithClient[]> {
-  return await db
+  return await executorFor(scope)
     .select({ consent: consents, client: clients })
     .from(consents)
     .innerJoin(clients, eq(clients.id, consents.clientId))
@@ -121,12 +119,11 @@ export async function listConsentsForEndUser(
  * @returns Whether a live consent was revoked.
  */
 export async function revokeConsent(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   consentId: string,
   now?: Date,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(consents)
     .set({ revokedAt: nowValue(now) })
     .where(
@@ -150,12 +147,11 @@ export async function revokeConsent(
  * @returns How many consents were revoked.
  */
 export async function revokeConsentsForClient(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   endUserId: string,
   now?: Date,
 ): Promise<number> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(consents)
     .set({ revokedAt: nowValue(now) })
     .where(

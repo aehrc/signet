@@ -110,6 +110,5 @@ export const SWEEP_FUNCTIONS: readonly string[] = [
  */
 export const MODULES_AWAITING_BINDING: readonly string[] = [
   "audit/record",
-  "repositories/consents",
   "repositories/federationStates",
 ];

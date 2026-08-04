@@ -1196,24 +1196,34 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         }),
       );
 
-      const live = await recordConsent(db, fixture.clientScope, {
-        endUserId: user.id,
-        scope: "patient/Observation.rs",
-      });
-      await recordConsent(db, fixture.clientScope, {
-        endUserId: user.id,
-        scope: "patient/*.cruds",
-        expiresAt: new Date(Date.now() - 1000),
-      });
+      const live = await withTenantScope(db, fixture.clientScope, (bound) =>
+        recordConsent(bound, {
+          endUserId: user.id,
+          scope: "patient/Observation.rs",
+        }),
+      );
+      await withTenantScope(db, fixture.clientScope, (bound) =>
+        recordConsent(bound, {
+          endUserId: user.id,
+          scope: "patient/*.cruds",
+          expiresAt: new Date(Date.now() - 1000),
+        }),
+      );
 
-      const listed = await listLiveConsents(db, fixture.clientScope, user.id);
+      const listed = await withTenantScope(db, fixture.clientScope, (bound) =>
+        listLiveConsents(bound, user.id),
+      );
       expect(listed.map((consent) => consent.id)).toEqual([live.id]);
 
-      expect(await revokeConsent(db, fixture.endpointScope, live.id)).toBe(
-        true,
-      );
       expect(
-        await listLiveConsents(db, fixture.clientScope, user.id),
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          revokeConsent(bound, live.id),
+        ),
+      ).toBe(true);
+      expect(
+        await withTenantScope(db, fixture.clientScope, (bound) =>
+          listLiveConsents(bound, user.id),
+        ),
       ).toHaveLength(0);
     });
   });

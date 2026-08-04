@@ -331,11 +331,13 @@ describeWithDatabase("row-level security as the serving role", () => {
         expiresAt: soon(),
       }),
     );
-    await recordConsent(owner, clientScope, {
-      endUserId: endUser.id,
-      scope: "patient/Observation.rs",
-      expiresAt: soon(),
-    });
+    await withTenantScope(owner, clientScope, (bound) =>
+      recordConsent(bound, {
+        endUserId: endUser.id,
+        scope: "patient/Observation.rs",
+        expiresAt: soon(),
+      }),
+    );
     await withTenantScope(owner, endpointScope, (bound) =>
       createEndUserSession(bound, {
         endUserId: endUser.id,

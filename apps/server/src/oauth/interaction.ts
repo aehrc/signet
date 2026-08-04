@@ -180,11 +180,10 @@ async function hasCoveringConsent(
   loaded: LoadedSession,
   endUserId: string,
 ): Promise<boolean> {
-  const consents = await listLiveConsents(
+  const consents = await withTenantScope(
     context.db,
     loaded.clientScope,
-    endUserId,
-    context.clock(),
+    (bound) => listLiveConsents(bound, endUserId, context.clock()),
   );
   return consents.some((consent) =>
     areScopesCoveredBy(loaded.requested, parseScopes(consent.scope).scopes),
@@ -727,11 +726,13 @@ export function interactionConsentHandler(context: ServerContext) {
     // would be an unused row that the management page would nevertheless show the
     // user as a standing permission.
     if (endpoint.consentMode === "remember") {
-      await recordConsent(context.db, loaded.clientScope, {
-        endUserId: loaded.session.endUserId,
-        scope: loaded.session.requestedScopes.join(" "),
-        expiresAt: null,
-      });
+      await withTenantScope(context.db, loaded.clientScope, (bound) =>
+        recordConsent(bound, {
+          endUserId: loaded.session.endUserId,
+          scope: loaded.session.requestedScopes.join(" "),
+          expiresAt: null,
+        }),
+      );
       await recordEndUserEvent(context, issuerContext, metadata, {
         action: "consent.granted",
         target: { type: "client", id: loaded.client.clientId },

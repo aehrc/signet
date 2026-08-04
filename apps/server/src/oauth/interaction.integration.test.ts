@@ -224,10 +224,10 @@ describeWithDatabase("the interaction API", () => {
 
     // A stored consent in `always` mode would show the user a standing permission on
     // the management page that the server never actually honours.
-    const consents = await listConsentsForEndUser(
+    const consents = await withTenantScope(
       stack.context.db,
       stack.scope,
-      stack.user.id,
+      (bound) => listConsentsForEndUser(bound, stack.user.id),
     );
     expect(consents).toHaveLength(0);
   });

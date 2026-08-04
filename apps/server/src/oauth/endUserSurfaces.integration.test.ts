@@ -16,6 +16,7 @@ import {
   clientScopeFromRow,
   listConsentsForEndUser,
   recordConsent,
+  withTenantScope,
 } from "@signet/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -114,14 +115,15 @@ describe.skipIf(testDatabaseUrl === undefined)(
     });
 
     it("lists what the person has consented to", async () => {
-      await recordConsent(
+      await withTenantScope(
         stack.context.db,
         clientScopeFromRow(stack.scope, stack.publicClient),
-        {
-          endUserId: stack.user.id,
-          scope: "openid patient/Observation.rs",
-          expiresAt: null,
-        },
+        (bound) =>
+          recordConsent(bound, {
+            endUserId: stack.user.id,
+            scope: "openid patient/Observation.rs",
+            expiresAt: null,
+          }),
       );
 
       const cookie = await manageSignIn(stack, {
@@ -209,16 +211,20 @@ describe.skipIf(testDatabaseUrl === undefined)(
           other.scope,
           other.symmetricClient,
         );
-        await recordConsent(other.context.db, scope, {
-          endUserId: other.user.id,
-          scope: "patient/Observation.rs",
-          expiresAt: null,
-        });
-        await recordConsent(other.context.db, otherScope, {
-          endUserId: other.user.id,
-          scope: "patient/Condition.rs",
-          expiresAt: null,
-        });
+        await withTenantScope(other.context.db, scope, (bound) =>
+          recordConsent(bound, {
+            endUserId: other.user.id,
+            scope: "patient/Observation.rs",
+            expiresAt: null,
+          }),
+        );
+        await withTenantScope(other.context.db, otherScope, (bound) =>
+          recordConsent(bound, {
+            endUserId: other.user.id,
+            scope: "patient/Condition.rs",
+            expiresAt: null,
+          }),
+        );
 
         const cookie = await manageSignIn(other, {
           username: "clinician",
@@ -230,10 +236,10 @@ describe.skipIf(testDatabaseUrl === undefined)(
           body: JSON.stringify({ clientId: other.publicClient.clientId }),
         });
 
-        const consents = await listConsentsForEndUser(
+        const consents = await withTenantScope(
           other.context.db,
           other.scope,
-          other.user.id,
+          (bound) => listConsentsForEndUser(bound, other.user.id),
         );
         const survivor = consents.find(
           (entry) => entry.client.clientId === other.symmetricClient.clientId,

@@ -283,10 +283,10 @@ export function manageAuthorizationsHandler(context: ServerContext) {
     }
     const { user } = authenticated;
 
-    const consents = await listConsentsForEndUser(
+    const consents = await withTenantScope(
       context.db,
       issuerContext.scope,
-      user.id,
+      (bound) => listConsentsForEndUser(bound, user.id),
     );
     const now = context.clock();
     const accessTokens = await withTenantScope(
@@ -377,11 +377,10 @@ export function manageRevokeHandler(context: ServerContext) {
 
     const clientScope = clientScopeFromRow(issuerContext.scope, client);
     const now = context.clock();
-    const consentsRevoked = await revokeConsentsForClient(
+    const consentsRevoked = await withTenantScope(
       context.db,
       clientScope,
-      user.id,
-      now,
+      (bound) => revokeConsentsForClient(bound, user.id, now),
     );
     // Scoped to this user *and* this client: revoking every token the user holds
     // would disconnect apps they did not ask to disconnect.
