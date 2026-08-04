@@ -257,6 +257,10 @@ export async function listAccessTokensForSubject(
 /**
  * Deletes records for tokens that have already expired.
  *
+ * Part of the cross-tenant expiry sweep, so it takes a connection rather than a
+ * bound scope and needs the owning identity; see `./unscoped.ts`.
+ *
+ * @param db - The connection to delete on, which must be the owning identity.
  * @param before - Delete records whose token expired before this instant. A
  *   caller may pass an earlier time than "now" to keep a grace period, so that
  *   introspecting a just-expired token still reports `active: false` with its
