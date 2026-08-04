@@ -43,6 +43,13 @@
       "when": 1785801078155,
       "tag": "0005_famous_otto_octavius",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785801078156,
+      "tag": "0006_tenant_row_level_security",
+      "breakpoints": true
     }
   ]
 }

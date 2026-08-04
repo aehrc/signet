@@ -27,6 +27,78 @@ node dist/index.js bootstrap  # create the first tenant and administrator, then 
 `migrate` and `bootstrap` need only a database connection - not the public URL or
 the master key - so a migration job's manifest stays minimal.
 
+## Tenant isolation in the database
+
+Signet enforces tenancy twice, and the two layers fail in different ways on
+purpose.
+
+The first is the type system. Every function in
+`packages/db/src/repositories/` demands a `TenantScope`, `EndpointScope` or
+`ClientScope`, and none of those can be written down by hand - they are only
+produced by resolving a tenant. A query that has not proved which tenant it
+belongs to does not compile. This is the layer that matters most, because it
+fails at build time in every environment whether or not anybody configured
+anything.
+
+The second is Postgres row-level security. Migration
+`0006_tenant_row_level_security` enables RLS on all 21 tenant-owned tables and
+creates a `signet_tenant_isolation` policy on each, comparing against
+`current_setting('signet.tenant_id', true)`. Because the second argument makes a
+missing setting return NULL, and a NULL comparison is not true, a connection that
+never set the variable sees no tenant-owned rows at all. Forgetting it yields an
+obviously empty result rather than a quietly cross-tenant one.
+
+You get the policies by running migrations. There is nothing extra to install:
+
+```bash
+node dist/index.js migrate
+```
+
+Verify them on any database you are unsure about:
+
+```sql
+select tablename from pg_policies where policyname = 'signet_tenant_isolation';
+```
+
+### Which connections the policies bite
+
+This is the part to understand before relying on them, because Postgres exempts
+a table's owner from its policies.
+
+The Signet process connects as the owner, and that is deliberate rather than an
+oversight. Signet is not a single-tenant application holding one tenant for the
+lifetime of a connection: the admin API resolves _which_ tenants a session may
+see before any tenant is known, the expiry sweep is cross-tenant by design, and
+migrations must be able to alter every table. A process pinned to one tenant per
+connection could not serve those paths.
+
+So the policies constrain every connection that is **not** the owner - a `psql`
+session, a reporting job, an analytics tool, a backup verification script, a
+future service that reads the database directly. Those are the connections a
+mistake is most likely to reach the data through, and the ones least likely to
+have gone through the repositories. Give each of them a non-owning role:
+
+```sql
+create role signet_reader login password '...';
+grant usage on schema public to signet_reader;
+grant select on all tables in schema public to signet_reader;
+alter default privileges in schema public
+  grant select on tables to signet_reader;
+```
+
+A `signet_reader` session then sees nothing until it names a tenant, and only
+that tenant's rows afterwards:
+
+```sql
+select set_config('signet.tenant_id', '<tenant uuid>', false);
+select slug from endpoints;
+```
+
+What this does **not** do is constrain the Signet process itself. Inside the
+application the compiler is the enforcement, and it is not optional: the scope
+types make an unscoped query fail to build. Row-level security is the backstop
+for everything reaching the database from outside that build.
+
 ## The master key
 
 `SIGNET_MASTER_KEY` is the envelope key for every endpoint's private signing key
