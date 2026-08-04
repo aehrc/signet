@@ -54,6 +54,7 @@ import {
   hashToken,
   recordIdpDiscoveryFetch,
   upsertFederatedEndUser,
+  withTenantScope,
 } from "@signet/db";
 import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose";
 
@@ -170,7 +171,11 @@ async function loadSetup(
   | { readonly ok: true; readonly setup: FederationSetup }
   | { readonly ok: false; readonly reason: string }
 > {
-  const config = await getIdpConfig(context.db, issuerContext.scope);
+  const config = await withTenantScope(
+    context.db,
+    issuerContext.scope,
+    (bound) => getIdpConfig(bound),
+  );
   if (config === undefined) {
     return { ok: false, reason: "no-idp-configured" };
   }
@@ -183,10 +188,8 @@ async function loadSetup(
   if (!fetched.ok) {
     return { ok: false, reason: `discovery-${fetched.reason}` };
   }
-  await recordIdpDiscoveryFetch(
-    context.db,
-    issuerContext.scope,
-    context.clock(),
+  await withTenantScope(context.db, issuerContext.scope, (bound) =>
+    recordIdpDiscoveryFetch(bound, context.clock()),
   );
 
   const validated = validateUpstreamMetadata(fetched.value, config.issuer, {

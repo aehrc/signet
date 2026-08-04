@@ -229,7 +229,9 @@ async function buildView(
   // must not put a sign-in button on the page.
   const idp =
     endpoint.authMode === "oidc"
-      ? await getIdpConfig(context.db, issuerContext.scope)
+      ? await withTenantScope(context.db, issuerContext.scope, (bound) =>
+          getIdpConfig(bound),
+        )
       : undefined;
 
   return {

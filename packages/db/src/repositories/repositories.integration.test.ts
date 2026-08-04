@@ -252,12 +252,14 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     options: { readonly isProduction?: boolean } = {},
   ): Promise<Fixture> {
     const tenantScope = await newTenant();
-    const endpoint = await createEndpoint(db, tenantScope, {
-      slug: `e-${unique()}`,
-      name: "Endpoint",
-      fhirBaseUrl: "https://fhir.example.org/fhir",
-      isProduction: options.isProduction ?? true,
-    });
+    const endpoint = await withTenantScope(db, tenantScope, (bound) =>
+      createEndpoint(bound, {
+        slug: `e-${unique()}`,
+        name: "Endpoint",
+        fhirBaseUrl: "https://fhir.example.org/fhir",
+        isProduction: options.isProduction ?? true,
+      }),
+    );
     const endpointScope = endpointScopeFromRow(tenantScope, endpoint);
 
     const client = await createClient(db, endpointScope, {
@@ -325,14 +327,14 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const mine = await newFixture();
       const theirs = await newFixture();
 
-      const listed = await listEndpoints(db, mine.tenantScope);
+      const listed = await withTenantScope(db, mine.tenantScope, (bound) =>
+        listEndpoints(bound),
+      );
       expect(listed).toHaveLength(1);
       expect(listed[0]?.id).toBe(mine.endpointScope.endpointId);
 
-      const foreign = await getEndpoint(
-        db,
-        mine.tenantScope,
-        theirs.endpointScope.endpointId,
+      const foreign = await withTenantScope(db, mine.tenantScope, (bound) =>
+        getEndpoint(bound, theirs.endpointScope.endpointId),
       );
       expect(foreign).toBeUndefined();
     });
@@ -896,34 +898,54 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   describe("signing keys", () => {
     it("promotes the next key and retires the outgoing one", async () => {
       const fixture = await newFixture();
-      expect(await promoteNextEndpointKey(db, fixture.endpointScope)).toEqual({
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          promoteNextEndpointKey(bound),
+        ),
+      ).toEqual({
         ok: false,
         reason: "no-next-key",
       });
 
-      await insertEndpointKey(db, fixture.endpointScope, {
-        kid: "kid-1",
-        algorithm: "ES384",
-        publicJwk: { kty: "EC" },
-        privateJwkEncrypted: "envelope-1",
-      });
-      const first = await promoteNextEndpointKey(db, fixture.endpointScope);
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        insertEndpointKey(bound, {
+          kid: "kid-1",
+          algorithm: "ES384",
+          publicJwk: { kty: "EC" },
+          privateJwkEncrypted: "envelope-1",
+        }),
+      );
+      const first = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        promoteNextEndpointKey(bound),
+      );
       expect(first.ok).toBe(true);
-      const afterFirst = await getActiveEndpointKey(db, fixture.endpointScope);
+      const afterFirst = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) => getActiveEndpointKey(bound),
+      );
       expect(afterFirst?.kid).toBe("kid-1");
 
-      await insertEndpointKey(db, fixture.endpointScope, {
-        kid: "kid-2",
-        algorithm: "ES384",
-        publicJwk: { kty: "EC" },
-        privateJwkEncrypted: "envelope-2",
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        insertEndpointKey(bound, {
+          kid: "kid-2",
+          algorithm: "ES384",
+          publicJwk: { kty: "EC" },
+          privateJwkEncrypted: "envelope-2",
+        }),
+      );
       const second = expectOk(
-        await promoteNextEndpointKey(db, fixture.endpointScope),
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          promoteNextEndpointKey(bound),
+        ),
       );
       expect(second.activated.kid).toBe("kid-2");
       expect(second.retired.map((key) => key.kid)).toEqual(["kid-1"]);
-      const afterSecond = await getActiveEndpointKey(db, fixture.endpointScope);
+      const afterSecond = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) => getActiveEndpointKey(bound),
+      );
       expect(afterSecond?.kid).toBe("kid-2");
     });
   });
@@ -1074,10 +1096,8 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   describe("personas", () => {
     it("offers personas only on a non-production endpoint", async () => {
       const fixture = await newFixture({ isProduction: false });
-      const endpoint = await getEndpoint(
-        db,
-        fixture.tenantScope,
-        fixture.endpointScope.endpointId,
+      const endpoint = await withTenantScope(db, fixture.tenantScope, (bound) =>
+        getEndpoint(bound, fixture.endpointScope.endpointId),
       );
       expect(endpoint).toBeDefined();
       if (endpoint === undefined) {

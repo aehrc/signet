@@ -4,8 +4,11 @@
  * Three states, and the order they move in matters: a key is published as `next`
  * so that relying parties have fetched it before it signs anything, then promoted
  * to `active`, then `retired` once the tokens it signed have expired. Promotion is
- * therefore not "set this key active" - it is a swap, and it happens in a
+ * therefore not "set this key active" - it is a swap, and it happens in one
  * transaction so that there is never an instant with two active keys or none.
+ * That transaction is now the caller's: the bound scope carries it, so the three
+ * statements below share the atomicity boundary the declaration opened rather than
+ * a nested one of their own.
  *
  * No function here returns a private key in a form any API could serve: the
  * column holds an AES-256-GCM envelope, and decrypting it is the caller's
@@ -17,11 +20,11 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { firstRow, requireRow } from "./rows.js";
+import { executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { endpointKeys } from "../schema/endpoints.js";
 
-import type { Executor } from "./executor.js";
-import type { EndpointScope } from "./scope.js";
+import type { BoundEndpointScope } from "./scope.js";
 import type { EndpointKey, NewEndpointKey } from "../schema/endpoints.js";
 
 /** The caller-supplied half of a signing key. */
@@ -38,11 +41,10 @@ export type EndpointKeyInput = Omit<
  * would reject the first tokens it produced.
  */
 export async function insertEndpointKey(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   input: EndpointKeyInput,
 ): Promise<EndpointKey> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(endpointKeys)
     .values({ ...input, endpointId: scope.endpointId })
     .returning();
@@ -51,10 +53,9 @@ export async function insertEndpointKey(
 
 /** Lists every key of the scoped endpoint, newest first. */
 export async function listEndpointKeys(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<readonly EndpointKey[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(endpointKeys)
     .where(eq(endpointKeys.endpointId, scope.endpointId))
@@ -70,10 +71,9 @@ export async function listEndpointKeys(
  * assuming, which of them wins: the most recently activated.
  */
 export async function getActiveEndpointKey(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<EndpointKey | undefined> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .select()
     .from(endpointKeys)
     .where(
@@ -96,10 +96,9 @@ export async function getActiveEndpointKey(
  * should stop advertising a key the moment Signet stops signing with it.
  */
 export async function listPublishableEndpointKeys(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<readonly EndpointKey[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(endpointKeys)
     .where(
@@ -113,11 +112,10 @@ export async function listPublishableEndpointKeys(
 
 /** Reads one of the scoped endpoint's keys by `kid`. */
 export async function getEndpointKeyByKid(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   kid: string,
 ): Promise<EndpointKey | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(endpointKeys)
     .where(
@@ -155,52 +153,49 @@ export type KeyPromotion =
  * was filled.
  */
 export async function promoteNextEndpointKey(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   now?: Date,
 ): Promise<KeyPromotion> {
-  return await db.transaction(async (tx) => {
-    const candidates = await tx
-      .select()
-      .from(endpointKeys)
-      .where(
-        and(
-          eq(endpointKeys.endpointId, scope.endpointId),
-          eq(endpointKeys.status, "next"),
-        ),
-      )
-      .orderBy(asc(endpointKeys.createdAt))
-      .limit(1)
-      .for("update");
+  const candidates = await executorFor(scope)
+    .select()
+    .from(endpointKeys)
+    .where(
+      and(
+        eq(endpointKeys.endpointId, scope.endpointId),
+        eq(endpointKeys.status, "next"),
+      ),
+    )
+    .orderBy(asc(endpointKeys.createdAt))
+    .limit(1)
+    .for("update");
 
-    const incoming = firstRow(candidates);
-    if (incoming === undefined) {
-      return { ok: false, reason: "no-next-key" };
-    }
+  const incoming = firstRow(candidates);
+  if (incoming === undefined) {
+    return { ok: false, reason: "no-next-key" };
+  }
 
-    const retired = await tx
-      .update(endpointKeys)
-      .set({ status: "retired", retiredAt: nowValue(now) })
-      .where(
-        and(
-          eq(endpointKeys.endpointId, scope.endpointId),
-          eq(endpointKeys.status, "active"),
-        ),
-      )
-      .returning();
+  const retired = await executorFor(scope)
+    .update(endpointKeys)
+    .set({ status: "retired", retiredAt: nowValue(now) })
+    .where(
+      and(
+        eq(endpointKeys.endpointId, scope.endpointId),
+        eq(endpointKeys.status, "active"),
+      ),
+    )
+    .returning();
 
-    const activatedRows = await tx
-      .update(endpointKeys)
-      .set({ status: "active", activatedAt: nowValue(now) })
-      .where(eq(endpointKeys.id, incoming.id))
-      .returning();
+  const activatedRows = await executorFor(scope)
+    .update(endpointKeys)
+    .set({ status: "active", activatedAt: nowValue(now) })
+    .where(eq(endpointKeys.id, incoming.id))
+    .returning();
 
-    return {
-      ok: true,
-      activated: requireRow(activatedRows, "activate endpoint_keys row"),
-      retired,
-    };
-  });
+  return {
+    ok: true,
+    activated: requireRow(activatedRows, "activate endpoint_keys row"),
+    retired,
+  };
 }
 
 /**
@@ -212,12 +207,11 @@ export async function promoteNextEndpointKey(
  * brief outage is recoverable where a leaked signing key is not.
  */
 export async function retireEndpointKey(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   kid: string,
   now?: Date,
 ): Promise<EndpointKey | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .update(endpointKeys)
     .set({ status: "retired", retiredAt: nowValue(now) })
     .where(
@@ -241,11 +235,10 @@ export async function retireEndpointKey(
  * @returns How many keys were deleted.
  */
 export async function deleteRetiredEndpointKeys(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   retiredBefore: Date,
 ): Promise<number> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .delete(endpointKeys)
     .where(
       and(

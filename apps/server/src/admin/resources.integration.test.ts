@@ -13,7 +13,11 @@
  * Author: John Grimes
  */
 
-import { getActiveEndpointKey, listPolicyVersions } from "@signet/db";
+import {
+  getActiveEndpointKey,
+  listPolicyVersions,
+  withTenantScope,
+} from "@signet/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -166,9 +170,10 @@ describe.skipIf(testDatabaseUrl === undefined)(
 
     describe("signing keys", () => {
       it("adds a key as next, publishes it, and only signs with it once promoted", async () => {
-        const activeBefore = await getActiveEndpointKey(
+        const activeBefore = await withTenantScope(
           stack.context.db,
           stack.scope,
+          (bound) => getActiveEndpointKey(bound),
         );
 
         const created = await adminJson<{
@@ -187,9 +192,10 @@ describe.skipIf(testDatabaseUrl === undefined)(
         expect(jwks.keys.map((key) => key.kid)).toContain(created.key.kid);
 
         // Still not the signing key.
-        const stillActive = await getActiveEndpointKey(
+        const stillActive = await withTenantScope(
           stack.context.db,
           stack.scope,
+          (bound) => getActiveEndpointKey(bound),
         );
         expect(stillActive?.kid).toBe(activeBefore?.kid);
 
@@ -201,9 +207,10 @@ describe.skipIf(testDatabaseUrl === undefined)(
         );
         expect(promoted.key.kid).toBe(created.key.kid);
 
-        const nowActive = await getActiveEndpointKey(
+        const nowActive = await withTenantScope(
           stack.context.db,
           stack.scope,
+          (bound) => getActiveEndpointKey(bound),
         );
         expect(nowActive?.kid).toBe(created.key.kid);
       });

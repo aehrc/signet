@@ -26,6 +26,7 @@ import {
   isAuditAction,
   isAuditTargetType,
   queryAuditEvents,
+  withTenantScope,
 } from "@signet/db";
 
 import { requireRole } from "./authentication.js";
@@ -135,11 +136,10 @@ export function registerAuditRoutes(
     const targetType = query.targetType;
 
     let endpointId: string | undefined;
-    if (query.endpointSlug !== undefined) {
-      const endpoint = await getEndpointBySlug(
-        context.db,
-        scope,
-        query.endpointSlug,
+    const endpointSlug = query.endpointSlug;
+    if (endpointSlug !== undefined) {
+      const endpoint = await withTenantScope(context.db, scope, (bound) =>
+        getEndpointBySlug(bound, endpointSlug),
       );
       if (endpoint === undefined) {
         return c.json(

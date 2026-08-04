@@ -219,23 +219,29 @@ describeWithDatabase("row-level security as the serving role", () => {
       }),
     );
 
-    const endpoint = await createEndpoint(owner, tenantScope, {
-      slug: `e-${unique()}`,
-      name: "Endpoint",
-      fhirBaseUrl: "https://fhir.example.org/fhir",
-    });
+    const endpoint = await withTenantScope(owner, tenantScope, (bound) =>
+      createEndpoint(bound, {
+        slug: `e-${unique()}`,
+        name: "Endpoint",
+        fhirBaseUrl: "https://fhir.example.org/fhir",
+      }),
+    );
     const endpointScope = endpointScopeFromRow(tenantScope, endpoint);
 
-    await insertEndpointKey(owner, endpointScope, {
-      kid: `kid-${unique()}`,
-      algorithm: "RS384",
-      publicJwk: { kty: "RSA", kid: "k" },
-      privateJwkEncrypted: "v1:not-a-real-key",
-    });
-    await upsertIdpConfig(owner, endpointScope, {
-      issuer: `https://idp-${unique()}.example.org`,
-      clientId: "signet",
-    });
+    await withTenantScope(owner, endpointScope, (bound) =>
+      insertEndpointKey(bound, {
+        kid: `kid-${unique()}`,
+        algorithm: "RS384",
+        publicJwk: { kty: "RSA", kid: "k" },
+        privateJwkEncrypted: "v1:not-a-real-key",
+      }),
+    );
+    await withTenantScope(owner, endpointScope, (bound) =>
+      upsertIdpConfig(bound, {
+        issuer: `https://idp-${unique()}.example.org`,
+        clientId: "signet",
+      }),
+    );
 
     const endUser = await createEndUser(owner, endpointScope, {
       username: `user-${unique()}`,

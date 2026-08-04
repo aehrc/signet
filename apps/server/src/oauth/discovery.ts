@@ -24,7 +24,11 @@ import {
   buildOpenIdConfiguration,
   buildSmartConfiguration,
 } from "@signet/core";
-import { listPublishableEndpointKeys, toCapabilityConfig } from "@signet/db";
+import {
+  listPublishableEndpointKeys,
+  toCapabilityConfig,
+  withTenantScope,
+} from "@signet/db";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { Context } from "hono";
@@ -61,7 +65,9 @@ export function smartConfigurationHandler(c: Context<SignetEnvironment>) {
 export function openIdConfigurationHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const { endpoint, issuer, scope } = c.get("issuer");
-    const keys = await listPublishableEndpointKeys(context.db, scope);
+    const keys = await withTenantScope(context.db, scope, (bound) =>
+      listPublishableEndpointKeys(bound),
+    );
     c.header("Cache-Control", CACHE_CONTROL);
     return c.json(
       buildOpenIdConfiguration(toCapabilityConfig(endpoint, issuer), {
@@ -99,7 +105,9 @@ function advertisedAlgorithms(
 export function jwksHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const { scope } = c.get("issuer");
-    const keys = await listPublishableEndpointKeys(context.db, scope);
+    const keys = await withTenantScope(context.db, scope, (bound) =>
+      listPublishableEndpointKeys(bound),
+    );
 
     c.header("Cache-Control", CACHE_CONTROL);
     // `application/jwk-set+json` per RFC 7517 §8.5. Several JWKS clients accept

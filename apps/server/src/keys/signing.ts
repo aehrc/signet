@@ -16,7 +16,7 @@
  * Author: John Grimes
  */
 
-import { getActiveEndpointKey } from "@signet/db";
+import { getActiveEndpointKey, withTenantScope } from "@signet/db";
 import { SignJWT } from "jose";
 
 import { isEndpointKeyAlgorithm } from "./algorithms.js";
@@ -91,7 +91,9 @@ export async function loadSigningKey(
   scope: EndpointScope,
   masterKey: string,
 ): Promise<SigningKeyLoad> {
-  const row = await getActiveEndpointKey(db, scope);
+  const row = await withTenantScope(db, scope, (bound) =>
+    getActiveEndpointKey(bound),
+  );
   return row === undefined
     ? { ok: false, reason: "no-active-key" }
     : await prepareSigningKey(row, masterKey);

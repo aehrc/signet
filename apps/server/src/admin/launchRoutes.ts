@@ -22,13 +22,14 @@
 import { launchSimulationSchema } from "@signet/contracts";
 import { generateHapiInterceptor, toLaunchContext } from "@signet/core";
 import {
+  clientScopeFromRow,
   createLaunchContext,
   generateOpaqueToken,
   getClientByClientId,
   hashToken,
   isClientUsable,
   listPublishableEndpointKeys,
-  clientScopeFromRow,
+  withTenantScope,
 } from "@signet/db";
 
 import { recordAdminEvent } from "./auditTrail.js";
@@ -161,7 +162,9 @@ export function registerLaunchRoutes(
       // The algorithms this endpoint actually publishes keys for, so an operator
       // who chose RS256 for a resource server that reads nothing else is not
       // handed an interceptor that rejects their own tokens.
-      const keys = await listPublishableEndpointKeys(context.db, scope);
+      const keys = await withTenantScope(context.db, scope, (bound) =>
+        listPublishableEndpointKeys(bound),
+      );
 
       const source = generateHapiInterceptor({
         issuer,

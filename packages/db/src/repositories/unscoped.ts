@@ -92,8 +92,6 @@ export const MODULES_AWAITING_BINDING: readonly string[] = [
   "repositories/consents",
   "repositories/endUserSessions",
   "repositories/endUsers",
-  "repositories/endpointKeys",
-  "repositories/endpoints",
   "repositories/federationStates",
   "repositories/jtiReplay",
   "repositories/launchContexts",

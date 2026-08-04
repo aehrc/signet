@@ -1,9 +1,9 @@
 /**
  * Endpoint configuration.
  *
- * Reads take a {@link TenantScope} and filter on `tenant_id`; writes take an
- * {@link EndpointScope}, which can only have been built from an endpoint row that
- * was already proved to belong to the tenant. That asymmetry is deliberate: a
+ * Reads take a {@link BoundTenantScope} and filter on `tenant_id`; writes take a
+ * {@link BoundEndpointScope}, which can only have been built from an endpoint row
+ * that was already proved to belong to the tenant. That asymmetry is deliberate: a
  * read has to be able to look an endpoint up by slug before a scope for it
  * exists, whereas nothing should ever update an endpoint the caller has not
  * already resolved.
@@ -19,11 +19,11 @@
 import { and, eq } from "drizzle-orm";
 
 import { requireRow } from "./rows.js";
+import { executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { endpoints, idpConfigs } from "../schema/endpoints.js";
 
-import type { Executor } from "./executor.js";
-import type { EndpointScope, TenantScope } from "./scope.js";
+import type { BoundEndpointScope, BoundTenantScope } from "./scope.js";
 import type {
   Endpoint,
   IdpConfig,
@@ -45,11 +45,10 @@ export type EndpointInput = Omit<
 
 /** Creates an endpoint in the scoped tenant. */
 export async function createEndpoint(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
   input: EndpointInput,
 ): Promise<Endpoint> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(endpoints)
     .values({ ...input, tenantId: scope.tenantId })
     .returning();
@@ -58,10 +57,9 @@ export async function createEndpoint(
 
 /** Lists the scoped tenant's endpoints, by slug. */
 export async function listEndpoints(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
 ): Promise<readonly Endpoint[]> {
-  return await db
+  return await executorFor(scope)
     .select()
     .from(endpoints)
     .where(eq(endpoints.tenantId, scope.tenantId))
@@ -70,11 +68,10 @@ export async function listEndpoints(
 
 /** Reads one of the scoped tenant's endpoints by identifier. */
 export async function getEndpoint(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
   endpointId: string,
 ): Promise<Endpoint | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(endpoints)
     .where(
@@ -86,11 +83,10 @@ export async function getEndpoint(
 
 /** Reads one of the scoped tenant's endpoints by `/e/{slug}` segment. */
 export async function getEndpointBySlug(
-  db: Executor,
-  scope: TenantScope,
+  scope: BoundTenantScope,
   slug: string,
 ): Promise<Endpoint | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(endpoints)
     .where(
@@ -108,10 +104,9 @@ export async function getEndpointBySlug(
  * configuration rather than a snapshot of it.
  */
 export async function getScopedEndpoint(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<Endpoint | undefined> {
-  return await getEndpoint(db, scope, scope.endpointId);
+  return await getEndpoint(scope, scope.endpointId);
 }
 
 /**
@@ -123,12 +118,11 @@ export async function getScopedEndpoint(
  * from editing another tenant's configuration.
  */
 export async function updateEndpoint(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   patch: Partial<EndpointInput>,
   now?: Date,
 ): Promise<Endpoint | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .update(endpoints)
     .set({ ...patch, updatedAt: nowValue(now) })
     .where(
@@ -149,12 +143,11 @@ export async function updateEndpoint(
  * a question that is usually temporary.
  */
 export async function setEndpointStatus(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   status: Endpoint["status"],
   now?: Date,
 ): Promise<Endpoint | undefined> {
-  return await updateEndpoint(db, scope, { status }, now);
+  return await updateEndpoint(scope, { status }, now);
 }
 
 /**
@@ -163,10 +156,9 @@ export async function setEndpointStatus(
  * @returns Whether an endpoint was deleted.
  */
 export async function deleteEndpoint(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .delete(endpoints)
     .where(
       and(
@@ -186,10 +178,9 @@ export type IdpConfigInput = Omit<
 
 /** Reads the scoped endpoint's upstream IdP configuration. */
 export async function getIdpConfig(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<IdpConfig | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(idpConfigs)
     .where(eq(idpConfigs.endpointId, scope.endpointId))
@@ -205,12 +196,11 @@ export async function getIdpConfig(
  * the caller has to know whether to make.
  */
 export async function upsertIdpConfig(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   input: IdpConfigInput,
   now?: Date,
 ): Promise<IdpConfig> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(idpConfigs)
     .values({ ...input, endpointId: scope.endpointId })
     .onConflictDoUpdate({
@@ -227,10 +217,9 @@ export async function upsertIdpConfig(
  * @returns Whether a configuration was removed.
  */
 export async function deleteIdpConfig(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .delete(idpConfigs)
     .where(eq(idpConfigs.endpointId, scope.endpointId))
     .returning({ endpointId: idpConfigs.endpointId });
@@ -239,11 +228,10 @@ export async function deleteIdpConfig(
 
 /** Records that the upstream discovery document was fetched. */
 export async function recordIdpDiscoveryFetch(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   now?: Date,
 ): Promise<void> {
-  await db
+  await executorFor(scope)
     .update(idpConfigs)
     .set({ discoveryCachedAt: nowValue(now) })
     .where(eq(idpConfigs.endpointId, scope.endpointId));

@@ -142,7 +142,7 @@ export interface TestStack {
 /** How a stack should differ from the default. */
 export interface TestStackOptions {
   /** Overrides on the `endpoints` row. */
-  readonly endpoint?: Partial<Parameters<typeof createEndpoint>[2]>;
+  readonly endpoint?: Partial<Parameters<typeof createEndpoint>[1]>;
   /** The policy to publish. Defaults to the SMART baseline preset. */
   readonly policy?: PolicyDocument;
   /** Omits the active signing key, to exercise the misconfigured-endpoint path. */
@@ -213,33 +213,39 @@ export async function createTestStack(
   });
   const tenantScope = tenantScopeFromRow(tenant);
 
-  const endpoint = await createEndpoint(db, tenantScope, {
-    slug: "fhir",
-    name: "Test endpoint",
-    fhirBaseUrl: TEST_FHIR_BASE_URL,
-    // Non-production so personas are selectable and the picker accepts an
-    // identifier that is not on a user's list.
-    isProduction: false,
-    consentMode: "always",
-    supportsAuthorizePost: true,
-    scopesSupported: ALLOWED_SCOPES,
-    ...options.endpoint,
-  });
+  const endpoint = await withTenantScope(db, tenantScope, (bound) =>
+    createEndpoint(bound, {
+      slug: "fhir",
+      name: "Test endpoint",
+      fhirBaseUrl: TEST_FHIR_BASE_URL,
+      // Non-production so personas are selectable and the picker accepts an
+      // identifier that is not on a user's list.
+      isProduction: false,
+      consentMode: "always",
+      supportsAuthorizePost: true,
+      scopesSupported: ALLOWED_SCOPES,
+      ...options.endpoint,
+    }),
+  );
   const scope = endpointScopeFromRow(tenantScope, endpoint);
 
   if (options.withoutSigningKey !== true) {
     const key = await generateEndpointKey("ES384", TEST_MASTER_KEY);
-    await insertEndpointKey(db, scope, {
-      kid: key.kid,
-      algorithm: key.algorithm,
-      publicJwk: key.publicJwk,
-      privateJwkEncrypted: key.privateJwkEncrypted,
-      status: "next",
-    });
+    await withTenantScope(db, scope, (bound) =>
+      insertEndpointKey(bound, {
+        kid: key.kid,
+        algorithm: key.algorithm,
+        publicJwk: key.publicJwk,
+        privateJwkEncrypted: key.privateJwkEncrypted,
+        status: "next",
+      }),
+    );
     // Inserted as `next` and promoted, rather than inserted as `active`: promotion is
     // what stamps `activated_at`, and `getActiveEndpointKey` orders by it. Setting the
     // status directly would produce a key the server cannot find.
-    const promotion = await promoteNextEndpointKey(db, scope);
+    const promotion = await withTenantScope(db, scope, (bound) =>
+      promoteNextEndpointKey(bound),
+    );
     if (!promotion.ok) {
       throw new Error(
         `could not activate the signing key: ${promotion.reason}`,

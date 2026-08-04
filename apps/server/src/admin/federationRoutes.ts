@@ -30,6 +30,7 @@ import {
   encryptSecret,
   getIdpConfig,
   upsertIdpConfig,
+  withTenantScope,
 } from "@signet/db";
 
 import { recordAdminEvent } from "./auditTrail.js";
@@ -86,7 +87,9 @@ export function registerFederationRoutes(
   /** Reads the endpoint's provider configuration. */
   router.get(`${ENDPOINT_PATH}/idp`, requireRole("admin"), async (c) => {
     const { scope, issuer } = c.get("endpoint");
-    const config = await getIdpConfig(context.db, scope);
+    const config = await withTenantScope(context.db, scope, (bound) =>
+      getIdpConfig(bound),
+    );
     return c.json({
       idp:
         config === undefined
@@ -103,26 +106,29 @@ export function registerFederationRoutes(
       return body;
     }
 
-    const existing = await getIdpConfig(context.db, scope);
+    const existing = await withTenantScope(context.db, scope, (bound) =>
+      getIdpConfig(bound),
+    );
     const secret = await resolveSecret(context, body.clientSecret, existing);
 
-    const config = await upsertIdpConfig(
-      context.db,
-      scope,
-      {
-        issuer: body.issuer,
-        displayName: body.displayName ?? null,
-        clientId: body.clientId,
-        clientSecretEncrypted: secret,
-        // `openid` is not negotiable: without it the provider returns no ID token,
-        // and an ID token is the only thing in the response Signet can verify.
-        scopes: [...withOpenId(body.scopes)],
-        claimMappings: claimMappings(body.claimMappings),
-        // Cleared on every write, so an issuer change cannot be followed by one
-        // more request against the provider that was configured before it.
-        discoveryCachedAt: null,
-      },
-      context.clock(),
+    const config = await withTenantScope(context.db, scope, (bound) =>
+      upsertIdpConfig(
+        bound,
+        {
+          issuer: body.issuer,
+          displayName: body.displayName ?? null,
+          clientId: body.clientId,
+          clientSecretEncrypted: secret,
+          // `openid` is not negotiable: without it the provider returns no ID token,
+          // and an ID token is the only thing in the response Signet can verify.
+          scopes: [...withOpenId(body.scopes)],
+          claimMappings: claimMappings(body.claimMappings),
+          // Cleared on every write, so an issuer change cannot be followed by one
+          // more request against the provider that was configured before it.
+          discoveryCachedAt: null,
+        },
+        context.clock(),
+      ),
     );
 
     await recordAdminEvent(context, c, {
@@ -144,7 +150,9 @@ export function registerFederationRoutes(
   /** Stops the endpoint federating. */
   router.delete(`${ENDPOINT_PATH}/idp`, requireRole("admin"), async (c) => {
     const { scope, endpoint } = c.get("endpoint");
-    const removed = await deleteIdpConfig(context.db, scope);
+    const removed = await withTenantScope(context.db, scope, (bound) =>
+      deleteIdpConfig(bound),
+    );
     if (!removed) {
       return c.json(
         adminErrorBody("not_found", "This endpoint has no identity provider"),
@@ -170,7 +178,9 @@ export function registerFederationRoutes(
    */
   router.post(`${ENDPOINT_PATH}/idp/check`, requireRole("admin"), async (c) => {
     const { scope } = c.get("endpoint");
-    const config = await getIdpConfig(context.db, scope);
+    const config = await withTenantScope(context.db, scope, (bound) =>
+      getIdpConfig(bound),
+    );
     if (config === undefined) {
       return c.json(
         adminErrorBody("not_found", "This endpoint has no identity provider"),

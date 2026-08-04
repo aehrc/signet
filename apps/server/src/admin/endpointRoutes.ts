@@ -38,6 +38,7 @@ import {
   publishPolicy,
   retireEndpointKey,
   updateEndpoint,
+  withTenantScope,
 } from "@signet/db";
 
 import { recordAdminEvent } from "./auditTrail.js";
@@ -118,7 +119,9 @@ export function registerEndpointRoutes(
   /** Lists the tenant's endpoints. */
   router.get(`${TENANT_PATH}/endpoints`, requireRole("viewer"), async (c) => {
     const { scope } = c.get("tenant");
-    const endpoints = await listEndpoints(context.db, scope);
+    const endpoints = await withTenantScope(context.db, scope, (bound) =>
+      listEndpoints(bound),
+    );
     return c.json({
       endpoints: endpoints.map((endpoint) =>
         endpointView(
@@ -144,13 +147,15 @@ export function registerEndpointRoutes(
 
     let endpoint;
     try {
-      endpoint = await createEndpoint(context.db, scope, {
-        slug: body.slug,
-        name: body.name,
-        fhirBaseUrl: body.fhirBaseUrl,
-        ...settingColumns(body),
-        ...capabilityColumns(body),
-      });
+      endpoint = await withTenantScope(context.db, scope, (bound) =>
+        createEndpoint(bound, {
+          slug: body.slug,
+          name: body.name,
+          fhirBaseUrl: body.fhirBaseUrl,
+          ...settingColumns(body),
+          ...capabilityColumns(body),
+        }),
+      );
     } catch (error) {
       if (isUniqueViolation(error)) {
         return c.json(
@@ -167,16 +172,22 @@ export function registerEndpointRoutes(
     const endpointScope = endpointScopeFromRow(scope, endpoint);
 
     const key = await generateEndpointKey("ES384", context.config.masterKey);
-    await insertEndpointKey(context.db, endpointScope, {
-      kid: key.kid,
-      algorithm: key.algorithm,
-      publicJwk: key.publicJwk,
-      privateJwkEncrypted: key.privateJwkEncrypted,
-      status: "next",
-    });
+    await withTenantScope(context.db, endpointScope, (bound) =>
+      insertEndpointKey(bound, {
+        kid: key.kid,
+        algorithm: key.algorithm,
+        publicJwk: key.publicJwk,
+        privateJwkEncrypted: key.privateJwkEncrypted,
+        status: "next",
+      }),
+    );
     // Inserted as `next` and promoted, rather than inserted as `active`: promotion
     // is what stamps `activated_at`, which is how the signing key is chosen.
-    const promotion = await promoteNextEndpointKey(context.db, endpointScope);
+    const promotion = await withTenantScope(
+      context.db,
+      endpointScope,
+      (bound) => promoteNextEndpointKey(bound),
+    );
     if (!promotion.ok) {
       throw new Error(
         `could not activate the new endpoint's signing key: ${promotion.reason}`,
@@ -247,11 +258,8 @@ export function registerEndpointRoutes(
       return c.json({ endpoint: endpointView(endpoint, issuer) });
     }
 
-    const updated = await updateEndpoint(
-      context.db,
-      scope,
-      patch,
-      context.clock(),
+    const updated = await withTenantScope(context.db, scope, (bound) =>
+      updateEndpoint(bound, patch, context.clock()),
     );
     if (updated === undefined) {
       return c.json(
@@ -288,7 +296,9 @@ export function registerEndpointRoutes(
       detail: { slug: endpoint.slug },
     });
 
-    const deleted = await deleteEndpoint(context.db, scope);
+    const deleted = await withTenantScope(context.db, scope, (bound) =>
+      deleteEndpoint(bound),
+    );
     if (!deleted) {
       return c.json(
         adminErrorBody("not_found", "No such endpoint"),
@@ -301,7 +311,9 @@ export function registerEndpointRoutes(
   /** Lists the endpoint's signing keys, newest first. */
   router.get(`${ENDPOINT_PATH}/keys`, requireRole("admin"), async (c) => {
     const { scope } = c.get("endpoint");
-    const keys = await listEndpointKeys(context.db, scope);
+    const keys = await withTenantScope(context.db, scope, (bound) =>
+      listEndpointKeys(bound),
+    );
     return c.json({ keys: keys.map(endpointKeyView) });
   });
 
@@ -325,13 +337,15 @@ export function registerEndpointRoutes(
     );
     let key;
     try {
-      key = await insertEndpointKey(context.db, scope, {
-        kid: generated.kid,
-        algorithm: generated.algorithm,
-        publicJwk: generated.publicJwk,
-        privateJwkEncrypted: generated.privateJwkEncrypted,
-        status: "next",
-      });
+      key = await withTenantScope(context.db, scope, (bound) =>
+        insertEndpointKey(bound, {
+          kid: generated.kid,
+          algorithm: generated.algorithm,
+          publicJwk: generated.publicJwk,
+          privateJwkEncrypted: generated.privateJwkEncrypted,
+          status: "next",
+        }),
+      );
     } catch (error) {
       if (isUniqueViolation(error)) {
         // `kid` is the key's own thumbprint, so a collision means this exact key is
@@ -370,7 +384,9 @@ export function registerEndpointRoutes(
     async (c) => {
       const { scope, endpoint } = c.get("endpoint");
 
-      const promotion = await promoteNextEndpointKey(context.db, scope);
+      const promotion = await withTenantScope(context.db, scope, (bound) =>
+        promoteNextEndpointKey(bound),
+      );
       if (!promotion.ok) {
         // The only refusal the data layer has: there is nothing queued. Rotating
         // to nothing would leave the endpoint unable to sign at all.
@@ -410,11 +426,8 @@ export function registerEndpointRoutes(
       const { scope, endpoint } = c.get("endpoint");
       const kid = c.req.param("kid");
 
-      const retired = await retireEndpointKey(
-        context.db,
-        scope,
-        kid,
-        context.clock(),
+      const retired = await withTenantScope(context.db, scope, (bound) =>
+        retireEndpointKey(bound, kid, context.clock()),
       );
       if (retired === undefined) {
         return c.json(

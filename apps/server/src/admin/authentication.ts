@@ -185,7 +185,9 @@ export function withAdminEndpoint(
     const { scope } = c.get("tenant");
     const endpointSlug = c.req.param("endpointSlug") ?? "";
 
-    const endpoint = await getEndpointBySlug(context.db, scope, endpointSlug);
+    const endpoint = await withTenantScope(context.db, scope, (bound) =>
+      getEndpointBySlug(bound, endpointSlug),
+    );
     if (endpoint === undefined) {
       return refuse(c, "not_found", "No such endpoint");
     }
