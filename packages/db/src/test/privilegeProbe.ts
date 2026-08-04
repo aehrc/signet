@@ -142,6 +142,96 @@ export async function listSignetRoutines(
   return rows.map((row) => row.signature).toSorted();
 }
 
+/**
+ * Every routine in the schema a role may execute.
+ *
+ * The question `roleCanExecute` cannot answer. Asking "may it execute each
+ * declared routine" passes with a fourth routine granted beside them; asking what
+ * it may execute *at all* is what makes the declared set an upper bound rather
+ * than a lower one.
+ *
+ * Scoped to `public`, which is where every routine Signet installs lives. The
+ * `pg_catalog` and `information_schema` routines every role may execute are not
+ * part of this surface: they are the standard library, not an exemption Signet
+ * granted, and enumerating them would drown the assertion.
+ *
+ * @param db - A connection that may read the catalogues.
+ * @param role - The role to ask about.
+ * @returns The signatures, keyed as `PRIVILEGED_ROUTINES` keys them, sorted.
+ */
+export async function listExecutableRoutines(
+  db: Executor,
+  role: string,
+): Promise<readonly string[]> {
+  const rows = (await db.execute(
+    sql`
+      select p.proname || '(' || oidvectortypes(p.proargtypes) || ')' as signature
+              from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and has_function_privilege(${role}, p.oid, 'execute')
+    `,
+  )) as unknown as readonly { readonly signature: string }[];
+
+  return rows.map((row) => row.signature).toSorted();
+}
+
+/**
+ * Whether a role holds `BYPASSRLS`.
+ *
+ * The exemption that leaves no trace on any table: a role holding it is exempt
+ * from every policy in the database while looking correct in a schema diff.
+ *
+ * @param db - A connection that may read the catalogues.
+ * @param role - The role to ask about.
+ * @returns True when it holds the attribute.
+ */
+export async function roleBypassesPolicies(
+  db: Executor,
+  role: string,
+): Promise<boolean> {
+  return await scalar<boolean>(
+    db,
+    sql`
+      select coalesce(bool_or(rolbypassrls), false) as bypasses
+        from pg_roles where rolname = ${role}
+    `,
+  );
+}
+
+/**
+ * Which of the given tables a role holds the owner's rights on.
+ *
+ * `pg_has_role` rather than a name comparison, because membership of the owning
+ * role inherits the owner's exemption - a serving role added to the owning role
+ * for convenience is exempt from every policy and named nothing like the owner.
+ *
+ * @param db - A connection that may read the catalogues.
+ * @param role - The role to ask about.
+ * @param tables - The tables to check, unqualified.
+ * @returns The tables it has owner rights on, sorted. Empty is the answer a
+ *   correctly provisioned serving role gives.
+ */
+export async function ownedCoveredTables(
+  db: Executor,
+  role: string,
+  tables: readonly string[],
+): Promise<readonly string[]> {
+  const rows = (await db.execute(
+    sql`
+      select c.relname::text as table_name
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relkind = 'r'
+                and c.relname = any(${sql.param(tables)})
+                and pg_has_role(${role}, c.relowner, 'usage')
+    `,
+  )) as unknown as readonly { readonly table_name: string }[];
+
+  return rows.map((row) => row.table_name).toSorted();
+}
+
 /** How a probe role should differ from the login-less default. */
 export interface ProbeRoleOptions {
   /**

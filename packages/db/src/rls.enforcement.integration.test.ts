@@ -69,8 +69,13 @@ import {
 import { createTenant } from "./repositories/tenants.js";
 import { currentTenantSetting, RLS_TABLES, withTenantScope } from "./rls.js";
 import { tenants } from "./schema/tenancy.js";
+import { roleHasTablePrivilege } from "./test/privilegeProbe.js";
 import { isTestSchemaReady } from "./test/schemaReady.js";
-import { prepareServingRole, servingRoleUrl } from "./test/servingRole.js";
+import {
+  prepareServingRole,
+  SERVING_TEST_ROLE,
+  servingRoleUrl,
+} from "./test/servingRole.js";
 
 import type { Executor } from "./repositories/executor.js";
 import type {
@@ -366,6 +371,50 @@ describeWithDatabase("row-level security as the serving role", () => {
     return rows.map((entry) => entry.row);
   }
 
+  /**
+   * The SQLSTATE an attempt to mutate an audit row comes back with.
+   *
+   * The predicate matches nothing, so a permitted statement would affect no rows
+   * and report success - which is what makes the returned SQLSTATE the assertion
+   * rather than a row count.
+   */
+  async function auditFailure(
+    db: Executor,
+    statement: "update" | "delete",
+  ): Promise<string | undefined> {
+    try {
+      await db.execute(
+        statement === "update"
+          ? sql`update audit_events set action = 'tampered' where false`
+          : sql`delete from audit_events where false`,
+      );
+    } catch (error) {
+      return sqlStateOf(error);
+    }
+    return undefined;
+  }
+
+  /**
+   * The same attempt, made from a transaction that declared the tenant.
+   *
+   * Caught around the whole transaction rather than around the statement, and the
+   * reason is the one that shapes `recordAuditEvent`: a refused statement aborts
+   * the transaction that issued it, so the failure surfaces when the transaction
+   * ends rather than where it was raised. Catching it inside would return a
+   * SQLSTATE and then throw a second time on the commit.
+   */
+  async function boundAuditFailure(
+    statement: "update" | "delete",
+  ): Promise<string | undefined> {
+    try {
+      return await withTenantScope(serving, mine.tenantScope, (bound) =>
+        auditFailure(executorFor(bound), statement),
+      );
+    } catch (error) {
+      return sqlStateOf(error);
+    }
+  }
+
   /** Every covered table's row, as the serving role sees it bound to a tenant. */
   async function rowsVisibleTo(
     scope: TenantScope,
@@ -570,6 +619,95 @@ describeWithDatabase("row-level security as the serving role", () => {
       } finally {
         await single.end();
       }
+    });
+  });
+
+  describe("reachability, which an empty result looks exactly like", () => {
+    // The distinction the whole feature turns on. A covered table the serving role
+    // was never granted returns a permission error, and a covered table whose
+    // policy is doing its job returns nothing - and a suite that could not tell
+    // them apart would report the first as the second and call it enforcement.
+
+    it.each(RLS_TABLES)("holds select and insert on %s", async (table) => {
+      expect(
+        await roleHasTablePrivilege(owner, SERVING_TEST_ROLE, table, "select"),
+        `${table} select`,
+      ).toBe(true);
+      expect(
+        await roleHasTablePrivilege(owner, SERVING_TEST_ROLE, table, "insert"),
+        `${table} insert`,
+      ).toBe(true);
+    });
+
+    it("fails distinguishably on a table it holds no grant on", async () => {
+      // A table created by the owning identity, the way a later migration creates
+      // one. Two properties are asserted in one fixture, and the order is the
+      // point:
+      //
+      //   1. It is reachable the moment it exists, without anybody remembering to
+      //      grant it, because `migrate` set default privileges. That is FR-016 -
+      //      a tenant-owned table cannot ship ungranted.
+      //   2. With the grant taken away it fails with 42501 rather than returning
+      //      nothing, so an operator can tell a missing grant from a policy doing
+      //      its job. The empty result above carries no SQLSTATE at all.
+      const table = `rls_ungranted_${String(process.pid)}`;
+      await owner.execute(sql.raw(`create table "${table}" (id uuid)`));
+      try {
+        expect(await rowsOf(serving, table)).toEqual([]);
+
+        await owner.execute(
+          sql.raw(`revoke all on table "${table}" from ${SERVING_TEST_ROLE}`),
+        );
+
+        let state: string | undefined;
+        try {
+          await rowsOf(serving, table);
+        } catch (error) {
+          state = sqlStateOf(error);
+        }
+
+        expect(state).toBe("42501");
+        // And the contrast, on the same connection in the same state: a granted
+        // covered table answers with rows rather than with a permission error.
+        expect(await rowsOf(serving, "tenants")).toEqual([]);
+      } finally {
+        await owner.execute(sql.raw(`drop table if exists "${table}"`));
+      }
+    });
+  });
+
+  describe("the audit trail, append-only by privilege", () => {
+    // The constitution requires the audit trail to be append-only, and until this
+    // feature that was a convention no mechanism enforced. Asserted bound as well
+    // as unbound, because a policy that permits a bound update would make the
+    // revoke the only thing standing in the way - and it must be.
+
+    it("refuses an unbound update", async () => {
+      expect(await auditFailure(serving, "update")).toBe("42501");
+    });
+
+    it("refuses an unbound delete", async () => {
+      expect(await auditFailure(serving, "delete")).toBe("42501");
+    });
+
+    it("refuses an update from a transaction that declared the tenant", async () => {
+      expect(await boundAuditFailure("update")).toBe("42501");
+    });
+
+    it("refuses a delete from a transaction that declared the tenant", async () => {
+      expect(await boundAuditFailure("delete")).toBe("42501");
+    });
+
+    it("still permits the insert, or nothing could be audited at all", async () => {
+      // The revoke must not have taken the grant that makes the trail usable.
+      expect(
+        await roleHasTablePrivilege(
+          owner,
+          SERVING_TEST_ROLE,
+          "audit_events",
+          "insert",
+        ),
+      ).toBe(true);
     });
   });
 
