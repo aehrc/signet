@@ -33,8 +33,6 @@ import {
   withTenantScope,
 } from "@signet/db";
 
-import type { ClientScope } from "@signet/db";
-
 import {
   authenticateClient,
   credentialFieldsFrom,
@@ -44,6 +42,7 @@ import { requestMetadata } from "../http/requestMeta.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { FormBody } from "./grants/types.js";
+import type { ClientScope } from "@signet/db";
 import type { Context } from "hono";
 
 /**
