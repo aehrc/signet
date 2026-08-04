@@ -28,6 +28,8 @@
  * deployment that does not strip that header at its ingress is one where a caller
  * chooses their own key. That is true of the audit trail too, and is documented
  * where the header is read.
+ *
+ * Author: John Grimes
  */
 
 import { admitRequest, isWindowStale } from "@signet/core";
@@ -134,15 +136,30 @@ export function createUnlimitedStore(): RateLimitStore {
 }
 
 /**
- * The key a request is counted against.
+ * The key a request is counted against: the route and the client address.
  *
  * An address that could not be determined - which happens in tests, and behind a
  * proxy that strips everything - collapses to one bucket named `unknown`. That is
  * the conservative choice: it limits those callers collectively rather than
  * exempting them.
+ *
+ * The route is the *matched pattern*, `…/interaction/:sessionId/login`, and never
+ * the requested path. A key built from the path would contain the session
+ * identifier, and an attacker who can start sessions could then start a new one
+ * per guess and never meet the limit at all - the same defeat as putting a
+ * username in the key, reached by a different route.
+ *
+ * The route belongs in the key for the reason the limit name alone does not
+ * suffice: three separate surfaces check a password, and counting them together
+ * means anybody who can reach one can exhaust the allowance of the others. An
+ * unauthenticated caller guessing at an end user's management page would lock the
+ * operators out of the console. Each surface therefore gets its own allowance,
+ * and `rateLimit.integration.test.ts` asserts both halves of that - the surfaces
+ * do not exhaust one another, and each still runs out on its own.
  */
 function rateLimitKey(c: Context, name: RateLimitName): string {
-  return `${name}:${requestMetadata(c).ip ?? "unknown"}`;
+  const route = c.req.routePath;
+  return `${name}:${route}:${requestMetadata(c).ip ?? "unknown"}`;
 }
 
 /** How a refusal is worded on an OAuth endpoint. */

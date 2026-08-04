@@ -7,6 +7,8 @@
  * limiter behaves exactly like one with a limiter nobody has reached yet.
  *
  * The stack opts the limiter in, which every other suite opts out of.
+ *
+ * Author: John Grimes
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -176,5 +178,41 @@ describe.skipIf(testDatabaseUrl === undefined)("the rate limits", () => {
       last = response.status;
     }
     expect(last).toBe(429);
+  });
+
+  it("does not let one sign-in surface exhaust another's allowance", async () => {
+    // Exhaust the management sign-in from an address.
+    let last = 0;
+    for (let index = 0; index < RATE_LIMITS.signIn.limit + 1; index += 1) {
+      const response = await stack.app.request(
+        `${issuerPath(stack)}/manage/session`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-forwarded-for": "203.0.113.90",
+          },
+          body: JSON.stringify({ username: "clinician", password: "wrong" }),
+        },
+      );
+      last = response.status;
+    }
+    expect(last).toBe(429);
+
+    // The console's sign-in is a different route and must still answer. Sharing
+    // one bucket across every route that checks a password means an
+    // unauthenticated caller can lock the operators out of the console by
+    // guessing at an end user's management page - the same "exhaust somebody
+    // else's allowance" failure the key is supposed to prevent.
+    expect(await adminSignIn("203.0.113.90")).not.toBe(429);
+  });
+
+  it("still limits each surface on its own", async () => {
+    // The separation must not become an exemption: having spent the management
+    // allowance above, the console's own allowance must still run out.
+    for (let index = 0; index < RATE_LIMITS.signIn.limit + 1; index += 1) {
+      await adminSignIn("203.0.113.91");
+    }
+    expect(await adminSignIn("203.0.113.91")).toBe(429);
   });
 });
