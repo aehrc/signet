@@ -91,24 +91,26 @@ export function registerLaunchRoutes(
       }
 
       const handle = generateOpaqueToken();
-      const row = await createLaunchContext(context.db, scope, {
-        handleHash: await hashToken(handle),
-        context: toLaunchContext({
-          patient: body.patient,
-          encounter: body.encounter,
-          intent: body.intent,
-          tenant: body.tenant,
-          needPatientBanner: body.needPatientBanner,
-          smartStyleUrl: body.smartStyleUrl,
+      const row = await withTenantScope(context.db, scope, async (bound) =>
+        createLaunchContext(bound, {
+          handleHash: await hashToken(handle),
+          context: toLaunchContext({
+            patient: body.patient,
+            encounter: body.encounter,
+            intent: body.intent,
+            tenant: body.tenant,
+            needPatientBanner: body.needPatientBanner,
+            smartStyleUrl: body.smartStyleUrl,
+          }),
+          createdBy: `console:${endpoint.slug}`,
+          expiresAt: new Date(
+            context.clock().getTime() + LAUNCH_CONTEXT_TTL_SECONDS * 1000,
+          ),
+          // Always bound. The console knows which app it is launching, and an unbound
+          // handle is redeemable by whichever app presents it first.
+          boundTo: clientScopeFromRow(scope, client),
         }),
-        createdBy: `console:${endpoint.slug}`,
-        expiresAt: new Date(
-          context.clock().getTime() + LAUNCH_CONTEXT_TTL_SECONDS * 1000,
-        ),
-        // Always bound. The console knows which app it is launching, and an unbound
-        // handle is redeemable by whichever app presents it first.
-        boundTo: clientScopeFromRow(scope, client),
-      });
+      );
 
       await recordAdminEvent(context, c, {
         action: "launch-context.created",

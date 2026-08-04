@@ -33,6 +33,8 @@ import {
   withTenantScope,
 } from "@signet/db";
 
+import type { ClientScope } from "@signet/db";
+
 import {
   authenticateClient,
   credentialFieldsFrom,
@@ -164,7 +166,7 @@ export function launchContextHandler(context: ServerContext) {
       );
     }
 
-    let boundTo;
+    let boundTo: ClientScope | undefined;
     if (body.forClientId !== undefined) {
       if (typeof body.forClientId !== "string") {
         return c.json(
@@ -191,15 +193,20 @@ export function launchContextHandler(context: ServerContext) {
     }
 
     const handle = generateOpaqueToken();
-    const row = await createLaunchContext(context.db, issuerContext.scope, {
-      handleHash: await hashToken(handle),
-      context: validation.context,
-      createdBy: `client:${caller.client.clientId}`,
-      expiresAt: new Date(
-        context.clock().getTime() + LAUNCH_CONTEXT_TTL_SECONDS * 1000,
-      ),
-      ...(boundTo === undefined ? {} : { boundTo }),
-    });
+    const row = await withTenantScope(
+      context.db,
+      issuerContext.scope,
+      async (bound) =>
+        createLaunchContext(bound, {
+          handleHash: await hashToken(handle),
+          context: validation.context,
+          createdBy: `client:${caller.client.clientId}`,
+          expiresAt: new Date(
+            context.clock().getTime() + LAUNCH_CONTEXT_TTL_SECONDS * 1000,
+          ),
+          ...(boundTo === undefined ? {} : { boundTo }),
+        }),
+    );
 
     await context.audit.record(context.db, {
       tenantId: issuerContext.tenant.id,

@@ -481,22 +481,24 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   describe("launch handles", () => {
     it("redeems a bound handle once, for the client it was bound to", async () => {
       const fixture = await newFixture();
-      await createLaunchContext(db, fixture.endpointScope, {
-        handleHash: "launch-1",
-        context: { patient: "Patient/1" },
-        expiresAt: new Date(Date.now() + 60_000),
-        boundTo: fixture.clientScope,
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createLaunchContext(bound, {
+          handleHash: "launch-1",
+          context: { patient: "Patient/1" },
+          expiresAt: new Date(Date.now() + 60_000),
+          boundTo: fixture.clientScope,
+        }),
+      );
 
-      const first = await consumeLaunchContext(
-        db,
-        fixture.clientScope,
-        "launch-1",
+      const first = await withTenantScope(db, fixture.clientScope, (bound) =>
+        consumeLaunchContext(bound, "launch-1"),
       );
       expect(expectOk(first).launch.context).toEqual({ patient: "Patient/1" });
 
       expect(
-        await consumeLaunchContext(db, fixture.clientScope, "launch-1"),
+        await withTenantScope(db, fixture.clientScope, (bound) =>
+          consumeLaunchContext(bound, "launch-1"),
+        ),
       ).toEqual({ ok: false, reason: "already-consumed" });
     });
 
@@ -512,37 +514,43 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       );
       const otherScope = clientScopeFromRow(fixture.endpointScope, other);
 
-      await createLaunchContext(db, fixture.endpointScope, {
-        handleHash: "launch-bound",
-        context: { patient: "Patient/2" },
-        expiresAt: new Date(Date.now() + 60_000),
-        boundTo: fixture.clientScope,
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createLaunchContext(bound, {
+          handleHash: "launch-bound",
+          context: { patient: "Patient/2" },
+          expiresAt: new Date(Date.now() + 60_000),
+          boundTo: fixture.clientScope,
+        }),
+      );
 
       expect(
-        await consumeLaunchContext(db, otherScope, "launch-bound"),
+        await withTenantScope(db, otherScope, (bound) =>
+          consumeLaunchContext(bound, "launch-bound"),
+        ),
       ).toEqual({ ok: false, reason: "client-mismatch" });
 
-      const untouched = await findLaunchContext(
+      const untouched = await withTenantScope(
         db,
         fixture.endpointScope,
-        "launch-bound",
+        (bound) => findLaunchContext(bound, "launch-bound"),
       );
       expect(untouched?.consumedAt).toBeNull();
     });
 
     it("lets any client redeem an unbound handle", async () => {
       const fixture = await newFixture();
-      await createLaunchContext(db, fixture.endpointScope, {
-        handleHash: "launch-open",
-        context: {},
-        expiresAt: new Date(Date.now() + 60_000),
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createLaunchContext(bound, {
+          handleHash: "launch-open",
+          context: {},
+          expiresAt: new Date(Date.now() + 60_000),
+        }),
+      );
 
-      const redemption = await consumeLaunchContext(
+      const redemption = await withTenantScope(
         db,
         fixture.clientScope,
-        "launch-open",
+        (bound) => consumeLaunchContext(bound, "launch-open"),
       );
       expect(redemption.ok).toBe(true);
     });
@@ -552,12 +560,14 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const theirs = await newFixture();
 
       await expect(
-        createLaunchContext(db, mine.endpointScope, {
-          handleHash: "launch-foreign",
-          context: {},
-          expiresAt: new Date(Date.now() + 60_000),
-          boundTo: theirs.clientScope,
-        }),
+        withTenantScope(db, mine.endpointScope, (bound) =>
+          createLaunchContext(bound, {
+            handleHash: "launch-foreign",
+            context: {},
+            expiresAt: new Date(Date.now() + 60_000),
+            boundTo: theirs.clientScope,
+          }),
+        ),
       ).rejects.toThrow(TenantScopeViolationError);
     });
   });
@@ -1219,17 +1229,21 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   describe("the expiry sweep", () => {
     it("removes expired runtime rows and leaves live ones", async () => {
       const fixture = await newFixture();
-      await createLaunchContext(db, fixture.endpointScope, {
-        handleHash: `sweep-old-${unique()}`,
-        context: {},
-        expiresAt: new Date(Date.now() - 1000),
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createLaunchContext(bound, {
+          handleHash: `sweep-old-${unique()}`,
+          context: {},
+          expiresAt: new Date(Date.now() - 1000),
+        }),
+      );
       const liveHandle = `sweep-live-${unique()}`;
-      await createLaunchContext(db, fixture.endpointScope, {
-        handleHash: liveHandle,
-        context: {},
-        expiresAt: new Date(Date.now() + 600_000),
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createLaunchContext(bound, {
+          handleHash: liveHandle,
+          context: {},
+          expiresAt: new Date(Date.now() + 600_000),
+        }),
+      );
       await issueRefreshToken(db, fixture.clientScope, {
         tokenHash: `sweep-refresh-${unique()}`,
         subject: "user-1",
@@ -1242,7 +1256,9 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       expect(counts.refreshTokens).toBeGreaterThanOrEqual(1);
 
       expect(
-        await findLaunchContext(db, fixture.endpointScope, liveHandle),
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          findLaunchContext(bound, liveHandle),
+        ),
       ).toBeDefined();
     });
   });
@@ -1307,11 +1323,13 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     it("protects rows two joins from their tenant", async () => {
       const mine = await newFixture();
       const theirs = await newFixture();
-      await createLaunchContext(db, theirs.endpointScope, {
-        handleHash: `rls-${unique()}`,
-        context: {},
-        expiresAt: new Date(Date.now() + 600_000),
-      });
+      await withTenantScope(db, theirs.endpointScope, (bound) =>
+        createLaunchContext(bound, {
+          handleHash: `rls-${unique()}`,
+          context: {},
+          expiresAt: new Date(Date.now() + 600_000),
+        }),
+      );
       await issueRefreshToken(db, theirs.clientScope, {
         tokenHash: `rls-refresh-${unique()}`,
         subject: "user-1",

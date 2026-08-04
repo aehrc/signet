@@ -285,11 +285,13 @@ describeWithDatabase("row-level security as the serving role", () => {
       setClientPolicyOverride(bound, POLICY),
     );
 
-    await createLaunchContext(owner, endpointScope, {
-      handleHash: `launch-${unique()}`,
-      context: { patient: "Patient/1" },
-      expiresAt: soon(),
-    });
+    await withTenantScope(owner, endpointScope, (bound) =>
+      createLaunchContext(bound, {
+        handleHash: `launch-${unique()}`,
+        context: { patient: "Patient/1" },
+        expiresAt: soon(),
+      }),
+    );
 
     const session = await createAuthorizationSession(owner, clientScope, {
       redirectUri: "https://app.example.org/callback",

@@ -33,7 +33,7 @@ import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { AuthorizeParams, AuthorizeRefusal } from "./authorizeRequest.js";
 import type { FormBody } from "./grants/types.js";
 import type { LaunchContext } from "@signet/core";
-import type { LaunchHandleRefusal } from "@signet/db";
+import type { ClientScope, LaunchHandleRefusal } from "@signet/db";
 import type { Context } from "hono";
 
 /**
@@ -100,16 +100,17 @@ function formReader(body: FormBody): (name: string) => string | undefined {
  */
 async function resolveEhrContext(
   context: ServerContext,
-  scope: Parameters<typeof consumeLaunchContext>[1],
+  scope: ClientScope,
   handle: string,
 ): Promise<
   | { readonly ok: true; readonly context: LaunchContext; readonly id: string }
   | { readonly ok: false; readonly description: string }
 > {
-  const redemption = await consumeLaunchContext(
-    context.db,
-    scope,
-    await hashToken(handle),
+  // Hashed before the transaction opens: nothing that is not a database
+  // operation belongs inside one.
+  const handleHash = await hashToken(handle);
+  const redemption = await withTenantScope(context.db, scope, (bound) =>
+    consumeLaunchContext(bound, handleHash),
   );
   if (!redemption.ok) {
     return {

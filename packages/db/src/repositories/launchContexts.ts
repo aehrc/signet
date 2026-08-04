@@ -16,13 +16,21 @@ import { and, eq, gt, isNull, lte, or } from "drizzle-orm";
 
 import { classifyLaunchHandleRefusal } from "./predicates.js";
 import { firstRow, requireRow } from "./rows.js";
-import { databaseNow, TenantScopeViolationError } from "./scope.js";
+import {
+  executorFor,
+  databaseNow,
+  TenantScopeViolationError,
+} from "./scope.js";
 import { nowValue } from "./time.js";
 import { launchContexts } from "../schema/runtime.js";
 
 import type { Executor } from "./executor.js";
 import type { LaunchHandleRefusal } from "./predicates.js";
-import type { ClientScope, EndpointScope } from "./scope.js";
+import type {
+  BoundClientScope,
+  BoundEndpointScope,
+  ClientScope,
+} from "./scope.js";
 import type { LaunchContextRow } from "../schema/runtime.js";
 import type { LaunchContext } from "@signet/core";
 
@@ -39,6 +47,10 @@ export interface LaunchContextInput {
    *
    * A {@link ClientScope} rather than an identifier, so that a handle cannot be
    * bound to a client belonging to another endpoint.
+   *
+   * Not required to be bound: it is read for `clientRowId`, never queried on, and
+   * the proof it carries - that this client belongs to this endpoint - is
+   * established when it is built rather than by the transaction it is used in.
    */
   readonly boundTo?: ClientScope;
 }
@@ -52,8 +64,7 @@ export interface LaunchContextInput {
  * is about to launch.
  */
 export async function createLaunchContext(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   input: LaunchContextInput,
 ): Promise<LaunchContextRow> {
   if (
@@ -65,7 +76,7 @@ export async function createLaunchContext(
     );
   }
 
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(launchContexts)
     .values({
       endpointId: scope.endpointId,
@@ -97,41 +108,38 @@ export type LaunchContextRedemption =
  * a decision: whatever it says, nothing has been redeemed.
  */
 export async function consumeLaunchContext(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   handleHash: string,
   now?: Date,
 ): Promise<LaunchContextRedemption> {
-  return await db.transaction(async (tx) => {
-    const claimed = await tx
-      .update(launchContexts)
-      .set({ consumedAt: nowValue(now) })
-      .where(
-        and(
-          eq(launchContexts.handleHash, handleHash),
-          eq(launchContexts.endpointId, scope.endpointId),
-          isNull(launchContexts.consumedAt),
-          gt(launchContexts.expiresAt, nowValue(now)),
-          or(
-            isNull(launchContexts.clientId),
-            eq(launchContexts.clientId, scope.clientRowId),
-          ),
+  const claimed = await executorFor(scope)
+    .update(launchContexts)
+    .set({ consumedAt: nowValue(now) })
+    .where(
+      and(
+        eq(launchContexts.handleHash, handleHash),
+        eq(launchContexts.endpointId, scope.endpointId),
+        isNull(launchContexts.consumedAt),
+        gt(launchContexts.expiresAt, nowValue(now)),
+        or(
+          isNull(launchContexts.clientId),
+          eq(launchContexts.clientId, scope.clientRowId),
         ),
-      )
-      .returning();
+      ),
+    )
+    .returning();
 
-    const launch = firstRow(claimed);
-    if (launch !== undefined) {
-      return { ok: true, launch };
-    }
+  const launch = firstRow(claimed);
+  if (launch !== undefined) {
+    return { ok: true, launch };
+  }
 
-    const existing = await findLaunchContext(tx, scope, handleHash);
-    const at = now ?? (await databaseNow(tx));
-    return {
-      ok: false,
-      reason: classifyLaunchHandleRefusal(existing, scope.clientRowId, at),
-    };
-  });
+  const existing = await findLaunchContext(scope, handleHash);
+  const at = now ?? (await databaseNow(executorFor(scope)));
+  return {
+    ok: false,
+    reason: classifyLaunchHandleRefusal(existing, scope.clientRowId, at),
+  };
 }
 
 /**
@@ -141,11 +149,10 @@ export async function consumeLaunchContext(
  * as a handle that then fails a later check.
  */
 export async function findLaunchContext(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   handleHash: string,
 ): Promise<LaunchContextRow | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(launchContexts)
     .where(
