@@ -38,12 +38,16 @@
  * the variable sees no tenant-owned rows at all. Fail-closed: forgetting the
  * setting produces an obviously empty result, never a quietly cross-tenant one.
  *
- * {@link withTenantScope} is the only thing that should set it. Nothing in
- * `apps/` calls it, and that follows from the paragraphs above rather than being
- * an omission: Signet connects as the owner, so setting the variable would change
- * nothing about what its queries return. It is here for the callers the policies
- * do bind - the integration tests that prove the policies work at all, and any
- * later code that opens a non-owning connection.
+ * {@link withTenantScope} sets it, and nothing calls that function today. That
+ * follows from the paragraphs above rather than being an omission: Signet
+ * connects as the owner, so setting the variable would change nothing about what
+ * its queries return, and there is no other non-owning consumer in this
+ * repository. It exists for one that is added later.
+ *
+ * The suite that proves the policies work does not use it either, and cannot: it
+ * has to `set local role` in the same transaction to become a role the policies
+ * apply to, so it sets the variable inline alongside that - see `asTenant` in
+ * `./repositories/repositories.integration.test.ts`.
  *
  * The value is bound as a parameter to `set_config`, not interpolated into a
  * `SET LOCAL` statement, because `SET LOCAL` does not accept parameters and
