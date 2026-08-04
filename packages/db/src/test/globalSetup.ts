@@ -12,6 +12,7 @@ import { createDatabase } from "../client.js";
 import { applyMigrationsWithLock } from "../migrations.js";
 import { prepareRowLevelSecurityFixtures } from "./rlsRole.js";
 import { markTestSchemaReady } from "./schemaReady.js";
+import { prepareServingRole } from "./servingRole.js";
 
 /** Vitest's global setup entry point. */
 export default async function setup(): Promise<void> {
@@ -29,6 +30,16 @@ export default async function setup(): Promise<void> {
     // The row-level security suite's role and policies are DDL too, and for the
     // same reason they must not be created while other workers are running.
     await prepareRowLevelSecurityFixtures(handle.db);
+    // The role the suites will connect as, and its grants. Created here rather
+    // than by whichever worker got there first, for the same reason again: a
+    // `create role` racing a `grant ... on all tables` is a catalogue write that
+    // should not interleave with the suites it exists to enable.
+    //
+    // Nothing connects as it yet - every suite still uses the owning identity,
+    // which the policies exempt. Switching them over is what makes the suite
+    // evidence rather than decoration, and it is deliberately a later step: the
+    // role and its grants land first, with the suite green throughout.
+    await prepareServingRole(handle.db);
     markTestSchemaReady();
   } finally {
     await handle.close();
