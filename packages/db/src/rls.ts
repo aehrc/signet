@@ -27,13 +27,10 @@
  * resolving `/t/{slug}`, resolving a personal access token's digest, and answering
  * which tenants a signed-in console user may see. They reach past the policies
  * through the `security definer` routines declared in `./privileges.ts`, so the
- * process holds no handle that can read an arbitrary tenant.
- *
- * What is *not* yet true at this commit is that every tenant-owned read and write
- * declares its tenant: the data layer still takes an unbound executor in the
- * modules listed in `./repositories/unscoped.ts`, and the suite still connects as
- * the owning identity. Converting them is the next step, and this paragraph goes
- * with it.
+ * process holds no handle that can read an arbitrary tenant. Every other function
+ * that touches tenant-owned data takes a bound scope, and the few that legitimately
+ * do not are enumerated with a justification each in `./repositories/unscoped.ts`,
+ * where a test compares the declaration against the source in both directions.
  *
  * Neither layer substitutes for the other, and neither may be dropped because the
  * other exists. See the second principle in `CLAUDE.md`.
