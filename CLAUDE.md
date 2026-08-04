@@ -40,6 +40,11 @@ outside that directory. Every tenant-owned table MUST carry a row-level security
 policy comparing against `current_setting('signet.tenant_id', true)`, added in
 the same migration that creates the table.
 
+Any connection to the database other than Signet's own MUST be made as a
+non-owning role. Postgres exempts a table's owner from its policies, so a
+reporting job or a `psql` session that connects as the owner is a way past the
+isolation that no code review will catch.
+
 Rationale: the two layers bind different callers, and each is the only thing
 binding its own.
 
@@ -53,8 +58,8 @@ cross-tenant by design.
 
 Row-level security binds everything else that reaches the database - a `psql`
 session, a reporting job, an analytics tool, a service added later - none of
-which passes through the compiler at all. Those connections MUST be made as a
-non-owning role.
+which passes through the compiler at all, which is why the non-owning role is
+required above.
 
 Neither substitutes for the other, and neither may be dropped on the grounds
 that the other exists. See `packages/db/src/rls.ts` and the "Tenant isolation in

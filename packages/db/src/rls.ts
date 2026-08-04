@@ -8,17 +8,27 @@
  * because it fails at build time, in every environment, whether or not anybody
  * remembered to configure anything.
  *
- * Row-level security exists for what that cannot cover: a hand-written `sql` query
- * somewhere outside `./repositories/`, a migration script, an ad-hoc join added in
- * a hurry, or a future contributor who reaches for the Drizzle handle directly.
- * The policies below make the database refuse to return another tenant's rows even
- * when the application forgets to ask it not to.
+ * Row-level security binds a different set of callers, and it is important to be
+ * exact about which, because the obvious reading is wrong.
  *
- * It is second, rather than first, because it depends on two runtime conditions
- * that the type system does not: that the connection ran
- * `SET LOCAL signet.tenant_id`, and that it did not connect as a role which
- * bypasses policies. Both are easy to get right and neither is checked by the
- * compiler.
+ * Postgres exempts a table's owner from its policies, and Signet connects as the
+ * owner. That is deliberate rather than an oversight: the admin API works out the
+ * set of tenants a session may see before any tenant is known, the expiry sweep
+ * is cross-tenant by design, and migrations must be able to alter every table. A
+ * process pinned to one tenant per connection could not serve those paths. So the
+ * policies below do *not* constrain the Signet process, and they are not what
+ * stops a hand-written query inside it - the scope types are, and they fail the
+ * build rather than the request.
+ *
+ * What the policies constrain is every *other* connection to the database: a
+ * `psql` session, a reporting job, an analytics tool, a backup verification
+ * script, a service added later. None of those passes through the compiler at
+ * all, which is precisely why they need the database to refuse them. They must
+ * connect as a non-owning role for the policies to apply; `docs/operations.md`
+ * has the role recipe.
+ *
+ * Neither layer substitutes for the other, and neither may be dropped because the
+ * other exists. See the second principle in `CLAUDE.md`.
  *
  * ## The `signet.tenant_id` convention
  *
@@ -28,11 +38,17 @@
  * the variable sees no tenant-owned rows at all. Fail-closed: forgetting the
  * setting produces an obviously empty result, never a quietly cross-tenant one.
  *
- * {@link withTenantScope} is the only thing that should set it. The value is bound
- * as a parameter to `set_config`, not interpolated into a `SET LOCAL` statement,
- * because `SET LOCAL` does not accept parameters and building that statement by
- * string concatenation would put a value into SQL text on the one code path whose
- * entire job is to enforce a boundary.
+ * {@link withTenantScope} is the only thing that should set it. Nothing in
+ * `apps/` calls it, and that follows from the paragraphs above rather than being
+ * an omission: Signet connects as the owner, so setting the variable would change
+ * nothing about what its queries return. It is here for the callers the policies
+ * do bind - the integration tests that prove the policies work at all, and any
+ * later code that opens a non-owning connection.
+ *
+ * The value is bound as a parameter to `set_config`, not interpolated into a
+ * `SET LOCAL` statement, because `SET LOCAL` does not accept parameters and
+ * building that statement by string concatenation would put a value into SQL text
+ * on the one code path whose entire job is to enforce a boundary.
  *
  * `set_config(..., true)` is transaction-local, so the setting is released when the
  * transaction ends and cannot leak to the next request that borrows the pooled
@@ -42,13 +58,17 @@
  *
  * ## Deployment
  *
- * `ENABLE ROW LEVEL SECURITY` does not apply to a table's owner. That is
- * deliberate on Postgres's part and useful here: migrations and the expiry sweep
- * are cross-tenant by design and connect as the owner, while the application should
- * connect as a separate, non-owning role - conventionally `signet_app` - for which
- * the policies bite. Passing `force: true` additionally subjects the owner to them,
- * which is the stricter posture and requires the sweep to run as a role with
- * `BYPASSRLS`.
+ * The policies are installed by migration `0006_tenant_row_level_security`, which
+ * is generated from this file, so running `migrate` is all a deployment does to
+ * get them. `rls.migration.test.ts` asserts they are actually in the migration
+ * folder rather than merely generatable, which is the failure this file once had.
+ *
+ * `force: true` additionally subjects the owner to the policies. That is the
+ * stricter posture, and it is not what Signet runs: it would require every
+ * cross-tenant path - the sweep, the admin API's tenant resolution, the
+ * migrations themselves - to hold `BYPASSRLS` or to set the variable, which is
+ * the design the paragraphs above explain Signet does not have. It is offered for
+ * a deployment that wants it and is prepared to arrange those roles.
  *
  * Author: John Grimes
  */
