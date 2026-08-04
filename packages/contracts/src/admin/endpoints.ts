@@ -89,7 +89,12 @@ export const endpointPatchSchema = endpointSettingsSchema
 
 /** Generating a signing key. */
 export const endpointKeyCreateSchema = z.object({
-  algorithm: z.enum(["RS384", "ES384"]),
+  /**
+   * `RS256` is accepted as well as the two SMART names, for a resource server
+   * whose decoder takes nothing else. See `apps/server/src/keys/algorithms.ts`
+   * for when that is the right answer and why it is not the default.
+   */
+  algorithm: z.enum(["RS384", "ES384", "RS256"]),
 });
 
 export type EndpointCreate = z.infer<typeof endpointCreateSchema>;

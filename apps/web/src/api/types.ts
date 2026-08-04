@@ -62,7 +62,7 @@ export interface EndpointView {
 /** One signing key. */
 export interface EndpointKeyView {
   readonly kid: string;
-  readonly algorithm: "RS384" | "ES384";
+  readonly algorithm: "RS384" | "ES384" | "RS256";
   readonly status: "active" | "next" | "retired";
   readonly publicJwk: Readonly<Record<string, unknown>>;
   readonly createdAt: string;

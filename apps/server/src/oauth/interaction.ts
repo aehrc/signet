@@ -702,6 +702,13 @@ export function interactionConsentHandler(context: ServerContext) {
         "The user did not approve this request",
         loaded.session.state ?? undefined,
       );
+      // Built before the session is deleted, and complete rather than just the
+      // two interesting fields. The page renders a refusal from the same shape it
+      // renders every other step from, and a partial body crashed it - leaving
+      // the browser on a blank consent page instead of carrying the refusal back
+      // to the app, which is a worse outcome than the refusal itself.
+      const view = await buildView(context, issuerContext, loaded);
+
       await deleteAuthorizationSession(
         context.db,
         issuerContext.scope,
@@ -713,7 +720,7 @@ export function interactionConsentHandler(context: ServerContext) {
         detail: { reason: "user-declined", clientId: loaded.client.clientId },
         endUserId: loaded.session.endUserId,
       });
-      return c.json({ step: "denied", redirectTo });
+      return c.json({ ...view, step: "denied", redirectTo });
     }
 
     await recordSessionConsent(

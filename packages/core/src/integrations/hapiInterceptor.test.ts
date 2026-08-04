@@ -39,6 +39,26 @@ describe("generateHapiInterceptor", () => {
     expect(source).toContain("JWSAlgorithm.RS384, JWSAlgorithm.ES384");
   });
 
+  it("accepts the endpoint's own algorithms when it has chosen others", () => {
+    const generated = generateHapiInterceptor({
+      ...options,
+      algorithms: ["RS256"],
+    });
+    expect(generated).toContain("JWSAlgorithm.RS256");
+    expect(generated).not.toContain("JWSAlgorithm.RS384");
+  });
+
+  it("refuses to paste an algorithm name that is not one", () => {
+    // Generated source is compiled and run by somebody else, so a value from the
+    // database never becomes an identifier without being checked first.
+    const generated = generateHapiInterceptor({
+      ...options,
+      algorithms: ["none); System.exit(1"],
+    });
+    expect(generated).not.toContain("System.exit");
+    expect(generated).toContain("JWSAlgorithm.RS384");
+  });
+
   it("ends every rule list with an explicit denial", () => {
     // Without this, a request matching no rule falls through to the server's own
     // default, which is the difference between a whitelist and a suggestion.

@@ -377,10 +377,25 @@ describe("buildOpenIdConfiguration", () => {
     expect(document.jwks_uri).toBe(URLS.jwks);
   });
 
-  it("advertises the SMART-mandated ID token signing algorithms", () => {
+  it("falls back to the SMART algorithms for an endpoint with no keys", () => {
     expect(
       buildOpenIdConfiguration(config()).id_token_signing_alg_values_supported,
     ).toEqual(["RS384", "ES384"]);
+    expect(
+      buildOpenIdConfiguration(config(), { signingAlgorithms: [] })
+        .id_token_signing_alg_values_supported,
+    ).toEqual(["RS384", "ES384"]);
+  });
+
+  it("advertises the algorithms the endpoint's own keys use", () => {
+    // The property that matters: a relying party configuring a verifier from this
+    // document must end up accepting exactly what the endpoint signs with. An
+    // endpoint on RS256 - the compatibility choice for a Spring-based resource
+    // server - must not advertise RS384.
+    expect(
+      buildOpenIdConfiguration(config(), { signingAlgorithms: ["RS256"] })
+        .id_token_signing_alg_values_supported,
+    ).toEqual(["RS256"]);
   });
 
   it("advertises public subject types only", () => {

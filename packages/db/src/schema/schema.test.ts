@@ -449,6 +449,9 @@ describe("enums", () => {
     expect([...endpointKeyAlgorithmEnum.enumValues]).toEqual([
       "RS384",
       "ES384",
+      // The compatibility choice, for a resource server whose decoder reads
+      // nothing else. Deliberately last, and deliberately not the default.
+      "RS256",
     ]);
     expect([...endpointKeyStatusEnum.enumValues]).toEqual([
       "active",

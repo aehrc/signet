@@ -36,6 +36,13 @@
       "when": 1785798636504,
       "tag": "0004_freezing_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785801078155,
+      "tag": "0005_famous_otto_octavius",
+      "breakpoints": true
     }
   ]
 }

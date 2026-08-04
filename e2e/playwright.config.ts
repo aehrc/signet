@@ -1,24 +1,35 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * End-to-end suite. The stack under test (Signet, Pathling and a stub SMART
- * app) is brought up by docker-compose rather than by Playwright, because
- * Pathling needs a warm-up period that a `webServer` readiness check handles
- * poorly.
+ * The end-to-end suite.
  *
- * Run `bun run stack:up` before this suite, or let CI do it.
+ * The stack under test - Signet, Pathling, Postgres and a stub SMART app - is
+ * brought up by docker-compose rather than by Playwright. Pathling starts a Spark
+ * session before it serves anything, which takes long enough that a `webServer`
+ * readiness check is the wrong tool: it would either time out or mask a real
+ * failure to start.
+ *
+ * Run `bun run stack:up` before this suite. The global setup runs the seed, which
+ * is idempotent, so a suite against an already-running stack cannot fail for want
+ * of a fixture.
+ *
+ * `SIGNET_PORT` moves the whole stack, issuer identifiers included, for a machine
+ * where 3000 is taken. Set the same value here and in compose.
  */
-const baseURL = process.env["SIGNET_BASE_URL"] ?? "http://localhost:3000";
+const signetPort = process.env["SIGNET_PORT"] ?? "3000";
+const baseURL =
+  process.env["SIGNET_BASE_URL"] ?? `http://localhost:${signetPort}`;
 
 export default defineConfig({
   testDir: "./tests",
+  globalSetup: "./globalSetup.ts",
   fullyParallel: true,
   forbidOnly: !!process.env["CI"],
   retries: process.env["CI"] ? 2 : 0,
   workers: process.env["CI"] ? 2 : undefined,
   reporter: process.env["CI"]
     ? [["github"], ["html", { open: "never" }]]
-    : [["html", { open: "never" }]],
+    : [["list"], ["html", { open: "never" }]],
   timeout: 60_000,
   expect: { timeout: 10_000 },
   use: {
@@ -27,5 +38,15 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    // Signs in once and saves the session. Everything else depends on it, so a
+    // failure here fails the suite up front rather than as an unexplained
+    // authentication error in every console test.
+    { name: "setup", testMatch: /.*\.setup\.ts/ },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
+    },
+  ],
 });

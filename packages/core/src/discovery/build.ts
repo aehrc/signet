@@ -18,11 +18,17 @@ import type {
 const CODE_CHALLENGE_METHODS: readonly "S256"[] = ["S256"];
 
 /**
- * The signing algorithms SMART mandates for ID tokens.
+ * The signing algorithms SMART names, used when an endpoint has published no key.
+ *
+ * An endpoint with keys advertises *those* algorithms instead - see
+ * {@link buildOpenIdConfiguration}. A document that named an algorithm no
+ * published key uses would tell a relying party to expect something it will never
+ * see, and one that omitted the algorithm actually in use would have a strict
+ * verifier reject every token.
  *
  * @see https://hl7.org/fhir/smart-app-launch/client-confidential-asymmetric.html
  */
-const ID_TOKEN_SIGNING_ALGS: readonly string[] = ["RS384", "ES384"];
+const DEFAULT_ID_TOKEN_SIGNING_ALGS: readonly string[] = ["RS384", "ES384"];
 
 /** The claims Signet puts in an ID token, advertised for OIDC discovery. */
 const CLAIMS_SUPPORTED: readonly string[] = [
@@ -159,10 +165,15 @@ export function buildSmartConfiguration(
  * completely even for endpoints whose primary purpose is not single sign-on.
  *
  * @param config - The endpoint configuration.
+ * @param options - What the document should say about this endpoint's keys.
+ * @param options.signingAlgorithms - The algorithms of the keys the endpoint
+ *   publishes, in advertisement order. Omit for an endpoint with none, which
+ *   falls back to the pair SMART names.
  * @see https://openid.net/specs/openid-connect-discovery-1_0.html
  */
 export function buildOpenIdConfiguration(
   config: EndpointCapabilityConfig,
+  options: { readonly signingAlgorithms?: readonly string[] } = {},
 ): OpenIdConfiguration {
   const urls = endpointUrls(config.issuer);
   const grants: string[] = [...smartGrantTypes(config)];
@@ -189,7 +200,11 @@ export function buildOpenIdConfiguration(
     response_types_supported: RESPONSE_TYPES,
     grant_types_supported: grants,
     subject_types_supported: ["public"],
-    id_token_signing_alg_values_supported: ID_TOKEN_SIGNING_ALGS,
+    id_token_signing_alg_values_supported:
+      options.signingAlgorithms === undefined ||
+      options.signingAlgorithms.length === 0
+        ? DEFAULT_ID_TOKEN_SIGNING_ALGS
+        : options.signingAlgorithms,
     token_endpoint_auth_methods_supported: oidcAuthMethods(config),
     code_challenge_methods_supported: CODE_CHALLENGE_METHODS,
     claims_supported: CLAIMS_SUPPORTED,

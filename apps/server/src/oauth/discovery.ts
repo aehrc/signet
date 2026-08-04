@@ -43,11 +43,42 @@ export function smartConfigurationHandler(c: Context<SignetEnvironment>) {
   return c.json(buildSmartConfiguration(toCapabilityConfig(endpoint, issuer)));
 }
 
-/** Serves `.well-known/openid-configuration`. */
-export function openIdConfigurationHandler(c: Context<SignetEnvironment>) {
-  const { endpoint, issuer } = c.get("issuer");
-  c.header("Cache-Control", CACHE_CONTROL);
-  return c.json(buildOpenIdConfiguration(toCapabilityConfig(endpoint, issuer)));
+/**
+ * Serves `.well-known/openid-configuration`.
+ *
+ * A factory rather than a plain handler, and asynchronous, because
+ * `id_token_signing_alg_values_supported` is derived from the keys the endpoint
+ * actually publishes. Hard-coding the pair SMART names was wrong in both
+ * directions: an endpoint signing with something else told relying parties to
+ * expect an algorithm they would never see, and a strict verifier configured from
+ * this document then rejected every token. Spring Security builds exactly such a
+ * verifier, which is how the mismatch was found.
+ *
+ * @param context - The server's dependencies.
+ */
+export function openIdConfigurationHandler(context: ServerContext) {
+  return async (c: Context<SignetEnvironment>) => {
+    const { endpoint, issuer, scope } = c.get("issuer");
+    const keys = await listPublishableEndpointKeys(context.db, scope);
+    c.header("Cache-Control", CACHE_CONTROL);
+    return c.json(
+      buildOpenIdConfiguration(toCapabilityConfig(endpoint, issuer), {
+        signingAlgorithms: advertisedAlgorithms(keys),
+      }),
+    );
+  };
+}
+
+/**
+ * The distinct algorithms a set of keys uses, in a stable order.
+ *
+ * Deduplicated because two keys of the same algorithm - which is what a rotation
+ * looks like - must not produce a document listing it twice.
+ */
+function advertisedAlgorithms(
+  keys: readonly { readonly algorithm: string }[],
+): readonly string[] {
+  return [...new Set(keys.map((key) => key.algorithm))];
 }
 
 /**

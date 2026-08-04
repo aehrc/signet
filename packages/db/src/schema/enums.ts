@@ -47,6 +47,10 @@ export const endpointStatusEnum = pgEnum("endpoint_status", [
 export const endpointKeyAlgorithmEnum = pgEnum("endpoint_key_algorithm", [
   "RS384",
   "ES384",
+  // The compatibility choice, for a resource server whose JWT decoder accepts
+  // only RS256 - which is Spring Security's default and therefore several FHIR
+  // servers'. See `apps/server/src/keys/algorithms.ts`.
+  "RS256",
 ]);
 
 /**

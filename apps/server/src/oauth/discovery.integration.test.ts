@@ -69,8 +69,10 @@ describeWithDatabase("discovery documents", () => {
     // Exactly the fields a resource server needs to verify a Signet token.
     expect(document["issuer"]).toBe(stack.issuer);
     expect(document["jwks_uri"]).toBe(`${stack.issuer}/jwks`);
+    // The endpoint's own key, not a fixed list: a verifier configured from this
+    // document has to accept exactly what the endpoint signs with, and the
+    // fixture endpoint signs with one ES384 key.
     expect(document["id_token_signing_alg_values_supported"]).toEqual([
-      "RS384",
       "ES384",
     ]);
     expect(document["code_challenge_methods_supported"]).toEqual(["S256"]);

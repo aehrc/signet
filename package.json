@@ -14,18 +14,22 @@
   },
   "scripts": {
     "build": "bun run --filter '*' build",
+    "check:bundle": "bun run --filter @signet/server build && node scripts/checkBundle.mjs apps/server/dist/index.js",
     "dev": "bun run --filter '*' dev",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "lint:duplication": "bunx jscpd",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:duplication": "bunx jscpd",
+    "lint:fix": "eslint . --fix",
+    "stack:down": "docker compose -f deploy/compose/docker-compose.yml down",
+    "stack:logs": "docker compose -f deploy/compose/docker-compose.yml logs -f",
+    "stack:seed": "bun scripts/seedStack.mjs",
+    "stack:up": "docker compose -f deploy/compose/docker-compose.yml up -d --build --wait",
     "test": "vitest --run",
-    "test:watch": "vitest",
     "test:coverage": "vitest --run --coverage",
     "test:e2e": "bun run --filter signet-e2e test",
-    "typecheck": "tsc --build --force",
-    "check:bundle": "bun run --filter @signet/server build && node scripts/checkBundle.mjs apps/server/dist/index.js"
+    "test:watch": "vitest",
+    "typecheck": "tsc --build --force"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

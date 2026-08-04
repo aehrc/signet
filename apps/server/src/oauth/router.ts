@@ -80,7 +80,7 @@ export function createOAuthRouter(
   );
   router.get(
     path("/.well-known/openid-configuration"),
-    openIdConfigurationHandler,
+    openIdConfigurationHandler(context),
   );
   router.get(path("/jwks"), jwksHandler(context));
 

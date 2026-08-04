@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stub SMART app</title>
+    <style>
+      body {
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          sans-serif;
+        margin: 2rem auto;
+        max-width: 48rem;
+        padding: 0 1rem;
+        line-height: 1.5;
+      }
+      pre {
+        background: #f4f4f5;
+        padding: 1rem;
+        overflow-x: auto;
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
+      }
+      .status {
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      A deliberately minimal SMART app: no framework, no build step, no
+      dependencies. It exists so the end-to-end suite drives a launch the way an
+      app does - a browser navigation to /authorize, a redirect back with a code,
+      and a token request with a PKCE verifier - rather than by calling the
+      endpoints directly, which would prove the endpoints work and nothing about
+      whether an app can complete a launch.
+
+      Every element the suite asserts on carries a `data-testid`, so a change to
+      the wording here cannot break the tests and a change to the flow does.
+    -->
+    <h1>Stub SMART app</h1>
+    <p class="status" data-testid="status">Starting…</p>
+
+    <h2>Token response</h2>
+    <pre data-testid="token-response">—</pre>
+
+    <h2>Access token claims</h2>
+    <pre data-testid="access-token-claims">—</pre>
+
+    <h2>FHIR request</h2>
+    <p data-testid="fhir-status">Not attempted.</p>
+    <pre data-testid="fhir-response">—</pre>
+
+    <script type="module" src="./launch.js"></script>
+  </body>
+</html>

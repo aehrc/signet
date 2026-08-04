@@ -45,6 +45,15 @@ export interface HapiInterceptorOptions {
   readonly audience: string;
   /** Shown in the header comment so the file identifies what generated it. */
   readonly endpointName: string;
+  /**
+   * The algorithms the endpoint's published keys use.
+   *
+   * Listed in the generated code so the interceptor refuses a token whose header
+   * names anything else. Derived from the endpoint rather than hard-coded,
+   * because an endpoint configured for a resource server that only reads RS256
+   * would otherwise be handed an interceptor that rejects its own tokens.
+   */
+  readonly algorithms?: readonly string[];
   /** Java package for the generated class. */
   readonly packageName?: string;
   /** Class name for the generated interceptor. */
@@ -56,6 +65,21 @@ const DEFAULT_PACKAGE = "org.example.fhir.security";
 
 /** Default class name. */
 const DEFAULT_CLASS = "SignetAuthorizationInterceptor";
+
+/**
+ * Narrows an algorithm name to something safe to paste as a Java identifier.
+ *
+ * The names come from the database, and a value that is not one of the
+ * algorithms this project mints keys for has no business becoming code - so
+ * anything else is dropped to `RS384`, which is what SMART asks for and what an
+ * endpoint with no explicit choice uses. Generated source is code somebody else
+ * will compile and run, and no path to it takes an unvetted string.
+ *
+ * @param algorithm - The stored algorithm name.
+ */
+function javaIdentifier(algorithm: string): string {
+  return /^[A-Z]{2}\d{3}$/.test(algorithm) ? algorithm : "RS384";
+}
 
 /**
  * Escapes a value for inclusion in a Java string literal.
@@ -85,6 +109,11 @@ export function generateHapiInterceptor(
 ): string {
   const packageName = options.packageName ?? DEFAULT_PACKAGE;
   const className = options.className ?? DEFAULT_CLASS;
+  // Defaults to the pair SMART names, which is what an endpoint that has not
+  // been configured otherwise signs with.
+  const algorithmLiterals = (options.algorithms ?? ["RS384", "ES384"])
+    .map((algorithm) => `JWSAlgorithm.${javaIdentifier(algorithm)}`)
+    .join(", ");
 
   return `package ${packageName};
 
@@ -147,12 +176,12 @@ public class ${className} extends AuthorizationInterceptor {
     try {
       JWKSource<SecurityContext> keys = new RemoteJWKSet<>(new URL(JWKS_URI));
       ConfigurableJWTProcessor<SecurityContext> configured = new DefaultJWTProcessor<>();
-      // Signet signs with RS384 or ES384, as SMART App Launch requires for client
-      // assertions. Listing them explicitly refuses a token whose header names a
-      // weaker algorithm, which is the classic JWT confusion attack.
+      // Exactly the algorithms this endpoint publishes keys for. Listing them
+      // explicitly refuses a token whose header names anything else, which is
+      // the classic JWT confusion attack.
       configured.setJWSKeySelector(
           new JWSVerificationKeySelector<>(
-              java.util.Set.of(JWSAlgorithm.RS384, JWSAlgorithm.ES384), keys));
+              java.util.Set.of(${algorithmLiterals}), keys));
       this.processor = configured;
     } catch (Exception e) {
       throw new IllegalStateException("Could not initialise Signet token verification", e);

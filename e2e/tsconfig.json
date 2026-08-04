@@ -7,5 +7,10 @@
     "declarationMap": false,
     "noEmit": true
   },
-  "include": ["tests/**/*", "playwright.config.ts"]
+  "include": [
+    "tests/**/*",
+    "support/**/*",
+    "globalSetup.ts",
+    "playwright.config.ts"
+  ]
 }

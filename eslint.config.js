@@ -183,6 +183,33 @@ export default tseslint.config(
     },
   },
 
+  // The stub SMART app served by the compose stack. Browser code, run by a
+  // browser, with no build step and no tsconfig - so type-aware rules have no
+  // program and the DOM globals are the whole point of the file.
+  {
+    files: ["deploy/compose/app/**/*.js"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      globals: {
+        atob: "readonly",
+        btoa: "readonly",
+        crypto: "readonly",
+        document: "readonly",
+        fetch: "readonly",
+        sessionStorage: "readonly",
+        TextDecoder: "readonly",
+        TextEncoder: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+      },
+    },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+      // The selector is a literal in the same file, not user input.
+      "unicorn/require-css-escape": "off",
+    },
+  },
+
   // The data layer.
   {
     files: ["packages/db/**/*.ts"],

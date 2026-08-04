@@ -1,0 +1,1 @@
+ALTER TYPE "public"."endpoint_key_algorithm" ADD VALUE 'RS256';

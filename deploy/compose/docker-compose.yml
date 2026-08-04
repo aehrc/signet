@@ -1,0 +1,173 @@
+# The stack the end-to-end suite runs against.
+#
+# Four services, and each is here because the suite asserts something that only
+# holds when it is real:
+#
+#   - Postgres, because tenancy is enforced by row-level security as well as by
+#     types, and RLS is not exercisable against a fake.
+#   - Signet, built from the production Dockerfile rather than run from source,
+#     so the suite tests the artefact that ships - including the bundle check
+#     that fails the build if anything was left external.
+#   - Pathling, because the flagship policy translates SMART scopes into its
+#     `authorities` claim, and whether Pathling accepts the result is not a
+#     question this repository can answer by itself.
+#   - A stub SMART app, because the launch is a browser flow. A test that drove
+#     the endpoints with `fetch` would prove the endpoints work and say nothing
+#     about whether an app can complete a launch.
+#
+# Bring it up with `bun run stack:up`; `bun run stack:down` tears it down.
+#
+# **Ports.** Signet is published on `SIGNET_PORT` (3000 by default) and Pathling on
+# `PATHLING_PORT` (8080). Both are variables because an issuer identifier contains
+# its port: a developer whose 3000 is taken sets `SIGNET_PORT=3100` and every URL -
+# the public URL, the issuer Pathling validates against, the audience, the seed and
+# the suite - follows from it. Hard-coding the port would mean editing five places
+# and getting one of them wrong.
+#
+# **Why Pathling shares Signet's network namespace.** Pathling is configured with
+# the issuer it must validate tokens against, and OAuth issuers are compared as
+# exact strings - so it has to *reach* the same URL the browser used. Compose DNS
+# would give it `http://signet:3000`, which is a different issuer from the
+# `http://localhost:3000` in the tokens. `network_mode: service:signet` makes
+# `localhost` mean the same thing in both places, which is the smallest change that
+# makes one issuer identifier work from inside and outside the network.
+#
+# One consequence, worth knowing before it puzzles somebody: recreating the Signet
+# container destroys the namespace Pathling is sharing, so Pathling stops with it.
+# Bring the stack up as a whole - `bun run stack:up` - rather than one service at a
+# time, and compose restarts both together.
+
+name: signet-e2e
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: signet
+      POSTGRES_PASSWORD: signet
+      POSTGRES_DB: signet
+    # Published so a developer can inspect the database the suite ran against.
+    # A port distinct from the usual 5432, so it cannot collide with a local one.
+    ports:
+      - "55433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U signet -d signet"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Applies migrations and creates the first tenant and administrator, then
+  # exits. Signet waits for it: a server that starts against an unmigrated
+  # database answers every request with a 500, which is a confusing way for a
+  # suite to fail.
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    command: ["node", "dist/index.js", "migrate"]
+    environment:
+      SIGNET_DATABASE_URL: postgres://signet:signet@postgres:5432/signet
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  bootstrap:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    command: ["node", "dist/index.js", "bootstrap"]
+    environment:
+      SIGNET_DATABASE_URL: postgres://signet:signet@postgres:5432/signet
+      SIGNET_BOOTSTRAP_TENANT: demo
+      SIGNET_BOOTSTRAP_TENANT_NAME: Demo Hospital
+      SIGNET_BOOTSTRAP_EMAIL: ops@example.org
+      SIGNET_BOOTSTRAP_PASSWORD: correct horse battery staple
+      SIGNET_BOOTSTRAP_NAME: Ops
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  signet:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    environment:
+      # The container listens on the same port it is published on, because
+      # Pathling shares this namespace and reaches Signet at the *published*
+      # URL - a container port that differed would be refused from inside.
+      PORT: ${SIGNET_PORT:-3000}
+      # The origin the browser uses, because issuers are derived from it and a
+      # token minted for `http://signet:3000` would not verify against the
+      # issuer an app on the host discovered.
+      SIGNET_PUBLIC_URL: http://localhost:${SIGNET_PORT:-3000}
+      SIGNET_DATABASE_URL: postgres://signet:signet@postgres:5432/signet
+      # Development only. Never a real deployment's key.
+      SIGNET_MASTER_KEY: compose-master-key-not-for-production-0000
+      SIGNET_LOG_LEVEL: info
+      # The stack is entirely on a private network, so the outbound guard would
+      # refuse every hop within it. See `apps/server/src/security/outboundFetch.ts`
+      # for exactly what this turns off, and why it must never be set in
+      # production.
+      SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES: "true"
+    ports:
+      - "${SIGNET_PORT:-3000}:${SIGNET_PORT:-3000}"
+      # Pathling's port, published here because it shares this container's
+      # network namespace. See the header.
+      - "${PATHLING_PORT:-8080}:${PATHLING_PORT:-8080}"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
+  # Pathling with authorization on, pointed at a Signet endpoint. The issuer is
+  # the one `bun run stack:seed` creates; Pathling builds its own
+  # smart-configuration by merging from it, so this is the whole integration.
+  pathling:
+    image: aehrc/pathling:7.2.0
+    # Shares Signet's network stack so that `localhost` means the same host in
+    # both, and one issuer identifier works from the browser and from here.
+    network_mode: "service:signet"
+    environment:
+      pathling.auth.enabled: "true"
+      pathling.auth.issuer: http://localhost:${SIGNET_PORT:-3000}/t/demo/e/pathling
+      pathling.auth.audience: http://localhost:${PATHLING_PORT:-8080}/fhir
+      server.port: ${PATHLING_PORT:-8080}
+      pathling.storage.warehouseUrl: file:///usr/share/warehouse
+      # The stub app is a browser page on another origin, so without this every
+      # FHIR request it makes is a CORS preflight that Pathling refuses - and the
+      # suite would be unable to assert the one thing only a real FHIR server can
+      # tell it, which is whether the token works.
+      pathling.cors.allowedOrigins: http://localhost:${APP_PORT:-4000}
+      pathling.cors.allowedMethods: GET,POST,OPTIONS
+      pathling.cors.allowedHeaders: Authorization,Content-Type,Accept
+      # `JAVA_TOOL_OPTIONS` is deliberately not set. The image's own value carries
+      # the `--add-exports` flags Spark needs on a modern JVM, and overriding it to
+      # set a heap size drops them - which fails at startup, deep inside Spark,
+      # with an error that says nothing about the flag that went missing.
+    depends_on:
+      signet:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:${PATHLING_PORT:-8080}/fhir/metadata || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      # Pathling starts a Spark session before it serves anything, which takes
+      # longer than any other service here by an order of magnitude.
+      retries: 60
+      start_period: 60s
+
+  # The stub SMART app: static files, no build step, no dependencies. It does a
+  # real standalone launch with PKCE and shows what came back, which is what the
+  # Playwright suite drives.
+  app:
+    image: nginx:1-alpine
+    volumes:
+      - ./app:/usr/share/nginx/html:ro
+    ports:
+      - "${APP_PORT:-4000}:80"
+    depends_on:
+      signet:
+        condition: service_started

@@ -25,6 +25,7 @@ import {
   getClientByClientId,
   hashToken,
   isClientUsable,
+  listPublishableEndpointKeys,
   clientScopeFromRow,
 } from "@signet/db";
 
@@ -152,14 +153,20 @@ export function registerLaunchRoutes(
   router.get(
     `${ENDPOINT_PATH}/integrations/hapi-interceptor`,
     requireRole("viewer"),
-    (c) => {
-      const { endpoint, issuer, urls } = c.get("endpoint");
+    async (c) => {
+      const { endpoint, issuer, urls, scope } = c.get("endpoint");
+
+      // The algorithms this endpoint actually publishes keys for, so an operator
+      // who chose RS256 for a resource server that reads nothing else is not
+      // handed an interceptor that rejects their own tokens.
+      const keys = await listPublishableEndpointKeys(context.db, scope);
 
       const source = generateHapiInterceptor({
         issuer,
         jwksUri: urls.jwks,
         audience: endpoint.fhirBaseUrl,
         endpointName: endpoint.name,
+        algorithms: [...new Set(keys.map((key) => key.algorithm))],
       });
 
       c.header("Content-Type", "text/plain; charset=utf-8");

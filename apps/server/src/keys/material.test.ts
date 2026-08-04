@@ -39,8 +39,11 @@ describe("isEndpointKeyAlgorithm", () => {
   });
 
   it("refuses anything else", () => {
-    expect(isEndpointKeyAlgorithm("RS256")).toBe(false);
+    // `none` above all: an algorithm-confusion attack begins with a verifier that
+    // will accept a token claiming not to be signed.
     expect(isEndpointKeyAlgorithm("none")).toBe(false);
+    expect(isEndpointKeyAlgorithm("HS256")).toBe(false);
+    expect(isEndpointKeyAlgorithm("RS512")).toBe(false);
   });
 });
 
@@ -159,7 +162,7 @@ describe("prepareSigningKey", () => {
     const generated = await generateEndpointKey("RS384", MASTER_KEY);
     const row = {
       ...rowFrom(generated),
-      algorithm: "RS256",
+      algorithm: "HS256",
     } as unknown as EndpointKey;
     await expect(prepareSigningKey(row, MASTER_KEY)).resolves.toEqual({
       ok: false,
