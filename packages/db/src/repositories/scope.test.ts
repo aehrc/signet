@@ -16,9 +16,109 @@ import {
 } from "./scope.js";
 import { createFakeExecutor } from "../test/fakeExecutor.js";
 
+import type { listClients } from "./clients.js";
+import type { listEndpoints } from "./endpoints.js";
+import type {
+  BoundEndpointScope,
+  BoundTenantScope,
+  TenantScope,
+} from "./scope.js";
 import type { Client } from "../schema/clients.js";
 import type { Endpoint } from "../schema/endpoints.js";
 import type { Tenant } from "../schema/tenancy.js";
+
+/**
+ * What the compiler refuses, asserted by the compiler.
+ *
+ * The two mistakes this feature must make impossible are a query against
+ * tenant-owned data with no established tenant, and one that establishes tenant A
+ * then filters for tenant B. Both are compile errors, and a compile error is not
+ * something a runtime assertion can observe: by the time a test runs, the build
+ * that would have failed has already succeeded.
+ *
+ * So they are asserted as types. Each constant below is annotated with a
+ * conditional type that evaluates to `true` or `false` and initialised with the
+ * literal that type must be, so the assignment fails to compile the moment the
+ * assignability it describes changes. `bun run typecheck` is what runs them, which
+ * is exactly the gate the property is supposed to hold at.
+ *
+ * Written here rather than in a file of their own deliberately. A file containing
+ * only type fixtures either fails Vitest for defining no tests or lowers the
+ * coverage floor for holding statements nothing executes; the `it` at the foot of
+ * this block reads every one of them, so they are compiled *and* run.
+ */
+type Assignable<A, B> = A extends B ? true : false;
+
+/**
+ * An unbound scope does not satisfy a bound one.
+ *
+ * The root of it. `TenantScope` is proof a tenant was resolved;
+ * `BoundTenantScope` is proof it was declared to the database, on a transaction
+ * the value carries. Were this to become `true`, every assertion below would
+ * follow it.
+ */
+const unboundIsNotBound: Assignable<TenantScope, BoundTenantScope> = false;
+
+/**
+ * And therefore does not satisfy a data-layer function's parameter.
+ *
+ * `listEndpoints` stands for the 152 of them: it takes a bound scope, so a caller
+ * holding only a resolved one cannot reach the table without going through
+ * `withTenantScope` first.
+ */
+const unboundIsNotAcceptedByADataLayerFunction: Assignable<
+  TenantScope,
+  Parameters<typeof listEndpoints>[0]
+> = false;
+
+/**
+ * A bound scope cannot be written down.
+ *
+ * The brand holding the transaction is a module-private symbol, so no object
+ * literal - and nothing reconstructed from a request body - can produce one.
+ */
+const aBoundScopeCannotBeWrittenDown: Assignable<
+  { readonly tenantId: string; readonly tenantSlug: string },
+  BoundTenantScope
+> = false;
+
+/**
+ * The declaration is not separable from the tenant it was made for.
+ *
+ * This is FR-005 expressed as a type. Take the tenant away from a bound scope and
+ * what remains no longer satisfies it, so there is no value that carries a
+ * declaration for tenant A while naming tenant B - and no data-layer function
+ * takes a tenant identifier alongside the scope, so there is nothing for the two
+ * to disagree about.
+ */
+const theDeclarationIsNotSeparableFromItsTenant: Assignable<
+  Omit<BoundTenantScope, "tenantId">,
+  BoundTenantScope
+> = false;
+
+/**
+ * A tenant-level binding is not an endpoint-level one.
+ *
+ * The narrowing has to be done, and done against a row, which is where the
+ * ownership check lives. Otherwise `listClients` would accept a scope that had
+ * proved a tenant and nothing about the endpoint whose clients it returns.
+ */
+const aTenantBindingIsNotAnEndpointBinding: Assignable<
+  BoundTenantScope,
+  Parameters<typeof listClients>[0]
+> = false;
+
+/**
+ * The positive control, without which the rest could all be vacuous.
+ *
+ * A conditional type over a mistyped or `never` operand yields `false` for
+ * everything, and five refusals against nothing would look like five guarantees.
+ * A correctly narrowed bound scope must still reach both functions.
+ */
+const aBoundEndpointScopeIsAccepted: Assignable<
+  BoundEndpointScope,
+  Parameters<typeof listEndpoints>[0] & Parameters<typeof listClients>[0]
+> = true;
 
 const AT = new Date("2026-01-01T00:00:00.000Z");
 
@@ -188,6 +288,30 @@ describe("declareTenantScope", () => {
     expect(JSON.stringify(bound)).toBe(
       `{"tenantId":"${tenant.id}","tenantSlug":"demo"}`,
     );
+  });
+});
+
+describe("what the compiler refuses", () => {
+  it("has evaluated every assertion above", () => {
+    // The assertions are the annotations, not this test: each constant above fails
+    // to compile if the assignability it describes changes, and `bun run typecheck`
+    // is the gate that runs them.
+    //
+    // What this adds is that they are not dead code. A `const` nothing reads is a
+    // statement the coverage report counts as unexecuted, and - worse - one a later
+    // tidy-up would delete as unused, taking the guarantee with it. Reading them
+    // here ties them to a test that fails if they disappear.
+    expect([
+      unboundIsNotBound,
+      unboundIsNotAcceptedByADataLayerFunction,
+      aBoundScopeCannotBeWrittenDown,
+      theDeclarationIsNotSeparableFromItsTenant,
+      aTenantBindingIsNotAnEndpointBinding,
+    ]).toEqual([false, false, false, false, false]);
+
+    // The positive control. Without it the five refusals above could all be
+    // conditional types over `never`, which yields `false` for anything.
+    expect(aBoundEndpointScopeIsAccepted).toBe(true);
   });
 });
 
