@@ -293,15 +293,19 @@ describeWithDatabase("row-level security as the serving role", () => {
       }),
     );
 
-    const session = await createAuthorizationSession(owner, clientScope, {
-      redirectUri: "https://app.example.org/callback",
-      expiresAt: soon(),
-      requestedScopes: ["patient/Observation.rs"],
-    });
-    await createAuthorizationCode(owner, endpointScope, session, {
-      codeHash: `code-${unique()}`,
-      expiresAt: soon(),
-    });
+    const session = await withTenantScope(owner, clientScope, (bound) =>
+      createAuthorizationSession(bound, {
+        redirectUri: "https://app.example.org/callback",
+        expiresAt: soon(),
+        requestedScopes: ["patient/Observation.rs"],
+      }),
+    );
+    await withTenantScope(owner, endpointScope, (bound) =>
+      createAuthorizationCode(bound, session, {
+        codeHash: `code-${unique()}`,
+        expiresAt: soon(),
+      }),
+    );
     await createFederationState(owner, endpointScope, session, {
       stateHash: `state-${unique()}`,
       nonce: `nonce-${unique()}`,

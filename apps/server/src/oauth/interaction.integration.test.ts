@@ -8,7 +8,11 @@
  * Author: John Grimes
  */
 
-import { getAuthorizationSession, listConsentsForEndUser } from "@signet/db";
+import {
+  getAuthorizationSession,
+  listConsentsForEndUser,
+  withTenantScope,
+} from "@signet/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -106,10 +110,8 @@ describeWithDatabase("the interaction API", () => {
 
     // Answered with the step that is actually outstanding, and nothing consented.
     expect(response.step).toBe("login");
-    const row = await getAuthorizationSession(
-      stack.context.db,
-      stack.scope,
-      session,
+    const row = await withTenantScope(stack.context.db, stack.scope, (bound) =>
+      getAuthorizationSession(bound, session),
     );
     expect(row?.consentGrantedAt).toBeNull();
   });
@@ -121,10 +123,8 @@ describeWithDatabase("the interaction API", () => {
     ).json()) as { step: string };
     expect(response.step).toBe("login");
 
-    const row = await getAuthorizationSession(
-      stack.context.db,
-      stack.scope,
-      session,
+    const row = await withTenantScope(stack.context.db, stack.scope, (bound) =>
+      getAuthorizationSession(bound, session),
     );
     expect(row?.resolvedContext).toBeNull();
   });
@@ -137,10 +137,8 @@ describeWithDatabase("the interaction API", () => {
 
     // The persona has exactly one candidate patient, so there is nothing to pick.
     expect(state.step).toBe("consent");
-    const row = await getAuthorizationSession(
-      stack.context.db,
-      stack.scope,
-      session,
+    const row = await withTenantScope(stack.context.db, stack.scope, (bound) =>
+      getAuthorizationSession(bound, session),
     );
     expect(row?.resolvedContext).toMatchObject({ patient: "pat-9" });
   });
@@ -202,7 +200,9 @@ describeWithDatabase("the interaction API", () => {
     const url = new URL(declined.redirectTo);
     expect(url.searchParams.get("error")).toBe("access_denied");
     expect(
-      await getAuthorizationSession(stack.context.db, stack.scope, session),
+      await withTenantScope(stack.context.db, stack.scope, (bound) =>
+        getAuthorizationSession(bound, session),
+      ),
     ).toBeUndefined();
   });
 

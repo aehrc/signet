@@ -9,7 +9,7 @@
  * Author: John Grimes
  */
 
-import { getAuthorizationSession } from "@signet/db";
+import { getAuthorizationSession, withTenantScope } from "@signet/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -54,10 +54,10 @@ describeWithDatabase("the authorization endpoint", () => {
     expect(location.startsWith(`${stack.issuer}/login?`)).toBe(true);
 
     const sessionId = new URL(location).searchParams.get("session") ?? "";
-    const session = await getAuthorizationSession(
+    const session = await withTenantScope(
       stack.context.db,
       stack.scope,
-      sessionId,
+      (bound) => getAuthorizationSession(bound, sessionId),
     );
 
     // Everything security-bearing is on the row, and nothing is left for a later
@@ -242,10 +242,10 @@ describeWithDatabase("the EHR launch", () => {
     expect(state.step).toBe("login");
 
     const { getAuthorizationSession } = await import("@signet/db");
-    const session = await getAuthorizationSession(
+    const session = await withTenantScope(
       stack.context.db,
       stack.scope,
-      sessionId,
+      (bound) => getAuthorizationSession(bound, sessionId),
     );
     expect(session?.resolvedContext).toEqual({
       patient: "pat-77",

@@ -265,10 +265,8 @@ export function authorizeHandler(context: ServerContext) {
       });
     }
 
-    const session = await createAuthorizationSession(
-      context.db,
-      resolved.scope,
-      {
+    const session = await withTenantScope(context.db, resolved.scope, (bound) =>
+      createAuthorizationSession(bound, {
         requestedScopes: [...request.requestedScopes],
         redirectUri: request.redirectUri,
         state: request.state ?? null,
@@ -279,16 +277,12 @@ export function authorizeHandler(context: ServerContext) {
         expiresAt: new Date(
           context.clock().getTime() + AUTHORIZATION_SESSION_TTL_SECONDS * 1000,
         ),
-      },
+      }),
     );
 
     if (launchContextId !== undefined) {
-      await setResolvedContext(
-        context.db,
-        scope,
-        session.id,
-        launchContext,
-        launchContextId,
+      await withTenantScope(context.db, scope, (bound) =>
+        setResolvedContext(bound, session.id, launchContext, launchContextId),
       );
     }
 

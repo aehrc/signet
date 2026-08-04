@@ -41,6 +41,7 @@ import {
   revokeRefreshTokensForClient,
   toEvaluationClient,
   toEvaluationUser,
+  withTenantScope,
 } from "@signet/db";
 
 import { recordReplayRevocation, recordTokenIssued } from "./audit.js";
@@ -91,10 +92,10 @@ export async function authorizationCodeGrant(
     );
   }
 
-  const redemption = await consumeAuthorizationCode(
+  const redemption = await withTenantScope(
     context.db,
     issuerContext.scope,
-    await hashToken(code),
+    async (bound) => consumeAuthorizationCode(bound, await hashToken(code)),
   );
 
   if (!redemption.ok) {

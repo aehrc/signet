@@ -317,11 +317,13 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
   /** An authorization session on the fixture's client. */
   async function newSession(fixture: Fixture) {
-    return await createAuthorizationSession(db, fixture.clientScope, {
-      redirectUri: "https://app.example.org/callback",
-      expiresAt: new Date(Date.now() + 600_000),
-      requestedScopes: ["patient/Observation.rs"],
-    });
+    return await withTenantScope(db, fixture.clientScope, (bound) =>
+      createAuthorizationSession(bound, {
+        redirectUri: "https://app.example.org/callback",
+        expiresAt: new Date(Date.now() + 600_000),
+        requestedScopes: ["patient/Observation.rs"],
+      }),
+    );
   }
 
   describe("tenant isolation", () => {
@@ -381,24 +383,22 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     it("redeems a code once and returns its session", async () => {
       const fixture = await newFixture();
       const session = await newSession(fixture);
-      await createAuthorizationCode(db, fixture.endpointScope, session, {
-        codeHash: "code-hash-1",
-        expiresAt: new Date(Date.now() + 60_000),
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createAuthorizationCode(bound, session, {
+          codeHash: "code-hash-1",
+          expiresAt: new Date(Date.now() + 60_000),
+        }),
+      );
 
-      const first = await consumeAuthorizationCode(
-        db,
-        fixture.endpointScope,
-        "code-hash-1",
+      const first = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        consumeAuthorizationCode(bound, "code-hash-1"),
       );
       const claimed = expectOk(first);
       expect(claimed.session.id).toBe(session.id);
       expect(claimed.code.consumedAt).not.toBeNull();
 
-      const second = await consumeAuthorizationCode(
-        db,
-        fixture.endpointScope,
-        "code-hash-1",
+      const second = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        consumeAuthorizationCode(bound, "code-hash-1"),
       );
       expect(second).toEqual({ ok: false, reason: "already-consumed" });
     });
@@ -406,16 +406,16 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     it("lets exactly one of two overlapping redemptions win", async () => {
       const fixture = await newFixture();
       const session = await newSession(fixture);
-      await createAuthorizationCode(db, fixture.endpointScope, session, {
-        codeHash: "code-hash-race",
-        expiresAt: new Date(Date.now() + 60_000),
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createAuthorizationCode(bound, session, {
+          codeHash: "code-hash-race",
+          expiresAt: new Date(Date.now() + 60_000),
+        }),
+      );
 
       const [first, second] = await raceOnOneRow((executor) =>
-        consumeAuthorizationCode(
-          executor,
-          fixture.endpointScope,
-          "code-hash-race",
+        withTenantScope(executor, fixture.endpointScope, (bound) =>
+          consumeAuthorizationCode(bound, "code-hash-race"),
         ),
       );
 
@@ -426,15 +426,15 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     it("refuses an expired code without consuming it", async () => {
       const fixture = await newFixture();
       const session = await newSession(fixture);
-      await createAuthorizationCode(db, fixture.endpointScope, session, {
-        codeHash: "code-hash-old",
-        expiresAt: new Date(Date.now() - 1000),
-      });
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createAuthorizationCode(bound, session, {
+          codeHash: "code-hash-old",
+          expiresAt: new Date(Date.now() - 1000),
+        }),
+      );
 
-      const result = await consumeAuthorizationCode(
-        db,
-        fixture.endpointScope,
-        "code-hash-old",
+      const result = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        consumeAuthorizationCode(bound, "code-hash-old"),
       );
       expect(result).toEqual({ ok: false, reason: "expired" });
     });
@@ -443,23 +443,23 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const mine = await newFixture();
       const theirs = await newFixture();
       const session = await newSession(theirs);
-      await createAuthorizationCode(db, theirs.endpointScope, session, {
-        codeHash: "code-hash-foreign",
-        expiresAt: new Date(Date.now() + 60_000),
-      });
+      await withTenantScope(db, theirs.endpointScope, (bound) =>
+        createAuthorizationCode(bound, session, {
+          codeHash: "code-hash-foreign",
+          expiresAt: new Date(Date.now() + 60_000),
+        }),
+      );
 
-      const result = await consumeAuthorizationCode(
-        db,
-        mine.endpointScope,
-        "code-hash-foreign",
+      const result = await withTenantScope(db, mine.endpointScope, (bound) =>
+        consumeAuthorizationCode(bound, "code-hash-foreign"),
       );
       expect(result).toEqual({ ok: false, reason: "not-found" });
 
       // The important half: the attempt must not have spent the victim's code.
-      const untouched = await findAuthorizationCode(
+      const untouched = await withTenantScope(
         db,
         theirs.endpointScope,
-        "code-hash-foreign",
+        (bound) => findAuthorizationCode(bound, "code-hash-foreign"),
       );
       expect(untouched?.consumedAt).toBeNull();
     });
@@ -470,10 +470,12 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       const session = await newSession(theirs);
 
       await expect(
-        createAuthorizationCode(db, mine.endpointScope, session, {
-          codeHash: "code-hash-mismatch",
-          expiresAt: new Date(Date.now() + 60_000),
-        }),
+        withTenantScope(db, mine.endpointScope, (bound) =>
+          createAuthorizationCode(bound, session, {
+            codeHash: "code-hash-mismatch",
+            expiresAt: new Date(Date.now() + 60_000),
+          }),
+        ),
       ).rejects.toThrow(TenantScopeViolationError);
     });
   });

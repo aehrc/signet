@@ -228,10 +228,11 @@ export function federationStartHandler(context: ServerContext) {
       );
     }
 
-    const session = await getLiveAuthorizationSession(
+    const session = await withTenantScope(
       context.db,
       issuerContext.scope,
-      c.req.query("session") ?? "",
+      (bound) =>
+        getLiveAuthorizationSession(bound, c.req.query("session") ?? ""),
     );
     if (session === undefined || session.endUserId !== null) {
       return refuseSignIn(c);

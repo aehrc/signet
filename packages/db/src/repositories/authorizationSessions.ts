@@ -19,11 +19,12 @@
 import { and, eq, gt, isNull, lte } from "drizzle-orm";
 
 import { firstRow, requireRow } from "./rows.js";
+import { executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { authorizationSessions } from "../schema/runtime.js";
 
 import type { Executor } from "./executor.js";
-import type { ClientScope, EndpointScope } from "./scope.js";
+import type { BoundClientScope, BoundEndpointScope } from "./scope.js";
 import type {
   AuthorizationSession,
   NewAuthorizationSession,
@@ -50,11 +51,10 @@ export type AuthorizationSessionInput = Omit<
 
 /** Opens an authorization session for the scoped client. */
 export async function createAuthorizationSession(
-  db: Executor,
-  scope: ClientScope,
+  scope: BoundClientScope,
   input: AuthorizationSessionInput,
 ): Promise<AuthorizationSession> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(authorizationSessions)
     .values({
       ...input,
@@ -67,11 +67,10 @@ export async function createAuthorizationSession(
 
 /** Reads a session belonging to the scoped endpoint, whatever its state. */
 export async function getAuthorizationSession(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   sessionId: string,
 ): Promise<AuthorizationSession | undefined> {
-  const [row] = await db
+  const [row] = await executorFor(scope)
     .select()
     .from(authorizationSessions)
     .where(
@@ -92,12 +91,11 @@ export async function getAuthorizationSession(
  * console's diagnostics use {@link getAuthorizationSession}.
  */
 export async function getLiveAuthorizationSession(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   sessionId: string,
   now?: Date,
 ): Promise<AuthorizationSession | undefined> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .select()
     .from(authorizationSessions)
     .where(
@@ -120,12 +118,11 @@ export async function getLiveAuthorizationSession(
  * concurrency rather than depending on the handler's ordering.
  */
 export async function attachEndUser(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   sessionId: string,
   endUserId: string,
 ): Promise<AuthorizationSession | undefined> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(authorizationSessions)
     .set({ endUserId })
     .where(
@@ -148,13 +145,12 @@ export async function attachEndUser(
  * launch handle must not change what the user consented to.
  */
 export async function setResolvedContext(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   sessionId: string,
   context: LaunchContext,
   launchContextId?: string,
 ): Promise<AuthorizationSession | undefined> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(authorizationSessions)
     .set({
       resolvedContext: context,
@@ -172,12 +168,11 @@ export async function setResolvedContext(
 
 /** Records that the end user granted consent. */
 export async function recordSessionConsent(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   sessionId: string,
   now?: Date,
 ): Promise<AuthorizationSession | undefined> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .update(authorizationSessions)
     .set({ consentGrantedAt: nowValue(now) })
     .where(
@@ -200,11 +195,10 @@ export async function recordSessionConsent(
  * @returns Whether a session was deleted.
  */
 export async function deleteAuthorizationSession(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   sessionId: string,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .delete(authorizationSessions)
     .where(
       and(

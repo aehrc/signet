@@ -120,10 +120,10 @@ async function loadSession(
   issuerContext: ResolvedIssuerContext,
   sessionId: string,
 ): Promise<LoadedSession | undefined> {
-  const session = await getLiveAuthorizationSession(
+  const session = await withTenantScope(
     context.db,
     issuerContext.scope,
-    sessionId,
+    (bound) => getLiveAuthorizationSession(bound, sessionId),
   );
   if (session === undefined) {
     return undefined;
@@ -280,16 +280,13 @@ async function completeAuthorization(
   metadata: ReturnType<typeof requestMetadata>,
 ): Promise<string> {
   const code = generateOpaqueToken();
-  await createAuthorizationCode(
-    context.db,
-    issuerContext.scope,
-    loaded.session,
-    {
+  await withTenantScope(context.db, issuerContext.scope, async (bound) =>
+    createAuthorizationCode(bound, loaded.session, {
       codeHash: await hashToken(code),
       expiresAt: new Date(
         context.clock().getTime() + AUTHORIZATION_CODE_TTL_SECONDS * 1000,
       ),
-    },
+    }),
   );
 
   await recordEndUserEvent(context, issuerContext, metadata, {
@@ -484,11 +481,10 @@ async function attachUser(
   loaded: LoadedSession,
   user: EndUser,
 ): Promise<void> {
-  const attached = await attachEndUser(
+  const attached = await withTenantScope(
     context.db,
     issuerContext.scope,
-    loaded.session.id,
-    user.id,
+    (bound) => attachEndUser(bound, loaded.session.id, user.id),
   );
   // `attachEndUser` matches only while the session has no user, so an absent row
   // means somebody else already authenticated into it. Nothing is overwritten.
@@ -518,11 +514,8 @@ async function attachUser(
   };
   const validation = validateLaunchContext(merged);
   if (validation.ok) {
-    await setResolvedContext(
-      context.db,
-      issuerContext.scope,
-      loaded.session.id,
-      validation.context,
+    await withTenantScope(context.db, issuerContext.scope, (bound) =>
+      setResolvedContext(bound, loaded.session.id, validation.context),
     );
   }
 }
@@ -662,11 +655,8 @@ export function interactionContextHandler(context: ServerContext) {
       );
     }
 
-    await setResolvedContext(
-      context.db,
-      issuerContext.scope,
-      loaded.session.id,
-      validation.context,
+    await withTenantScope(context.db, issuerContext.scope, (bound) =>
+      setResolvedContext(bound, loaded.session.id, validation.context),
     );
 
     return await respondAfterAdvance(
@@ -717,10 +707,8 @@ export function interactionConsentHandler(context: ServerContext) {
       // to the app, which is a worse outcome than the refusal itself.
       const view = await buildView(context, issuerContext, loaded);
 
-      await deleteAuthorizationSession(
-        context.db,
-        issuerContext.scope,
-        loaded.session.id,
+      await withTenantScope(context.db, issuerContext.scope, (bound) =>
+        deleteAuthorizationSession(bound, loaded.session.id),
       );
       await recordEndUserEvent(context, issuerContext, metadata, {
         action: "authorize.denied",
@@ -731,11 +719,8 @@ export function interactionConsentHandler(context: ServerContext) {
       return c.json({ ...view, step: "denied", redirectTo });
     }
 
-    await recordSessionConsent(
-      context.db,
-      issuerContext.scope,
-      loaded.session.id,
-      context.clock(),
+    await withTenantScope(context.db, issuerContext.scope, (bound) =>
+      recordSessionConsent(bound, loaded.session.id, context.clock()),
     );
 
     // Only `remember` mode stores a consent. In `always` mode a stored consent

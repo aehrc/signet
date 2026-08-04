@@ -25,7 +25,11 @@ import { and, eq, exists, gt, isNull, lte, sql } from "drizzle-orm";
 
 import { classifyConsumptionRefusal } from "./predicates.js";
 import { firstRow, requireRow } from "./rows.js";
-import { databaseNow, TenantScopeViolationError } from "./scope.js";
+import {
+  executorFor,
+  databaseNow,
+  TenantScopeViolationError,
+} from "./scope.js";
 import { nowValue } from "./time.js";
 import {
   authorizationCodes,
@@ -34,7 +38,7 @@ import {
 
 import type { Executor } from "./executor.js";
 import type { ConsumptionRefusal } from "./predicates.js";
-import type { EndpointScope } from "./scope.js";
+import type { BoundEndpointScope } from "./scope.js";
 import type {
   AuthorizationCode,
   AuthorizationSession,
@@ -56,8 +60,7 @@ export interface AuthorizationCodeInput {
  * consistency, not a permission decision, so it throws.
  */
 export async function createAuthorizationCode(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   session: AuthorizationSession,
   input: AuthorizationCodeInput,
 ): Promise<AuthorizationCode> {
@@ -67,7 +70,7 @@ export async function createAuthorizationCode(
     );
   }
 
-  const rows = await db
+  const rows = await executorFor(scope)
     .insert(authorizationCodes)
     .values({
       codeHash: input.codeHash,
@@ -97,9 +100,9 @@ export type AuthorizationCodeRedemption =
  * a code belonging to another endpoint is never consumed at all, not consumed and
  * then rejected.
  */
-function belongsToEndpoint(tx: Executor, scope: EndpointScope) {
+function belongsToEndpoint(scope: BoundEndpointScope) {
   return exists(
-    tx
+    executorFor(scope)
       .select({ one: sql`1` })
       .from(authorizationSessions)
       .where(
@@ -120,46 +123,43 @@ function belongsToEndpoint(tx: Executor, scope: EndpointScope) {
  *   previously issued from that code.
  */
 export async function consumeAuthorizationCode(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   codeHash: string,
   now?: Date,
 ): Promise<AuthorizationCodeRedemption> {
-  return await db.transaction(async (tx) => {
-    const claimed = await tx
-      .update(authorizationCodes)
-      .set({ consumedAt: nowValue(now) })
-      .where(
-        and(
-          eq(authorizationCodes.codeHash, codeHash),
-          isNull(authorizationCodes.consumedAt),
-          gt(authorizationCodes.expiresAt, nowValue(now)),
-          belongsToEndpoint(tx, scope),
-        ),
-      )
-      .returning();
+  const claimed = await executorFor(scope)
+    .update(authorizationCodes)
+    .set({ consumedAt: nowValue(now) })
+    .where(
+      and(
+        eq(authorizationCodes.codeHash, codeHash),
+        isNull(authorizationCodes.consumedAt),
+        gt(authorizationCodes.expiresAt, nowValue(now)),
+        belongsToEndpoint(scope),
+      ),
+    )
+    .returning();
 
-    const code = firstRow(claimed);
-    if (code !== undefined) {
-      const sessions = await tx
-        .select()
-        .from(authorizationSessions)
-        .where(eq(authorizationSessions.id, code.sessionId))
-        .limit(1);
+  const code = firstRow(claimed);
+  if (code !== undefined) {
+    const sessions = await executorFor(scope)
+      .select()
+      .from(authorizationSessions)
+      .where(eq(authorizationSessions.id, code.sessionId))
+      .limit(1);
 
-      // The foreign key guarantees the session exists, and the claim above
-      // guaranteed it belongs to this endpoint.
-      return {
-        ok: true,
-        code,
-        session: requireRow(sessions, "select authorization_sessions for code"),
-      };
-    }
+    // The foreign key guarantees the session exists, and the claim above
+    // guaranteed it belongs to this endpoint.
+    return {
+      ok: true,
+      code,
+      session: requireRow(sessions, "select authorization_sessions for code"),
+    };
+  }
 
-    const existing = await findAuthorizationCode(tx, scope, codeHash);
-    const at = now ?? (await databaseNow(tx));
-    return { ok: false, reason: classifyConsumptionRefusal(existing, at) };
-  });
+  const existing = await findAuthorizationCode(scope, codeHash);
+  const at = now ?? (await databaseNow(executorFor(scope)));
+  return { ok: false, reason: classifyConsumptionRefusal(existing, at) };
 }
 
 /**
@@ -169,18 +169,14 @@ export async function consumeAuthorizationCode(
  * code minted elsewhere reads as absent.
  */
 export async function findAuthorizationCode(
-  db: Executor,
-  scope: EndpointScope,
+  scope: BoundEndpointScope,
   codeHash: string,
 ): Promise<AuthorizationCode | undefined> {
-  const rows = await db
+  const rows = await executorFor(scope)
     .select()
     .from(authorizationCodes)
     .where(
-      and(
-        eq(authorizationCodes.codeHash, codeHash),
-        belongsToEndpoint(db, scope),
-      ),
+      and(eq(authorizationCodes.codeHash, codeHash), belongsToEndpoint(scope)),
     )
     .limit(1);
   return firstRow(rows);
