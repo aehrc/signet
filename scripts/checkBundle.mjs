@@ -77,7 +77,7 @@ for (const file of files) {
   console.error(
     "\nThe runtime image has no node_modules. Either make this dependency" +
       "\nbundlable (prefer WASM or pure JS over a native addon), or restore a" +
-      "\nproduction-install stage to deploy/docker/Dockerfile alongside it.",
+      "\nproduction-install stage to the Dockerfile alongside it.",
   );
 }
 

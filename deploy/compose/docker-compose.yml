@@ -73,7 +73,7 @@ services:
   migrate:
     build:
       context: ../..
-      dockerfile: deploy/docker/Dockerfile
+      dockerfile: Dockerfile
     command: ["node", "dist/index.js", "migrate"]
     environment:
       # The only container given the owning identity. It applies the DDL and then
@@ -90,7 +90,7 @@ services:
   bootstrap:
     build:
       context: ../..
-      dockerfile: deploy/docker/Dockerfile
+      dockerfile: Dockerfile
     command: ["node", "dist/index.js", "bootstrap"]
     environment:
       # The serving role, like the server. Creating the first tenant declares the
@@ -108,7 +108,7 @@ services:
   signet:
     build:
       context: ../..
-      dockerfile: deploy/docker/Dockerfile
+      dockerfile: Dockerfile
     environment:
       # The container listens on the same port it is published on, because
       # Pathling shares this namespace and reaches Signet at the *published*
@@ -154,7 +154,7 @@ services:
   seed:
     build:
       context: ../..
-      dockerfile: deploy/docker/Dockerfile
+      dockerfile: Dockerfile
     command: ["node", "scripts/seedStack.mjs"]
     environment:
       # Compose DNS, not the published URL: this container talks to Signet

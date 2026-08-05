@@ -69,7 +69,7 @@ drifting into an accident.
 | `apps/server`        | Hono: OAuth endpoints and admin API.                                                                     |
 | `apps/web`           | React console, end-user auth pages, developer portal.                                                    |
 | `e2e`                | Playwright suite against Signet + Pathling.                                                              |
-| `deploy`             | Dockerfile, Helm chart, and the docker-compose stack the end-to-end suite runs against.                  |
+| `deploy`             | Helm chart, and the docker-compose stack the end-to-end suite runs against.                              |
 | `docs`               | What each resource server wants in a token, and how to run Signet.                                       |
 
 `packages/core` holds anything with real logic, as plain functions with no I/O,
@@ -143,7 +143,7 @@ every issuer identifier with it.
 ## Container image
 
 ```sh
-docker build -f deploy/docker/Dockerfile -t signet:dev .
+docker build -t signet:dev .
 ```
 
 The runtime image ships no `node_modules` - the server is bundled into a single
