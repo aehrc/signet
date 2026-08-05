@@ -4,7 +4,6 @@ description: Multi-tenant SMART on FHIR authorization server
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-home: https://github.com/csiro/signet
 keywords:
   - fhir
   - smart-on-fhir
