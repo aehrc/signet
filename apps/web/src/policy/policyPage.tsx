@@ -295,6 +295,16 @@ function PolicyEditor({
                       type="button"
                       className="btn btn-outline btn-xs"
                       onClick={() => {
+                        // Loading over unsaved work discards it, and nothing can
+                        // bring it back - so that is asked, not assumed.
+                        if (
+                          (changed || issues.length > 0) &&
+                          !globalThis.confirm(
+                            `Load the ${preset.name} preset? Your unsaved edits are replaced and cannot be recovered.`,
+                          )
+                        ) {
+                          return;
+                        }
                         const parsed = parsePolicy(
                           JSON.stringify(preset.policy),
                         );
