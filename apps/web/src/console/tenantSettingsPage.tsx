@@ -206,7 +206,7 @@ function MembersPanel({
             );
           }}
         >
-          <div className="grid items-start gap-3 sm:grid-cols-3">
+          <div className="grid items-start gap-3 sm:grid-cols-2">
             <TextField
               label="Email"
               type="email"
@@ -222,14 +222,11 @@ function MembersPanel({
               options={grantable}
               error={issues["role"]}
             />
-            <div className="flex flex-col">
-              <div className="label invisible">
-                <span className="label-text">Action</span>
-              </div>
-              <SubmitButton pending={setRole.isPending}>
-                Add or change
-              </SubmitButton>
-            </div>
+          </div>
+          <div>
+            <SubmitButton pending={setRole.isPending}>
+              Add or change
+            </SubmitButton>
           </div>
           {setRole.isError && Object.keys(issues).length === 0 ? (
             <ErrorAlert message={describeError(setRole.error)} />
@@ -376,7 +373,7 @@ function TokensPanel({
             );
           }}
         >
-          <div className="grid items-start gap-3 sm:grid-cols-3">
+          <div className="grid items-start gap-3 sm:grid-cols-2">
             <TextField
               label="Name"
               value={name}
@@ -391,12 +388,9 @@ function TokensPanel({
               options={grantable}
               error={issues["role"]}
             />
-            <div className="flex flex-col">
-              <div className="label invisible">
-                <span className="label-text">Action</span>
-              </div>
-              <SubmitButton pending={create.isPending}>Mint token</SubmitButton>
-            </div>
+          </div>
+          <div>
+            <SubmitButton pending={create.isPending}>Mint token</SubmitButton>
           </div>
           {create.isError && Object.keys(issues).length === 0 ? (
             <ErrorAlert message={describeError(create.error)} />
