@@ -8,6 +8,7 @@ import {
   activeEndpointTab,
   clientRoute,
   endpointRoute,
+  endUserRoute,
   tenantRoute,
 } from "./routes.js";
 
@@ -41,6 +42,22 @@ describe("clientRoute", () => {
   });
 });
 
+describe("endUserRoute", () => {
+  it("nests the user under the endpoint's users", () => {
+    expect(endUserRoute("demo", "fhir", "user-1")).toBe(
+      "/console/t/demo/e/fhir/users/user-1",
+    );
+  });
+
+  it("encodes every segment", () => {
+    // A user id is a uuid in practice, but the tenant and endpoint slugs reach here
+    // from the URL, so nothing is trusted to be safe.
+    expect(endUserRoute("a/b", "c d", "u/1")).toBe(
+      "/console/t/a%2Fb/e/c%20d/users/u%2F1",
+    );
+  });
+});
+
 describe("activeEndpointTab", () => {
   it("is the overview for the endpoint's own path", () => {
     expect(activeEndpointTab("demo", "fhir", "/console/t/demo/e/fhir")).toBe(
@@ -59,6 +76,12 @@ describe("activeEndpointTab", () => {
     expect(
       activeEndpointTab("demo", "fhir", "/console/t/demo/e/fhir/clients/app-1"),
     ).toBe("/clients");
+  });
+
+  it("keeps a user's detail page on the Users tab", () => {
+    expect(
+      activeEndpointTab("demo", "fhir", "/console/t/demo/e/fhir/users/user-1"),
+    ).toBe("/users");
   });
 
   it("falls back to the overview for a path outside the endpoint", () => {

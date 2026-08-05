@@ -744,6 +744,135 @@ describe.skipIf(testDatabaseUrl === undefined)(
         });
         expect(refused.status).toBe(401);
       });
+
+      it("fetches one user with every field the list shows", async () => {
+        const created = await adminJson<{ user: { id: string } }>(
+          stack,
+          "POST",
+          endpointPath(stack, "/users"),
+          {
+            credential: owner,
+            body: {
+              username: "fetch-one",
+              displayName: "Fetch One",
+              password: "fetch-one-password",
+              fhirUserReference: "Practitioner/prac-fetch",
+              roles: ["clinician"],
+              attributes: { patients: ["pat-1"], team: "renal" },
+              defaultContext: { patient: "pat-1" },
+            },
+            expect: 201,
+          },
+        );
+
+        const fetched = await adminJson<{ user: Record<string, unknown> }>(
+          stack,
+          "GET",
+          endpointPath(stack, `/users/${created.user.id}`),
+          { credential: owner },
+        );
+
+        // The detail page reads every one of these, and an omission would show as
+        // an empty form field rather than as a failure.
+        expect(fetched.user).toMatchObject({
+          id: created.user.id,
+          username: "fetch-one",
+          displayName: "Fetch One",
+          fhirUser: "Practitioner/prac-fetch",
+          roles: ["clinician"],
+          attributes: { patients: ["pat-1"], team: "renal" },
+          defaultContext: { patient: "pat-1" },
+          isPersona: false,
+          hasPassword: true,
+          disabledAt: null,
+        });
+        expect(Object.keys(fetched.user)).not.toContain("passwordHash");
+
+        // Identical to the element the list returns, so the two cannot drift.
+        const listed = await adminJson<{
+          users: Record<string, unknown>[];
+        }>(stack, "GET", endpointPath(stack, "/users"), { credential: owner });
+        expect(fetched.user).toEqual(
+          listed.users.find((user) => user["id"] === created.user.id) ?? {},
+        );
+      });
+
+      it("answers 404 for an id no user has", async () => {
+        const response = await adminRequest(
+          stack,
+          "GET",
+          endpointPath(stack, "/users/00000000-0000-4000-8000-000000000000"),
+          { credential: owner },
+        );
+        expect(response.status).toBe(404);
+      });
+
+      it("answers 404 for a user belonging to another endpoint of the tenant", async () => {
+        // The lookup is endpoint-scoped, so a neighbouring endpoint's user must be
+        // indistinguishable from one that does not exist.
+        await adminJson(stack, "POST", tenantPath(stack, "/endpoints"), {
+          credential: owner,
+          body: {
+            slug: "neighbour",
+            name: "Neighbouring endpoint",
+            fhirBaseUrl: "https://neighbour.test/fhir",
+          },
+          expect: 201,
+        });
+
+        const elsewhere = await adminJson<{ user: { id: string } }>(
+          stack,
+          "POST",
+          tenantPath(stack, "/endpoints/neighbour/users"),
+          {
+            credential: owner,
+            body: {
+              username: "neighbour-user",
+              displayName: "Neighbour",
+              password: "neighbour-password",
+            },
+            expect: 201,
+          },
+        );
+
+        const response = await adminRequest(
+          stack,
+          "GET",
+          endpointPath(stack, `/users/${elsewhere.user.id}`),
+          { credential: owner },
+        );
+        expect(response.status).toBe(404);
+
+        // ...and is readable on the endpoint it does belong to, so the 404 above is
+        // the scope working rather than the route being broken.
+        const found = await adminRequest(
+          stack,
+          "GET",
+          tenantPath(stack, `/endpoints/neighbour/users/${elsewhere.user.id}`),
+          { credential: owner },
+        );
+        expect(found.status).toBe(200);
+      });
+
+      it("lets a viewer fetch one user but not edit them", async () => {
+        const viewer = { bearer: await stack.mintApiToken("viewer") };
+
+        const read = await adminRequest(
+          stack,
+          "GET",
+          endpointPath(stack, `/users/${stack.user.id}`),
+          { credential: viewer },
+        );
+        expect(read.status).toBe(200);
+
+        const write = await adminRequest(
+          stack,
+          "PATCH",
+          endpointPath(stack, `/users/${stack.user.id}`),
+          { credential: viewer, body: { displayName: "Nope" } },
+        );
+        expect(write.status).toBe(403);
+      });
     });
 
     describe("the launch simulator", () => {

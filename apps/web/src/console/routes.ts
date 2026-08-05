@@ -46,6 +46,15 @@ export function clientRoute(
   return endpointRoute(tenant, endpoint, `/clients/${segment(clientId)}`);
 }
 
+/** One end user's detail page. */
+export function endUserRoute(
+  tenant: string,
+  endpoint: string,
+  userId: string,
+): string {
+  return endpointRoute(tenant, endpoint, `/users/${segment(userId)}`);
+}
+
 /** The tabs an endpoint's pages are reached by, in the order they are shown. */
 export const ENDPOINT_TABS: readonly {
   readonly path: string;
