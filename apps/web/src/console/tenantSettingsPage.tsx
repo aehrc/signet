@@ -222,7 +222,7 @@ function MembersPanel({
               options={grantable}
               error={issues["role"]}
             />
-            <div>
+            <div className="flex flex-col">
               <div className="label invisible">
                 <span className="label-text">Action</span>
               </div>
@@ -391,7 +391,7 @@ function TokensPanel({
               options={grantable}
               error={issues["role"]}
             />
-            <div>
+            <div className="flex flex-col">
               <div className="label invisible">
                 <span className="label-text">Action</span>
               </div>
