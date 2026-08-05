@@ -276,13 +276,24 @@ test.describe("an authenticated operator", () => {
   });
 
   test("shows the launches the other suite performed", async ({ page }) => {
-    await page.goto(`${SIGNET}/console/t/demo/audit`);
+    // Filtered rather than read off the top of the trail. The first page holds the
+    // most recent events, and the rest of this file writes enough of them - a user
+    // created, edited, disabled and deleted per test - to push a launch that
+    // happened seconds earlier off it. Filtering is also what an operator would do.
+    //
+    // Retried around a reload because the launches this asserts on are performed by
+    // another spec file, on another worker: arriving first is a matter of timing,
+    // and the query does not poll on its own.
+    await expect(async () => {
+      await page.goto(`${SIGNET}/console/t/demo/audit`);
+      await page.getByLabel("Actions").fill("token.issued");
 
-    // The trail is the record an operator answers questions from, so a launch
-    // that happened and left nothing behind would be worse than one that failed.
-    await expect(page.getByText("token.issued").first()).toBeVisible({
-      timeout: 20_000,
-    });
+      // The trail is the record an operator answers questions from, so a launch
+      // that happened and left nothing behind would be worse than one that failed.
+      await expect(page.getByText("token.issued").first()).toBeVisible({
+        timeout: 5000,
+      });
+    }).toPass({ timeout: 60_000 });
   });
 });
 
