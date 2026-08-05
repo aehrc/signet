@@ -7,23 +7,21 @@
  * which is a property of the endpoint rather than of the persona - so the page says
  * so where it matters instead of hiding the option.
  *
- * Disabling is offered before deleting. A disabled account stops authenticating on
- * the next request and keeps its name attached to its audit trail; deleting takes
- * that away along with the consents it granted.
+ * The rows carry no buttons. A user's name links to their detail page, where the
+ * edit form and the account state actions live - so that disabling and deleting sit
+ * next to the summary that explains what each of them costs, rather than beside a
+ * row that shows a name and a badge.
  *
  * Author: John Grimes
  */
 
 import { useState } from "react";
+import { Link } from "react-router";
 
+import { endUserRoute } from "./routes.js";
 import { roleAllows, useEndpointContext } from "./useConsole.js";
 import { describeError, issuesByField } from "../api/errors.js";
-import {
-  useCreateEndUser,
-  useDeleteEndUser,
-  useEndUsers,
-  useUpdateEndUser,
-} from "../api/queries.js";
+import { useCreateEndUser, useEndUsers } from "../api/queries.js";
 import {
   CheckboxField,
   FormFooter,
@@ -49,8 +47,6 @@ import type { Column } from "../components/table.js";
 export function UsersPage() {
   const { tenant, endpointSlug, endpoint, role } = useEndpointContext();
   const users = useEndUsers(tenant, endpointSlug);
-  const update = useUpdateEndUser(tenant, endpointSlug);
-  const destroy = useDeleteEndUser(tenant, endpointSlug);
   const [adding, setAdding] = useState(false);
 
   const mayWrite = roleAllows(role, "admin");
@@ -61,7 +57,12 @@ export function UsersPage() {
       header: "User",
       cell: (user) => (
         <div>
-          <div className="font-medium">{user.displayName}</div>
+          <Link
+            className="link link-hover font-medium"
+            to={endUserRoute(tenant, endpointSlug, user.id)}
+          >
+            {user.displayName}
+          </Link>
           <div className="text-base-content/60 font-mono text-xs">
             {user.username}
           </div>
@@ -106,44 +107,6 @@ export function UsersPage() {
             <StatusBadge tone="warning">disabled</StatusBadge>
           </span>
         ),
-    },
-    {
-      key: "actions",
-      header: "",
-      cell: (user) =>
-        mayWrite ? (
-          <div className="flex gap-1">
-            <button
-              type="button"
-              className="btn btn-ghost btn-xs"
-              disabled={update.isPending}
-              onClick={() => {
-                update.mutate({
-                  userId: user.id,
-                  body: { disabled: user.disabledAt === null },
-                });
-              }}
-            >
-              {user.disabledAt === null ? "Disable" : "Enable"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-xs text-error"
-              disabled={destroy.isPending}
-              onClick={() => {
-                if (
-                  globalThis.confirm(
-                    `Delete ${user.username}? Their stored consents and tokens go with them. Disabling keeps the audit trail readable.`,
-                  )
-                ) {
-                  destroy.mutate(user.id);
-                }
-              }}
-            >
-              Delete
-            </button>
-          </div>
-        ) : null,
     },
   ];
 
@@ -195,12 +158,6 @@ export function UsersPage() {
         {users.isPending ? <Loading /> : null}
         {users.isError ? (
           <ErrorAlert message={describeError(users.error)} />
-        ) : null}
-        {update.isError ? (
-          <ErrorAlert message={describeError(update.error)} />
-        ) : null}
-        {destroy.isError ? (
-          <ErrorAlert message={describeError(destroy.error)} />
         ) : null}
         {users.data === undefined ? null : (
           <DataTable

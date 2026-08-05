@@ -29,6 +29,8 @@
  * Author: John Grimes
  */
 
+import { attributeStringList } from "@signet/core";
+
 import type { LaunchContext } from "@signet/core";
 
 /** The end user fields the candidate lists are derived from. */
@@ -69,17 +71,6 @@ function toLogicalId(value: string, key: ContextKey): string | undefined {
   return /^[A-Za-z0-9\-.]{1,64}$/.test(id) ? id : undefined;
 }
 
-/** Reads a string array from an attributes blob, ignoring anything else. */
-function attributeList(
-  attributes: Readonly<Record<string, unknown>>,
-  name: string,
-): readonly string[] {
-  const value = attributes[name];
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string")
-    : [];
-}
-
 /**
  * Collects the identifiers a user may select for a context key.
  *
@@ -109,7 +100,7 @@ export function contextCandidates(
     raw.push(fromDefault);
   }
 
-  raw.push(...attributeList(source.attributes, ATTRIBUTE_KEYS[key]));
+  raw.push(...attributeStringList(source.attributes, ATTRIBUTE_KEYS[key]));
 
   const seen = new Set<string>();
   const candidates: string[] = [];

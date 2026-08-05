@@ -34,6 +34,15 @@ export const APP = process.env["APP_BASE_URL"] ?? "http://localhost:4000";
 export const CONSOLE_STORAGE_STATE = "playwright/.auth/console.json";
 
 /**
+ * Where the read-only console session is saved.
+ *
+ * A second session rather than a re-sign-in per test, for the same reason as the
+ * first. It exists so that a role below admin can be shown to read everything and
+ * be offered nothing - an assertion the admin session cannot make.
+ */
+export const VIEWER_STORAGE_STATE = "playwright/.auth/viewer.json";
+
+/**
  * The accounts and clients the seed creates.
  *
  * The administrator's credentials are read from `SIGNET_E2E_*` rather than from
@@ -50,6 +59,11 @@ export const SEED = {
   adminEmail: process.env["SIGNET_E2E_ADMIN_EMAIL"] ?? "ops@example.org",
   adminPassword:
     process.env["SIGNET_E2E_ADMIN_PASSWORD"] ?? "correct horse battery staple",
+  /** Holds `viewer` in the demo tenant, and may therefore write nothing. */
+  viewerEmail: process.env["SIGNET_E2E_VIEWER_EMAIL"] ?? "viewer@example.org",
+  viewerPassword:
+    process.env["SIGNET_E2E_VIEWER_PASSWORD"] ??
+    "read only horse battery staple",
   backendClientId: "stub-backend",
   backendSecret: "stub-backend-secret-value-0000",
   /** The public client the stub app launches as. */

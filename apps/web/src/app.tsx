@@ -32,6 +32,7 @@ import { RequestsPage } from "./console/requestsPage.js";
 import { CONSOLE_BASE, SIGN_IN_ROUTE } from "./console/routes.js";
 import { SignInPage } from "./console/signInPage.js";
 import { TenantSettingsPage } from "./console/tenantSettingsPage.js";
+import { UserDetailPage } from "./console/userDetailPage.js";
 import { UsersPage } from "./console/usersPage.js";
 import {
   ConsentPage,
@@ -76,6 +77,7 @@ export function App() {
               <Route path="clients/:clientId" element={<ClientDetailPage />} />
               <Route path="policy" element={<PolicyPage />} />
               <Route path="users" element={<UsersPage />} />
+              <Route path="users/:userId" element={<UserDetailPage />} />
               <Route path="keys" element={<KeysPage />} />
               <Route path="identity" element={<FederationPage />} />
               <Route path="requests" element={<RequestsPage />} />

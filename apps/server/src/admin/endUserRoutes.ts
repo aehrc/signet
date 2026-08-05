@@ -101,6 +101,25 @@ export function registerEndUserRoutes(
     return c.json({ users: users.map(endUserView) });
   });
 
+  /**
+   * Fetches one user.
+   *
+   * The body is `endUserView` under a `user` key - the same element the list
+   * returns - so the console's detail page and its table can never disagree about
+   * what a user is. Read parity with the list: `viewer` and above.
+   */
+  router.get(
+    `${ENDPOINT_PATH}/users/:userId`,
+    requireRole("viewer"),
+    async (c) => {
+      const route = await loadEndUserRoute(c, context);
+      if (route instanceof Response) {
+        return route;
+      }
+      return c.json({ user: endUserView(route.user) });
+    },
+  );
+
   /** Creates a local account or a persona. */
   router.post(`${ENDPOINT_PATH}/users`, requireRole("admin"), async (c) => {
     const { scope, endpoint } = c.get("endpoint");

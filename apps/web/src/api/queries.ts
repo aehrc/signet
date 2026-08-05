@@ -91,6 +91,12 @@ export const keys = {
     tenant,
     endpoint,
   ],
+  endUser: (tenant: string, endpoint: string, userId: string): QueryKey => [
+    "user",
+    tenant,
+    endpoint,
+    userId,
+  ],
   policies: (tenant: string, endpoint: string): QueryKey => [
     "policies",
     tenant,
@@ -468,6 +474,19 @@ export function useEndUsers(tenant: string, endpoint: string) {
   });
 }
 
+/** One end user or persona. */
+export function useEndUser(tenant: string, endpoint: string, userId: string) {
+  return useQuery({
+    queryKey: keys.endUser(tenant, endpoint, userId),
+    queryFn: async ({ signal }) =>
+      await getField<"user", EndUserView>(
+        endUserPath(tenant, endpoint, userId),
+        "user",
+        signal,
+      ),
+  });
+}
+
 /** Creates a user or persona. */
 export function useCreateEndUser(tenant: string, endpoint: string) {
   const client = useQueryClient();
@@ -499,9 +518,39 @@ export function useUpdateEndUser(tenant: string, endpoint: string) {
         "user",
         change.body,
       ),
-    onSuccess: async () => {
+    onSuccess: async (_user, change) => {
+      await client.invalidateQueries({
+        queryKey: keys.endUser(tenant, endpoint, change.userId),
+      });
       await client.invalidateQueries({
         queryKey: keys.users(tenant, endpoint),
+      });
+    },
+  });
+}
+
+/**
+ * Sets a user's password.
+ *
+ * Its own hook rather than a field on the patch, mirroring the API: replacing a
+ * credential is a separate operation with its own audit event. The detail query is
+ * invalidated because the summary says whether a password is set.
+ */
+export function useSetEndUserPassword(
+  tenant: string,
+  endpoint: string,
+  userId: string,
+) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (password: string) => {
+      await post<void>(endUserPath(tenant, endpoint, userId, "/password"), {
+        password,
+      });
+    },
+    onSuccess: async () => {
+      await client.invalidateQueries({
+        queryKey: keys.endUser(tenant, endpoint, userId),
       });
     },
   });
@@ -514,7 +563,12 @@ export function useDeleteEndUser(tenant: string, endpoint: string) {
     mutationFn: async (userId: string) => {
       await remove(endUserPath(tenant, endpoint, userId));
     },
-    onSuccess: async () => {
+    onSuccess: async (_result, userId) => {
+      // The detail query is removed rather than invalidated: the row is gone, and
+      // refetching it would answer 404 into a page the browser is leaving.
+      client.removeQueries({
+        queryKey: keys.endUser(tenant, endpoint, userId),
+      });
       await client.invalidateQueries({
         queryKey: keys.users(tenant, endpoint),
       });
