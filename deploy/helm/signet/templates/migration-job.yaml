@@ -1,50 +1,85 @@
-{{- if .Values.migrations.enabled }}
+{{- if .Values.signet.migrations.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "signet.fullname" . }}-migrate
+  name: {{ .Release.Name }}-migrate
   labels:
     {{- include "signet.labels" . | nindent 4 }}
   annotations:
+{{- if .Values.signet.postgres.enabled }}
+    # `post-install` rather than `pre-install`, because the bundled database is
+    # an ordinary resource and Helm creates those only after the pre-install
+    # hooks have finished - a pre-install migration would be waiting for a
+    # StatefulSet that Helm has not yet been asked to create. Upgrades stay on
+    # `pre-upgrade`, so a migration that fails does not replace running pods.
+    # The first install is the one case where the server starts before its
+    # schema exists; its pods fail readiness and recover once this Job has run.
+    "helm.sh/hook": post-install,pre-upgrade
+{{- else }}
     "helm.sh/hook": pre-install,pre-upgrade
+{{- end }}
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
-  backoffLimit: {{ .Values.migrations.backoffLimit }}
-  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  backoffLimit: {{ .Values.signet.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.signet.migrations.activeDeadlineSeconds }}
   template:
     metadata:
+      # Deliberately not `signet.selectorLabels`: these pods must not match the
+      # Service's selector, or a migration would briefly be an endpoint of the
+      # server it is migrating for.
       labels:
-        {{- include "signet.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: migrate
+        app.kubernetes.io/name: {{ printf "%s-migrate" .Chart.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
       restartPolicy: Never
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
+      automountServiceAccountToken: false
+      imagePullSecrets: {{ toJson .Values.signet.imagePullSecrets }}
+      securityContext: {{ toJson .Values.signet.podSecurityContext }}
+      {{- if .Values.signet.postgres.enabled }}
+      initContainers:
+        # The bundled database is created in the same install as this Job, so it
+        # is not necessarily accepting connections yet. `migrate` does not retry
+        # a refused connection; it fails, and the Job's backoff would spend the
+        # deadline on a database that was only starting.
+        - name: wait-for-database
+          image: {{ .Values.signet.postgres.image | quote }}
+          imagePullPolicy: {{ .Values.signet.postgres.imagePullPolicy | quote }}
+          securityContext: {{ toJson .Values.signet.securityContext }}
+          command:
+            - sh
+            - -c
+            # `-U` and `-d` are not optional here: the pod runs as a uid with no
+            # entry in the image's passwd file, and `pg_isready` left to infer a
+            # user name from it does not attempt the connection at all.
+            - until pg_isready -h {{ .Release.Name }}-postgres-service -p 5432 -U {{ .Values.signet.postgres.owner | quote }} -d {{ .Values.signet.postgres.database | quote }}; do sleep 2; done
+          resources: {{ toJson .Values.signet.resources }}
       {{- end }}
-      serviceAccountName: {{ include "signet.serviceAccountName" . }}
-      securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: migrate
-          image: {{ include "signet.image" . }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ .Values.signet.image | quote }}
+          imagePullPolicy: {{ .Values.signet.imagePullPolicy | quote }}
+          securityContext: {{ toJson .Values.signet.securityContext }}
           command: ["node", "dist/index.js", "migrate"]
           env:
             # The only pod spec in this chart carrying the owning identity. The
-            # server's Deployment gets `signet.env`, which is the serving role and
-            # nothing else, and `scripts/checkChartCredentials.mjs` asserts the
-            # difference against the rendered output.
+            # server's Deployment gets `signet.env`, which is the serving role
+            # and nothing else, and `scripts/checkChartCredentials.mjs` asserts
+            # the difference against the rendered output.
             {{- include "signet.migrationEnv" . | nindent 12 }}
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if gt (len .Values.signet.secretConfig) 0 }}
+          envFrom:
+            - secretRef:
+                name: {{ printf "%s-config" .Release.Name | quote }}
+          {{- end }}
+          resources: {{ toJson .Values.signet.resources }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: tmp
           emptyDir: {}
+      nodeSelector: {{ toJson .Values.signet.nodeSelector }}
+      affinity: {{ toJson .Values.signet.affinity }}
+      tolerations: {{ toJson .Values.signet.tolerations }}
 {{- end }}

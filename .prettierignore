@@ -19,5 +19,3 @@ bun.lock
 
 # Helm templates are Go templates, not YAML - Prettier cannot parse them.
 deploy/helm/*/templates
-deploy/helm/*/charts
-deploy/helm/*/Chart.lock

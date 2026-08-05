@@ -1,28 +1,35 @@
-Signet {{ .Chart.AppVersion }} is installed as {{ include "signet.fullname" . }}.
+{{- $publicUrl := index .Values.signet.config "SIGNET_PUBLIC_URL" | default "(SIGNET_PUBLIC_URL is not set)" -}}
+Signet {{ .Chart.AppVersion }} is installed as release {{ .Release.Name }}.
 
-Public origin: {{ .Values.publicUrl }}
+Public origin: {{ $publicUrl }}
 
 Endpoint issuers are derived from that origin:
 
-    {{ .Values.publicUrl }}/t/{tenant}/e/{endpoint}
+    {{ $publicUrl }}/t/{tenant}/e/{endpoint}
 
 To put Signet in front of a FHIR server, point that server's authorization
 issuer at the endpoint. For Pathling that is three settings:
 
     PATHLING_AUTH_ENABLED:  "true"
-    PATHLING_AUTH_ISSUER:   "{{ .Values.publicUrl }}/t/{tenant}/e/{endpoint}"
+    PATHLING_AUTH_ISSUER:   "{{ $publicUrl }}/t/{tenant}/e/{endpoint}"
     PATHLING_AUTH_AUDIENCE: "<your FHIR base URL>"
 
-{{ if not .Values.masterKey.existingSecret -}}
+Watch the rollout with:
+
+    kubectl rollout status deployment/{{ .Release.Name }}-deployment
+
+{{ if not .Values.signet.masterKey.existingSecret -}}
 WARNING: no existing secret was supplied for the signing-key envelope key, so
-the chart generated one into {{ include "signet.fullname" . }}-master-key. It is
-annotated `helm.sh/resource-policy: keep` so upgrades preserve it. Back it up -
-if it is lost, every stored endpoint signing key becomes undecryptable and every
-client must be re-registered. For production, manage it externally and set
-`masterKey.existingSecret`.
+the chart generated one into {{ .Release.Name }}-master-key. It is annotated
+`helm.sh/resource-policy: keep` so upgrades preserve it. Back it up - if it is
+lost, every stored endpoint signing key becomes undecryptable and every client
+must be re-registered. For production, manage it externally and set
+`signet.masterKey.existingSecret`.
 {{- end }}
-{{ if .Values.postgresql.enabled -}}
-NOTE: the bundled PostgreSQL subchart is enabled. It is convenient for
-evaluation and connectathons. For production, disable it and point
-`database.existingSecret` at a managed instance with backups.
+{{ if .Values.signet.postgres.enabled -}}
+NOTE: the bundled PostgreSQL is enabled. It is one replica with no backups,
+which is enough for evaluation and connectathons and nothing else. For
+production, set `signet.postgres.enabled=false` and point
+`signet.database.existingSecret` and `signet.database.ownerExistingSecret` at a
+managed instance.
 {{- end }}

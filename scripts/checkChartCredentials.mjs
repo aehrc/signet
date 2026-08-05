@@ -30,35 +30,35 @@ const OWNER_VARIABLE = "SIGNET_DATABASE_OWNER_URL";
 /**
  * Secret keys that would give a pod the owning identity.
  *
- * `postgres-password` is the bundled subchart's superuser, which is the owning
- * identity when the subchart is enabled. `ownerUrl` is the key of the secret the
+ * `ownerPassword` is the bundled PostgreSQL's superuser, which is the owning
+ * identity when that database is enabled. `ownerUrl` is the key of the secret the
  * chart creates for an external database. Either present in the Job's spec, and
  * either appearing in the server's would hand the server owner authority by
  * another name - which is why the check looks for the keys and not only for the
  * variable.
  */
-const OWNER_SECRET_KEYS = ["postgres-password", "ownerUrl"];
+const OWNER_SECRET_KEYS = ["ownerPassword", "ownerUrl"];
 
 /**
  * The configurations to render.
  *
  * Both database paths, because they compose the two identities differently: the
- * bundled subchart already has a superuser and a non-owning user, and an external
+ * bundled PostgreSQL creates a superuser and a non-owning role, and an external
  * database has whatever two roles the operator supplied.
  */
 const CONFIGURATIONS = [
-  { name: "bundled PostgreSQL subchart", flags: [] },
+  { name: "bundled PostgreSQL", flags: [] },
   {
     name: "external database with existing secrets",
     flags: [
       "--set",
-      "postgresql.enabled=false",
+      "signet.postgres.enabled=false",
       "--set",
-      "database.existingSecret=external-db",
+      "signet.database.existingSecret=external-db",
       "--set",
-      "database.ownerExistingSecret=external-db-owner",
+      "signet.database.ownerExistingSecret=external-db-owner",
       "--set",
-      "masterKey.existingSecret=external-key",
+      "signet.masterKey.existingSecret=external-key",
     ],
   },
   {
@@ -68,13 +68,13 @@ const CONFIGURATIONS = [
     name: "external database with chart-created secrets",
     flags: [
       "--set",
-      "postgresql.enabled=false",
+      "signet.postgres.enabled=false",
       "--set",
-      "database.url=postgres://app:pw@db:5432/signet",
+      "signet.database.url=postgres://app:pw@db:5432/signet",
       "--set",
-      "database.ownerUrl=postgres://owner:pw@db:5432/signet",
+      "signet.database.ownerUrl=postgres://owner:pw@db:5432/signet",
       "--set",
-      "masterKey.existingSecret=external-key",
+      "signet.masterKey.existingSecret=external-key",
     ],
   },
 ];

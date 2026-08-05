@@ -154,8 +154,8 @@ Prefer WASM or pure-JS dependencies.
 ## Kubernetes
 
 ```sh
-helm dependency update deploy/helm/signet
-helm install signet deploy/helm/signet --set publicUrl=https://signet.example.org
+helm install signet deploy/helm/signet \
+  --set signet.config.SIGNET_PUBLIC_URL=https://signet.example.org
 ```
 
 The chart bundles PostgreSQL for evaluation. For production, disable it and
@@ -163,11 +163,15 @@ point at a managed instance:
 
 ```sh
 helm install signet deploy/helm/signet \
-  --set postgresql.enabled=false \
-  --set database.existingSecret=signet-db \
-  --set masterKey.existingSecret=signet-master-key \
-  --set publicUrl=https://signet.example.org
+  --set signet.postgres.enabled=false \
+  --set signet.database.existingSecret=signet-db \
+  --set signet.database.ownerExistingSecret=signet-db-owner \
+  --set signet.masterKey.existingSecret=signet-master-key \
+  --set signet.config.SIGNET_PUBLIC_URL=https://signet.example.org
 ```
+
+Every value the chart takes is documented in
+[deploy/helm/signet/README.md](deploy/helm/signet/README.md).
 
 `SIGNET_MASTER_KEY` encrypts endpoint signing keys at rest. Manage it outside
 the chart in production and back it up somewhere other than the database it

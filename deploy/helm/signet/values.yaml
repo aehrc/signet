@@ -1,151 +1,154 @@
-replicaCount: 2
-
-image:
-  repository: ghcr.io/csiro/signet
-  tag: "" # defaults to .Chart.AppVersion
-  pullPolicy: IfNotPresent
-
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
-
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
-
-# The public origin Signet is reached on. Endpoint issuers are derived from it
-# (`{publicUrl}/t/{tenant}/e/{endpoint}`), so changing it invalidates every
-# issuer value already published to FHIR servers and registered clients.
-publicUrl: https://signet.example.org
-
-logLevel: info
-
-# A deployment runs two database identities, and keeping them apart is what makes
-# the tenant isolation policies bind Signet at all.
+# Signet - multi-tenant SMART App Launch authorization server.
 #
-#   - The serving role is what the server connects as. It must own none of
-#     Signet's tables: Postgres exempts a table's owner from that table's
-#     row-level security policies, so a server connecting as the owner would be
-#     unconstrained by them. The server verifies this at startup and refuses to
-#     serve if the role it is given is exempt.
-#   - The owning identity applies migrations and issues the grants that follow
-#     them. It reaches only the migration Job, never the server's pods.
-#
-# With the bundled subchart, both already exist and nothing has to be created:
-# `postgresql.auth.username` below is the serving role, and the subchart's
-# `postgres` superuser is the owning identity. Pointing at an external database
-# means creating the serving role yourself and supplying both URLs here; see the
-# tenant isolation section of docs/operations.md for the statements.
-database:
-  # Ignored when postgresql.enabled is true.
-  existingSecret: ""
-  existingSecretKey: url
-  # The serving role's connection URL.
-  url: ""
-  # The owning identity, read only by the migration Job. Required when
-  # postgresql.enabled is false, and it must name a different role from the one
-  # above - `migrate` refuses two URLs naming the same role, because that
-  # deployment could not enforce isolation.
-  ownerExistingSecret: ""
-  ownerExistingSecretKey: ownerUrl
-  ownerUrl: ""
+# See README.md in this directory for what every value below controls.
 
-# Envelope key protecting endpoint signing keys at rest. Never set this in
-# values for a real deployment - supply it through existingSecret.
-masterKey:
-  existingSecret: ""
-  existingSecretKey: masterKey
-  value: ""
+signet:
+  image: "ghcr.io/csiro/signet:0.1.0"
+  imagePullPolicy: "Always"
+  imagePullSecrets: []
+  replicas: 2
 
-migrations:
-  # Runs as a pre-install/pre-upgrade hook Job before new pods roll out.
-  enabled: true
-  backoffLimit: 3
-  activeDeadlineSeconds: 600
+  # Non-sensitive environment for the server and the migration job. Any variable
+  # Signet reads can go here; `.env.example` in the repository root lists them.
+  #
+  # SIGNET_PUBLIC_URL is the public origin Signet is reached on, and endpoint
+  # issuers are derived from it (`{origin}/t/{tenant}/e/{endpoint}`) - so
+  # changing it invalidates every issuer already published to FHIR servers and
+  # registered clients.
+  config:
+    SIGNET_PUBLIC_URL: "https://signet.example.org"
+    SIGNET_LOG_LEVEL: "info"
 
-service:
-  type: ClusterIP
-  port: 80
-  targetPort: 3000
-  annotations: {}
+  # Sensitive environment, written to a Secret and mounted by reference. Same
+  # shape as `config`, which takes precedence for a name set in both: Kubernetes
+  # lets a container's `env` override its `envFrom`.
+  secretConfig: {}
 
-ingress:
-  enabled: false
-  className: nginx
-  annotations: {}
-  hosts:
-    - host: signet.example.org
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
+  # Envelope key protecting endpoint signing keys at rest. Leave both unset and
+  # the chart generates one on install and keeps it across upgrades; a real
+  # deployment should manage it outside the chart and set `existingSecret`.
+  masterKey:
+    existingSecret: ~
+    existingSecretKey: "masterKey"
+    value: ~
 
-resources:
-  requests:
-    cpu: 100m
-    memory: 256Mi
-  limits:
-    cpu: "1"
-    memory: 512Mi
+  # A deployment runs two database identities, and keeping them apart is what
+  # makes the tenant isolation policies bind Signet at all. The serving role
+  # owns none of Signet's tables, because Postgres exempts a table's owner from
+  # that table's row-level security policies. The owning identity applies
+  # migrations and reaches only the migration job.
+  #
+  # Ignored when `postgres.enabled` is true, which creates both.
+  database:
+    existingSecret: ~
+    existingSecretKey: "url"
+    url: ~
+    ownerExistingSecret: ~
+    ownerExistingSecretKey: "ownerUrl"
+    ownerUrl: ~
 
-autoscaling:
-  enabled: false
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
+  # Applies migrations and grants the serving role, as a Helm hook that runs
+  # before new pods roll out.
+  migrations:
+    enabled: true
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
 
-podDisruptionBudget:
-  enabled: true
-  minAvailable: 1
+  service:
+    type: "ClusterIP"
+    port: 80
+    targetPort: 3000
+    annotations: {}
 
-podAnnotations: {}
-podLabels: {}
+  resources: {}
+    # requests:
+    #   cpu: "100m"
+    #   memory: "256Mi"
+    # limits:
+    #   cpu: "1"
+    #   memory: "512Mi"
 
-podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  runAsGroup: 1000
-  fsGroup: 1000
-  seccompProfile:
-    type: RuntimeDefault
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
 
-securityContext:
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
-  capabilities:
-    drop:
-      - ALL
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
 
-nodeSelector: {}
-tolerations: []
-affinity: {}
+  podAnnotations: {}
+  podLabels: {}
 
-# Spread replicas across nodes so a single node loss cannot take the
-# authorization server offline.
-topologySpreadConstraints:
-  - maxSkew: 1
-    topologyKey: kubernetes.io/hostname
-    whenUnsatisfiable: ScheduleAnyway
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: "RuntimeDefault"
 
-extraEnv: []
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - "ALL"
 
-postgresql:
-  enabled: true
-  auth:
-    # The serving role. A custom user in this subchart owns the database but none
-    # of the tables in it, because the migrations are applied by the superuser
-    # below - which is what leaves the policies applying to this role.
-    username: signet
-    database: signet
-    # Leave unset to have the subchart generate a password.
-    password: ""
-    # The owning identity, used by the migration Job alone. Leave unset to have
-    # the subchart generate one. A password supplied here reaches the Job as part
-    # of a connection URL, so it must be URL-safe; pass a complete URL through
-    # `database.ownerExistingSecret` if it is not.
-    postgresPassword: ""
-  primary:
+  terminationGracePeriodSeconds: 30
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # Spread replicas across nodes so a single node loss cannot take the
+  # authorization server offline.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: "kubernetes.io/hostname"
+      whenUnsatisfiable: "ScheduleAnyway"
+
+  # A bundled PostgreSQL, for evaluation and connectathons. It is a single
+  # replica with no backups; a production deployment should turn this off and
+  # point `database` at a managed instance.
+  #
+  # Both identities are created here: `owner` owns the schema the migrations
+  # create, and `servingRole` - created on first initialisation and owning
+  # nothing - is what the server connects as. Leave the passwords unset and the
+  # chart generates them on install and reuses them on upgrade.
+  postgres:
+    enabled: true
+    image: "postgres:18-alpine"
+    imagePullPolicy: "Always"
+    database: "signet"
+    owner: "signet"
+    ownerPassword: ~
+    servingRole: "signet_app"
+    servingPassword: ~
+    resources: {}
+      # requests:
+      #   cpu: "250m"
+      #   memory: "512Mi"
+      # limits:
+      #   cpu: "2"
+      #   memory: "2Gi"
     persistence:
       enabled: true
-      size: 8Gi
+      size: "8Gi"
+      storageClassName: ~
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 70
+      runAsGroup: 70
+      fsGroup: 70
+      seccompProfile:
+        type: "RuntimeDefault"
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - "ALL"
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}

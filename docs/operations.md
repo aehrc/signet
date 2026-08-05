@@ -297,42 +297,54 @@ endpoint signs with.
 ## Deploying on Kubernetes
 
 ```sh
-helm dependency update deploy/helm/signet
 helm install signet deploy/helm/signet \
-  --set publicUrl=https://signet.example.org
+  --set signet.config.SIGNET_PUBLIC_URL=https://signet.example.org
 ```
 
 That brings up Signet with a bundled PostgreSQL, which is for evaluation. For
-production, point at a managed instance and supply both secrets from outside the
-chart:
+production, point at a managed instance and supply all three secrets from
+outside the chart. Two database URLs, because a deployment runs two database
+identities - see the tenant isolation section above for the statements that
+create the serving role:
 
 ```sh
 kubectl create secret generic signet-db --from-literal=url='postgres://…'
+kubectl create secret generic signet-db-owner --from-literal=ownerUrl='postgres://…'
 kubectl create secret generic signet-master-key --from-literal=masterKey='…'
 
 helm install signet deploy/helm/signet \
-  --set postgresql.enabled=false \
-  --set database.existingSecret=signet-db \
-  --set masterKey.existingSecret=signet-master-key \
-  --set publicUrl=https://signet.example.org \
-  --set ingress.enabled=true \
-  --set ingress.hosts[0].host=signet.example.org
+  --set signet.postgres.enabled=false \
+  --set signet.database.existingSecret=signet-db \
+  --set signet.database.ownerExistingSecret=signet-db-owner \
+  --set signet.masterKey.existingSecret=signet-master-key \
+  --set signet.config.SIGNET_PUBLIC_URL=https://signet.example.org
 ```
 
-What the chart does that is worth knowing:
+Every value is documented in `deploy/helm/signet/README.md`. What the chart does
+that is worth knowing:
 
-- **Migrations run as a pre-install and pre-upgrade hook**, before new pods roll
-  out. An upgrade whose migration fails does not replace the running pods.
+- **Migrations run as a hook**, before new pods roll out. An upgrade whose
+  migration fails does not replace the running pods. The exception is the first
+  install with the bundled PostgreSQL, where the database is created in the same
+  operation and the migration runs after it; the server's pods fail readiness
+  until it has.
 - **Probes are separate.** `/healthz` is liveness and answers from the process
   alone; `/readyz` is readiness and consults the database, so a pod that has lost
   its connection is taken out of the load balancer rather than restarted.
 - **The root filesystem is read-only** and the container runs unprivileged, with
-  `/tmp` mounted as the one writable path.
+  `/tmp` mounted as the one writable path, and no service account token is
+  mounted.
 - **Replicas spread across nodes** by default, and a PodDisruptionBudget keeps one
   available through a drain. An authorization server that is down takes every app
   in front of it with it.
-- **Autoscaling is off by default.** Turn it on with `autoscaling.enabled=true`;
-  the defaults scale on CPU between two and ten replicas.
+- **Autoscaling is off by default.** Turn it on with
+  `signet.autoscaling.enabled=true`; the defaults scale on CPU between two and
+  ten replicas.
+- **Resource requests and limits are unset by default**, which leaves the pods in
+  the BestEffort QoS class. Set `signet.resources` on any cluster with contention
+  on it.
+- **The chart ships no Ingress.** What belongs there is specific to the cluster,
+  and the next section is what it has to do.
 
 ### What to put in front of it
 

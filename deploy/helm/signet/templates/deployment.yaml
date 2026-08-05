@@ -1,12 +1,12 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "signet.fullname" . }}
+  name: {{ .Release.Name }}-deployment
   labels:
     {{- include "signet.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
+  {{- if not .Values.signet.autoscaling.enabled }}
+  replicas: {{ .Values.signet.replicas }}
   {{- end }}
   selector:
     matchLabels:
@@ -20,38 +20,53 @@ spec:
     metadata:
       labels:
         {{- include "signet.selectorLabels" . | nindent 8 }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
+        {{- range $label, $value := .Values.signet.podLabels }}
+        {{ $label }}: {{ $value | quote }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
-      annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      # The checksum rolls the pods when `secretConfig` changes. Without it the
+      # Deployment is unchanged by an edit to the Secret it reads, and the
+      # running pods keep the old values with nothing to show for it.
+      annotations: {{ toJson (merge (dict "signet/secret-config-checksum" (toJson .Values.signet.secretConfig | sha256sum)) .Values.signet.podAnnotations) }}
     spec:
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      serviceAccountName: {{ include "signet.serviceAccountName" . }}
-      securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      # Signet never calls the Kubernetes API, so it is given no token to do it
+      # with.
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.signet.terminationGracePeriodSeconds }}
+      imagePullSecrets: {{ toJson .Values.signet.imagePullSecrets }}
+      securityContext: {{ toJson .Values.signet.podSecurityContext }}
       containers:
         - name: signet
-          image: {{ include "signet.image" . }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ .Values.signet.image | quote }}
+          imagePullPolicy: {{ .Values.signet.imagePullPolicy | quote }}
+          securityContext: {{ toJson .Values.signet.securityContext }}
           ports:
             - name: http
-              containerPort: {{ .Values.service.targetPort }}
+              containerPort: {{ .Values.signet.service.targetPort }}
               protocol: TCP
           env:
             {{- include "signet.env" . | nindent 12 }}
+          {{- if gt (len .Values.signet.secretConfig) 0 }}
+          # Before `env`, so a name set in both `config` and `secretConfig`
+          # takes its value from `config`: Kubernetes lets `env` override
+          # `envFrom`.
+          envFrom:
+            - secretRef:
+                name: {{ printf "%s-config" .Release.Name | quote }}
+          {{- end }}
+          # `/healthz` answers from the process alone and `/readyz` consults the
+          # database, so a pod that has lost its connection is taken out of the
+          # load balancer rather than restarted.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /healthz
               port: http
-            initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 3
             failureThreshold: 3
@@ -59,32 +74,22 @@ spec:
             httpGet:
               path: /readyz
               port: http
-            initialDelaySeconds: 3
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+          resources: {{ toJson .Values.signet.resources }}
           volumeMounts:
-            # readOnlyRootFilesystem is on, so anything needing writes is mounted.
+            # readOnlyRootFilesystem is on, so anything needing writes is
+            # mounted.
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: tmp
           emptyDir: {}
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.topologySpreadConstraints }}
+      nodeSelector: {{ toJson .Values.signet.nodeSelector }}
+      affinity: {{ toJson .Values.signet.affinity }}
+      tolerations: {{ toJson .Values.signet.tolerations }}
+      {{- with .Values.signet.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- range . }}
         - {{ toYaml . | nindent 10 | trim }}

@@ -1,33 +1,16 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "signet.fullname" . }}
+  name: {{ .Release.Name }}-service
   labels:
     {{- include "signet.labels" . | nindent 4 }}
-  {{- with .Values.service.annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+  annotations: {{ toJson .Values.signet.service.annotations }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .Values.signet.service.type | quote }}
   ports:
-    - port: {{ .Values.service.port }}
+    - port: {{ .Values.signet.service.port }}
       targetPort: http
       protocol: TCP
       name: http
   selector:
     {{- include "signet.selectorLabels" . | nindent 4 }}
----
-{{- if .Values.serviceAccount.create }}
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: {{ include "signet.serviceAccountName" . }}
-  labels:
-    {{- include "signet.labels" . | nindent 4 }}
-  {{- with .Values.serviceAccount.annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-automountServiceAccountToken: false
-{{- end }}

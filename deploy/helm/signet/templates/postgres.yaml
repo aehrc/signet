@@ -1,0 +1,190 @@
+{{- if .Values.signet.postgres.enabled }}
+{{- /*
+The bundled PostgreSQL: a credential, the script that creates the serving role,
+a Service and a single-replica StatefulSet. Grouped in one file because none of
+them means anything without the others.
+
+It runs the two database identities a real deployment runs. `postgres.owner` is
+the superuser the image creates, and it is what applies the migrations, so it
+owns the schema. `postgres.servingRole` is created on first initialisation,
+owns nothing, and is what the server connects as - which is what leaves the
+row-level security policies applying to it. Nothing is granted here: `migrate`
+issues the grants immediately after applying the migrations, as the owning
+identity and under the same advisory lock, so a table added by a later
+migration cannot ship ungranted.
+
+This is one replica with no backups and no failover. It exists so the chart can
+be installed and looked at; a deployment that matters points `database` at a
+managed instance instead.
+*/ -}}
+{{- $secretName := printf "%s-postgres-secret" .Release.Name }}
+{{- $existing := (lookup "v1" "Secret" .Release.Namespace $secretName) | default dict }}
+{{- $existingData := (get $existing "data") | default dict }}
+{{- /*
+Read back from the cluster before generating, because a password generated
+afresh on every upgrade would no longer be the one the running database was
+initialised with. Alphanumeric, because the migration Job composes it into a
+connection URL.
+*/ -}}
+{{- $ownerPassword := .Values.signet.postgres.ownerPassword | default (get $existingData "ownerPassword" | b64dec) | default (randAlphaNum 32) }}
+{{- $servingPassword := .Values.signet.postgres.servingPassword | default (get $existingData "servingPassword" | b64dec) | default (randAlphaNum 32) }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  labels:
+    {{- include "signet.labels" . | nindent 4 }}
+  annotations:
+    # Kept on uninstall, like the volume it belongs to. A retained volume whose
+    # password had been deleted would be a database nobody could open.
+    "helm.sh/resource-policy": keep
+type: Opaque
+stringData:
+  ownerPassword: {{ $ownerPassword | quote }}
+  servingPassword: {{ $servingPassword | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-postgres-initdb
+  labels:
+    {{- include "signet.labels" . | nindent 4 }}
+data:
+  # Run once by the `postgres` image, which executes every file in
+  # `/docker-entrypoint-initdb.d` in name order when the data directory is
+  # empty. It therefore does not run against a retained volume, which is
+  # correct: the role already exists there.
+  #
+  # The password is read from the environment rather than written here, so it
+  # does not sit in a ConfigMap.
+  10-serving-role.sh: |
+    #!/bin/sh
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+      -c "create role \"$SIGNET_SERVING_ROLE\" login password '$SIGNET_SERVING_PASSWORD'"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres-service
+  labels:
+    {{- include "signet.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: postgres
+      protocol: TCP
+      name: postgres
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels:
+    {{- include "signet.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-postgres-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {{ toJson .Values.signet.postgres.podSecurityContext }}
+      containers:
+        - name: postgres
+          image: {{ .Values.signet.postgres.image | quote }}
+          imagePullPolicy: {{ .Values.signet.postgres.imagePullPolicy | quote }}
+          securityContext: {{ toJson .Values.signet.postgres.securityContext }}
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.signet.postgres.owner | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.signet.postgres.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName | quote }}
+                  key: ownerPassword
+            # A subdirectory of the mount, because a volume presented with a
+            # `lost+found` in it is not an empty data directory as far as
+            # `initdb` is concerned.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: SIGNET_SERVING_ROLE
+              value: {{ .Values.signet.postgres.servingRole | quote }}
+            - name: SIGNET_SERVING_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName | quote }}
+                  key: servingPassword
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          startupProbe:
+            exec:
+              command:
+                ["pg_isready", "-U", {{ .Values.signet.postgres.owner | quote }}, "-d", {{ .Values.signet.postgres.database | quote }}]
+            periodSeconds: 2
+            timeoutSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            exec:
+              command:
+                ["pg_isready", "-U", {{ .Values.signet.postgres.owner | quote }}, "-d", {{ .Values.signet.postgres.database | quote }}]
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                ["pg_isready", "-U", {{ .Values.signet.postgres.owner | quote }}, "-d", {{ .Values.signet.postgres.database | quote }}]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources: {{ toJson .Values.signet.postgres.resources }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: initdb
+          configMap:
+            name: {{ .Release.Name }}-postgres-initdb
+            defaultMode: 0555
+        {{- if not .Values.signet.postgres.persistence.enabled }}
+        # Ephemeral: the database is lost when the pod is replaced.
+        - name: data
+          emptyDir: {}
+        {{- end }}
+      nodeSelector: {{ toJson .Values.signet.postgres.nodeSelector }}
+      affinity: {{ toJson .Values.signet.postgres.affinity }}
+      tolerations: {{ toJson .Values.signet.postgres.tolerations }}
+  {{- if .Values.signet.postgres.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- with .Values.signet.postgres.persistence.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.signet.postgres.persistence.size | quote }}
+  {{- end }}
+{{- end }}

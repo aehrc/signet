@@ -171,20 +171,37 @@ jobs:
       - uses: azure/setup-helm@v4
 
       - name: Lint chart
-        run: |
-          helm dependency update deploy/helm/signet
-          helm lint deploy/helm/signet
+        run: helm lint deploy/helm/signet
 
       - name: Render chart in each database configuration
         run: |
           helm template signet deploy/helm/signet > /dev/null
           helm template signet deploy/helm/signet \
-            --set postgresql.enabled=false \
-            --set database.existingSecret=external-db \
-            --set database.ownerExistingSecret=external-db-owner \
-            --set masterKey.existingSecret=external-key \
-            --set ingress.enabled=true \
-            --set autoscaling.enabled=true > /dev/null
+            --set signet.postgres.persistence.enabled=false \
+            --set signet.secretConfig.SIGNET_SMTP_PASSWORD=hunter2 > /dev/null
+          helm template signet deploy/helm/signet \
+            --set signet.postgres.enabled=false \
+            --set signet.database.existingSecret=external-db \
+            --set signet.database.ownerExistingSecret=external-db-owner \
+            --set signet.masterKey.existingSecret=external-key \
+            --set signet.autoscaling.enabled=true > /dev/null
+
+      # An external database with neither URL supplied is a deployment that
+      # cannot enforce tenant isolation, so the chart refuses to render it. A
+      # guard that stopped firing would be invisible without this.
+      - name: Assert an external database without both identities is refused
+        run: |
+          if helm template signet deploy/helm/signet \
+            --set signet.postgres.enabled=false > /dev/null 2>&1; then
+            echo "The chart rendered without a database URL, which it must refuse"
+            exit 1
+          fi
+          if helm template signet deploy/helm/signet \
+            --set signet.postgres.enabled=false \
+            --set signet.database.url=postgres://app:pw@db:5432/signet > /dev/null 2>&1; then
+            echo "The chart rendered without an owner URL, which it must refuse"
+            exit 1
+          fi
 
       # Rendering proves the templates are valid; this proves they keep the two
       # database identities apart. A chart that leaks the owning identity into the

@@ -2,7 +2,7 @@ apiVersion: v2
 name: signet
 description: Multi-tenant SMART on FHIR authorization server
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "0.1.0"
 keywords:
   - fhir
@@ -11,9 +11,4 @@ keywords:
   - openid-connect
   - authorization-server
 maintainers:
-  - name: Signet maintainers
-dependencies:
-  - name: postgresql
-    version: "16.x.x"
-    repository: https://charts.bitnami.com/bitnami
-    condition: postgresql.enabled
+  - name: John Grimes

@@ -1,35 +1,35 @@
-{{- if .Values.autoscaling.enabled }}
+{{- if .Values.signet.autoscaling.enabled }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "signet.fullname" . }}
+  name: {{ .Release.Name }}-hpa
   labels:
     {{- include "signet.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "signet.fullname" . }}
-  minReplicas: {{ .Values.autoscaling.minReplicas }}
-  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+    name: {{ .Release.Name }}-deployment
+  minReplicas: {{ .Values.signet.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.signet.autoscaling.maxReplicas }}
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+          averageUtilization: {{ .Values.signet.autoscaling.targetCPUUtilizationPercentage }}
 {{- end }}
+{{- if .Values.signet.podDisruptionBudget.enabled }}
 ---
-{{- if .Values.podDisruptionBudget.enabled }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "signet.fullname" . }}
+  name: {{ .Release.Name }}-pdb
   labels:
     {{- include "signet.labels" . | nindent 4 }}
 spec:
-  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.signet.podDisruptionBudget.minAvailable }}
   selector:
     matchLabels:
       {{- include "signet.selectorLabels" . | nindent 6 }}
