@@ -81,8 +81,7 @@ Requires [Bun](https://bun.sh) and Docker.
 
 ```sh
 bun install
-cp .env.example .env
-bun run test          # unit and integration tests
+bun run test          # unit and integration tests, via bun test
 bun run lint          # eslint
 bun run typecheck     # tsc
 ```
@@ -92,6 +91,37 @@ Run the server and the console:
 ```sh
 bun run --filter @signet/server dev     # http://localhost:3000
 bun run --filter @signet/web dev        # http://localhost:5173
+```
+
+### Configuration
+
+There are three `.env.example` files, one beside each thing that reads an
+environment, and each says which of its variables belongs in which file:
+
+```sh
+cp .env.example .env.test               # the test database, for `bun run test`
+cp apps/server/.env.example apps/server/.env.local
+cp packages/db/.env.example packages/db/.env.local
+```
+
+Two rules of Bun's decide the layout, and both are easy to be caught by. Bun loads
+`.env` files from the working directory and does not search upwards, not even for its
+own `bun run --filter`, which runs each script in its package's directory. And
+`bun test` sets `NODE_ENV=test`, in which mode Bun loads `.env` and `.env.test` but
+**not** `.env.local`.
+
+So `SIGNET_TEST_DATABASE_URL` goes in `.env.test`, and leaving it out is quiet rather
+than loud: the integration suites skip themselves and the run still reports success.
+If `bun run test` finishes in a couple of seconds with a `skip` count, that is what
+has happened.
+
+`bun run test` covers everything. A single package or file is a path filter, from the
+repository root:
+
+```sh
+bun test packages/db/src/                       # one package
+bun test packages/core/src/policy/              # one directory
+bun test src/ -t "refuses a wrong password"     # by test name
 ```
 
 ## The end-to-end stack
