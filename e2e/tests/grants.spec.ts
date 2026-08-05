@@ -16,10 +16,11 @@
  *
  * **The sign-in budget.** End-user sign-ins are rate limited to ten a minute per
  * address, and the whole suite runs from one address inside a single window. This
- * file spends three of them and `launch.spec.ts` spends four, so a run has three
- * to spare for retries. Anything added here that signs in interactively has to
- * come out of that, which is why the negative cases below are driven through the
- * request context wherever the browser is not what is being tested.
+ * file spends three of them, `launch.spec.ts` spends four and `console.spec.ts`
+ * spends one, so a run has two to spare for retries. Anything added here that signs
+ * in interactively has to come out of that, which is why the negative cases below
+ * are driven through the request context wherever the browser is not what is being
+ * tested.
  *
  * Author: John Grimes
  */

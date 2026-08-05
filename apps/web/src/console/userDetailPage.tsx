@@ -21,7 +21,11 @@ import { Link, useParams } from "react-router";
 import { endpointRoute } from "./routes.js";
 import { roleAllows, useEndpointContext } from "./useConsole.js";
 import { describeError, issuesByField } from "../api/errors.js";
-import { useEndUser, useUpdateEndUser } from "../api/queries.js";
+import {
+  useEndUser,
+  useSetEndUserPassword,
+  useUpdateEndUser,
+} from "../api/queries.js";
 import { ListField, SubmitButton, TextField } from "../components/fields.js";
 import {
   DetailList,
@@ -236,6 +240,66 @@ export function UserDetailPage() {
           ) : null}
         </form>
       </Panel>
+
+      {current.isPersona || !mayWrite ? null : (
+        <SetPasswordPanel userId={current.id} />
+      )}
     </>
+  );
+}
+
+/**
+ * The Set password form, for a local account.
+ *
+ * Its own component so that the password lives in its own state and is unmounted
+ * with the panel: a value held in the page's state would survive navigating between
+ * users. Rendered only for a local account - a persona has no password, and
+ * offering the operation would only surface the API's refusal.
+ */
+function SetPasswordPanel({ userId }: Readonly<{ readonly userId: string }>) {
+  const { tenant, endpointSlug } = useEndpointContext();
+  const setPassword = useSetEndUserPassword(tenant, endpointSlug, userId);
+  const [password, setPasswordValue] = useState("");
+
+  const issues = issuesByField(setPassword.error);
+
+  return (
+    <Panel title="Set password">
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setPassword.mutate(password, {
+            // Cleared on success rather than on submit, so a refusal leaves the
+            // value to correct rather than making it be typed again.
+            onSuccess: () => {
+              setPasswordValue("");
+            },
+          });
+        }}
+      >
+        <TextField
+          label="New password"
+          type="password"
+          value={password}
+          onChange={setPasswordValue}
+          error={issues["password"]}
+          hint="At least 8 characters. Replaces the current password immediately."
+          autoComplete="new-password"
+          required
+        />
+
+        {setPassword.isError && Object.keys(issues).length === 0 ? (
+          <ErrorAlert message={describeError(setPassword.error)} />
+        ) : null}
+        {setPassword.isSuccess ? <InfoAlert>Password set.</InfoAlert> : null}
+
+        <div>
+          <SubmitButton pending={setPassword.isPending}>
+            Set password
+          </SubmitButton>
+        </div>
+      </form>
+    </Panel>
   );
 }

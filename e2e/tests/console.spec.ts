@@ -4,6 +4,7 @@
 
 import { expect, test } from "@playwright/test";
 
+import { signIn, startLaunch } from "../support/launch.js";
 import { CONSOLE_STORAGE_STATE, SEED, SIGNET } from "../support/stack.js";
 
 import type { Page } from "@playwright/test";
@@ -67,6 +68,13 @@ function uniqueUsername(prefix: string): string {
  *
  * The session comes from `auth.setup.ts`, which signs in once for the whole
  * suite. The sign-in *refusal* gets its own block, with no stored session.
+ *
+ * The sign-in budget: end-user sign-ins are rate limited to ten a minute per
+ * address, and the whole suite runs from one address inside a single window. This
+ * file spends one of them - the launch that proves a console-set password is real,
+ * which is the only way to prove it - alongside three in `grants.spec.ts` and four
+ * in `launch.spec.ts`, leaving two for retries. The console sign-ins below are
+ * administrator sign-ins, on a different limiter, and do not come out of it.
  */
 
 test.describe("an authenticated operator", () => {
@@ -160,6 +168,54 @@ test.describe("an authenticated operator", () => {
     await page.goto(USERS);
     const row = page.getByRole("row").filter({ hasText: username });
     await expect(row.getByText("none").first()).toBeVisible();
+  });
+
+  test("sets a password the user can then sign in with", async ({ page }) => {
+    const username = uniqueUsername("password-target");
+    await createUser(page, {
+      username,
+      displayName: "Password Target",
+      password: "the-first-password",
+    });
+
+    await page.getByRole("link", { name: "Password Target" }).click();
+    await page.getByLabel("New password").fill("the-second-password");
+    await page.getByRole("button", { name: "Set password" }).click();
+
+    await expect(page.getByText("Password set.")).toBeVisible();
+    // Cleared, so the value is not left sitting in the DOM of a page an operator
+    // may walk away from.
+    await expect(page.getByLabel("New password")).toHaveValue("");
+
+    // The proof is a sign-in, not the confirmation message. Signet's sign-in page
+    // only exists inside an authorization request, so this drives a real launch.
+    // It spends one of the suite's end-user sign-ins; see the header's budget note.
+    await startLaunch(page);
+    await signIn(page, { username, password: "the-second-password" });
+
+    // Reaching the next step of the launch is what says the credential was
+    // accepted; a refusal would leave the page on its sign-in form.
+    await expect(
+      page.getByRole("heading", { name: "Choose a record" }),
+    ).toBeVisible();
+  });
+
+  test("offers a persona no password form", async ({ page }) => {
+    const username = uniqueUsername("persona-target");
+    await createUser(page, {
+      username,
+      displayName: "Persona Target",
+      isPersona: true,
+    });
+
+    await page.getByRole("link", { name: "Persona Target" }).click();
+
+    // A persona has no password by definition, so the console never offers the
+    // operation the API would refuse.
+    await expect(page.getByLabel("New password")).toHaveCount(0);
+    await expect(page.getByText("Password", { exact: true })).toHaveCount(0);
+    // Everything else is the same page.
+    await expect(page.getByLabel("Display name")).toHaveValue("Persona Target");
   });
 
   test("shows the launches the other suite performed", async ({ page }) => {

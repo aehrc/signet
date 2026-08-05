@@ -529,6 +529,33 @@ export function useUpdateEndUser(tenant: string, endpoint: string) {
   });
 }
 
+/**
+ * Sets a user's password.
+ *
+ * Its own hook rather than a field on the patch, mirroring the API: replacing a
+ * credential is a separate operation with its own audit event. The detail query is
+ * invalidated because the summary says whether a password is set.
+ */
+export function useSetEndUserPassword(
+  tenant: string,
+  endpoint: string,
+  userId: string,
+) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (password: string) => {
+      await post<void>(endUserPath(tenant, endpoint, userId, "/password"), {
+        password,
+      });
+    },
+    onSuccess: async () => {
+      await client.invalidateQueries({
+        queryKey: keys.endUser(tenant, endpoint, userId),
+      });
+    },
+  });
+}
+
 /** Deletes a user. */
 export function useDeleteEndUser(tenant: string, endpoint: string) {
   const client = useQueryClient();
