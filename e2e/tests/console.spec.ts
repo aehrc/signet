@@ -17,6 +17,34 @@ import type { Page } from "@playwright/test";
 /** The endpoint's Users tab, where every user journey below starts. */
 const USERS = `${SIGNET}/console/t/demo/e/pathling/users`;
 
+/** An account one of these tests owns for the duration of the test. */
+interface TestUser {
+  readonly username: string;
+  readonly displayName: string;
+  readonly password: string;
+}
+
+/**
+ * Names an account no other test and no earlier run has used.
+ *
+ * The display name carries the suffix as well as the username, and that is not
+ * belt-and-braces: these tests find their user by the name in the table, the suite
+ * is expected to run against a stack it did not create, and two runs against one
+ * long-lived stack would otherwise leave two rows called "Edit Target" and every
+ * lookup after the first would be ambiguous. The random half is for workers that
+ * start inside the same millisecond.
+ *
+ * @param prefix - What this account is for, so a leftover row explains itself.
+ */
+function uniqueUser(prefix: string): TestUser {
+  const suffix = `${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
+  return {
+    username: `${prefix}-${suffix}`,
+    displayName: `${prefix} ${suffix}`,
+    password: `${prefix}-password`,
+  };
+}
+
 /**
  * Creates a user through the console's own Add user form.
  *
@@ -26,40 +54,28 @@ const USERS = `${SIGNET}/console/t/demo/e/pathling/users`;
  * a long way away.
  *
  * @param page - The browser page to drive.
- * @param user - The account to create.
- * @param user.username - The username, which must be unique on the endpoint.
- * @param user.displayName - The display name to create it with.
- * @param user.password - The password, for a local account.
- * @param user.isPersona - True to create a password-free persona instead.
+ * @param user - The account to create, from {@link uniqueUser}.
+ * @param isPersona - True to create a password-free persona instead.
  */
 async function createUser(
   page: Page,
-  user: {
-    readonly username: string;
-    readonly displayName: string;
-    readonly password?: string;
-    readonly isPersona?: boolean;
-  },
+  user: TestUser,
+  isPersona = false,
 ): Promise<void> {
   await page.goto(USERS);
   await page.getByRole("button", { name: "Add user" }).click();
-  if (user.isPersona === true) {
+  if (isPersona) {
     await page.getByLabel("This is a persona").check();
   }
   await page.getByLabel("Username").fill(user.username);
   await page.getByLabel("Display name").fill(user.displayName);
-  if (user.isPersona !== true) {
-    await page.getByLabel("Password").fill(user.password ?? "");
+  if (!isPersona) {
+    await page.getByLabel("Password").fill(user.password);
   }
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(
     page.getByRole("link", { name: user.displayName }),
   ).toBeVisible();
-}
-
-/** A username no other run of the suite will have used. */
-function uniqueUsername(prefix: string): string {
-  return `${prefix}-${String(Date.now())}`;
 }
 
 /**
@@ -111,26 +127,23 @@ test.describe("an authenticated operator", () => {
   });
 
   test("edits a user from their detail page", async ({ page }) => {
-    const username = uniqueUsername("edit-target");
-    await createUser(page, {
-      username,
-      displayName: "Edit Target",
-      password: "edit-target-password",
-    });
+    const user = uniqueUser("edit-target");
+    await createUser(page, user);
+    const renamed = `${user.displayName} renamed`;
 
     // The rows carry no action buttons any more: the name is a link, and the
     // actions live with the detail that explains them (FR-007).
-    const row = page.getByRole("row").filter({ hasText: username });
+    const row = page.getByRole("row").filter({ hasText: user.username });
     await expect(row.getByRole("button", { name: "Disable" })).toHaveCount(0);
     await expect(row.getByRole("button", { name: "Delete" })).toHaveCount(0);
 
-    await page.getByRole("link", { name: "Edit Target" }).click();
+    await page.getByRole("link", { name: user.displayName }).click();
 
     // The summary states what cannot be edited, and the form pre-fills what can.
-    await expect(page.getByText(username).first()).toBeVisible();
-    await expect(page.getByLabel("Display name")).toHaveValue("Edit Target");
+    await expect(page.getByText(user.username).first()).toBeVisible();
+    await expect(page.getByLabel("Display name")).toHaveValue(user.displayName);
 
-    await page.getByLabel("Display name").fill("Edited Target");
+    await page.getByLabel("Display name").fill(renamed);
     await page.getByLabel("fhirUser reference").fill("Practitioner/e2e-1");
     await page.getByLabel("Roles").fill("clinician\nresearcher");
     await page.getByRole("button", { name: "Save" }).click();
@@ -139,25 +152,51 @@ test.describe("an authenticated operator", () => {
     await expect(page.getByText("User saved.")).toBeVisible();
 
     await page.goto(USERS);
-    await expect(
-      page.getByRole("link", { name: "Edited Target" }),
-    ).toBeVisible();
+    await expect(page.getByRole("link", { name: renamed })).toBeVisible();
     // The username is what consents and the audit trail name them by, and no edit
     // may change it (FR-008).
-    await expect(page.getByText(username).first()).toBeVisible();
+    await expect(page.getByText(user.username).first()).toBeVisible();
+  });
+
+  test("sends nothing when Save is pressed with nothing changed", async ({
+    page,
+  }) => {
+    const user = uniqueUser("unchanged-target");
+    await createUser(page, user);
+
+    await page.getByRole("link", { name: user.displayName }).click();
+    await expect(page.getByLabel("Display name")).toHaveValue(user.displayName);
+
+    const patches: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "PATCH") {
+        patches.push(request.url());
+      }
+    });
+
+    // FR-009. Asserted as an absent request rather than as an absent visible
+    // effect: an empty patch is accepted by the API and writes an audit event
+    // saying nothing changed, which the page cannot show and nobody can undo.
+    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+    await expect(page.getByText("Nothing has changed.")).toBeVisible();
+
+    // Editing enables it and undoing the edit disables it again, so the state is
+    // about what the form holds rather than about the page having loaded.
+    await page.getByLabel("Display name").fill("Something Else");
+    await expect(page.getByRole("button", { name: "Save" })).toBeEnabled();
+    await page.getByLabel("Display name").fill(user.displayName);
+    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    expect(patches).toEqual([]);
   });
 
   test("clears a fhirUser reference rather than storing an empty one", async ({
     page,
   }) => {
-    const username = uniqueUsername("clear-target");
-    await createUser(page, {
-      username,
-      displayName: "Clear Target",
-      password: "clear-target-password",
-    });
+    const user = uniqueUser("clear-target");
+    await createUser(page, user);
 
-    await page.getByRole("link", { name: "Clear Target" }).click();
+    await page.getByRole("link", { name: user.displayName }).click();
     await page.getByLabel("fhirUser reference").fill("Practitioner/e2e-2");
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("User saved.")).toBeVisible();
@@ -171,19 +210,15 @@ test.describe("an authenticated operator", () => {
     await page.reload();
     await expect(page.getByLabel("fhirUser reference")).toHaveValue("");
     await page.goto(USERS);
-    const row = page.getByRole("row").filter({ hasText: username });
+    const row = page.getByRole("row").filter({ hasText: user.username });
     await expect(row.getByText("none").first()).toBeVisible();
   });
 
   test("sets a password the user can then sign in with", async ({ page }) => {
-    const username = uniqueUsername("password-target");
-    await createUser(page, {
-      username,
-      displayName: "Password Target",
-      password: "the-first-password",
-    });
+    const user = uniqueUser("password-target");
+    await createUser(page, user);
 
-    await page.getByRole("link", { name: "Password Target" }).click();
+    await page.getByRole("link", { name: user.displayName }).click();
     await page.getByLabel("New password").fill("the-second-password");
     await page.getByRole("button", { name: "Set password" }).click();
 
@@ -196,7 +231,10 @@ test.describe("an authenticated operator", () => {
     // only exists inside an authorization request, so this drives a real launch.
     // It spends one of the suite's end-user sign-ins; see the header's budget note.
     await startLaunch(page);
-    await signIn(page, { username, password: "the-second-password" });
+    await signIn(page, {
+      username: user.username,
+      password: "the-second-password",
+    });
 
     // Reaching the next step of the launch is what says the credential was
     // accepted; a refusal would leave the page on its sign-in form.
@@ -206,34 +244,26 @@ test.describe("an authenticated operator", () => {
   });
 
   test("offers a persona no password form", async ({ page }) => {
-    const username = uniqueUsername("persona-target");
-    await createUser(page, {
-      username,
-      displayName: "Persona Target",
-      isPersona: true,
-    });
+    const user = uniqueUser("persona-target");
+    await createUser(page, user, true);
 
-    await page.getByRole("link", { name: "Persona Target" }).click();
+    await page.getByRole("link", { name: user.displayName }).click();
 
     // A persona has no password by definition, so the console never offers the
     // operation the API would refuse.
     await expect(page.getByLabel("New password")).toHaveCount(0);
     await expect(page.getByText("Password", { exact: true })).toHaveCount(0);
     // Everything else is the same page.
-    await expect(page.getByLabel("Display name")).toHaveValue("Persona Target");
+    await expect(page.getByLabel("Display name")).toHaveValue(user.displayName);
   });
 
   test("disables and re-enables a user from their detail page", async ({
     page,
   }) => {
-    const username = uniqueUsername("state-target");
-    await createUser(page, {
-      username,
-      displayName: "State Target",
-      password: "state-target-password",
-    });
+    const user = uniqueUser("state-target");
+    await createUser(page, user);
 
-    await page.getByRole("link", { name: "State Target" }).click();
+    await page.getByRole("link", { name: user.displayName }).click();
     await expect(page.getByRole("button", { name: "Disable" })).toBeVisible();
 
     await page.getByRole("button", { name: "Disable" }).click();
@@ -248,14 +278,10 @@ test.describe("an authenticated operator", () => {
   });
 
   test("deletes a user and returns to the users table", async ({ page }) => {
-    const username = uniqueUsername("delete-target");
-    await createUser(page, {
-      username,
-      displayName: "Delete Target",
-      password: "delete-target-password",
-    });
+    const user = uniqueUser("delete-target");
+    await createUser(page, user);
 
-    await page.getByRole("link", { name: "Delete Target" }).click();
+    await page.getByRole("link", { name: user.displayName }).click();
 
     // The confirmation has to say what is lost and what the alternative is, so it
     // is asserted rather than merely accepted.
@@ -268,9 +294,9 @@ test.describe("an authenticated operator", () => {
     await page.getByRole("button", { name: "Delete user" }).click();
 
     await expect(page).toHaveURL(USERS);
-    await expect(page.getByRole("link", { name: "Delete Target" })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByRole("link", { name: user.displayName }),
+    ).toHaveCount(0);
     expect(confirmations[0]).toContain("consents and tokens");
     expect(confirmations[0]).toContain("Disabling");
   });

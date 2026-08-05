@@ -91,6 +91,12 @@ export function UserDetailPage() {
     patients: patients ?? loaded.patients,
     encounters: encounters ?? loaded.encounters,
   };
+  // Computed for the render, not only for the submit: an empty patch must not be
+  // sent, and the reason it will not be has to be visible before the button is
+  // pressed. The API accepts an empty patch and records an audit event saying
+  // nothing changed, which is a write nobody asked for and nobody can undo.
+  const patch = endUserPatch(edited, current);
+  const hasChanges = Object.keys(patch).length > 0;
 
   return (
     <>
@@ -165,10 +171,11 @@ export function UserDetailPage() {
           className="flex flex-col gap-3"
           onSubmit={(event) => {
             event.preventDefault();
-            update.mutate({
-              userId: current.id,
-              body: endUserPatch(edited, current),
-            });
+            // Guarded here as well as by the disabled button, because that button
+            // is a hint and this is the rule.
+            if (hasChanges) {
+              update.mutate({ userId: current.id, body: patch });
+            }
           }}
         >
           <TextField
@@ -243,8 +250,15 @@ export function UserDetailPage() {
           {update.isSuccess ? <InfoAlert>User saved.</InfoAlert> : null}
 
           {mayWrite ? (
-            <div>
-              <SubmitButton pending={update.isPending}>Save</SubmitButton>
+            <div className="flex items-center gap-3">
+              <SubmitButton pending={update.isPending} disabled={!hasChanges}>
+                Save
+              </SubmitButton>
+              {hasChanges ? null : (
+                <span className="text-base-content/60 text-xs">
+                  Nothing has changed.
+                </span>
+              )}
             </div>
           ) : null}
         </form>
