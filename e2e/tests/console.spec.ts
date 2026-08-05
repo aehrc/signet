@@ -5,7 +5,12 @@
 import { expect, test } from "@playwright/test";
 
 import { signIn, startLaunch } from "../support/launch.js";
-import { CONSOLE_STORAGE_STATE, SEED, SIGNET } from "../support/stack.js";
+import {
+  CONSOLE_STORAGE_STATE,
+  SEED,
+  SIGNET,
+  VIEWER_STORAGE_STATE,
+} from "../support/stack.js";
 
 import type { Page } from "@playwright/test";
 
@@ -278,6 +283,40 @@ test.describe("an authenticated operator", () => {
     await expect(page.getByText("token.issued").first()).toBeVisible({
       timeout: 20_000,
     });
+  });
+});
+
+test.describe("a viewer-role operator", () => {
+  test.use({ storageState: VIEWER_STORAGE_STATE });
+
+  test("reads a user's detail page and is offered no write", async ({
+    page,
+  }) => {
+    // The seeded clinician, read-only: this block writes nothing, so using a
+    // shared fixture cannot disturb the suites that launch as them.
+    await page.goto(USERS);
+    await page.getByRole("link", { name: "Dr Casey Clinician" }).click();
+
+    // Everything is visible.
+    await expect(page.getByLabel("Display name")).toHaveValue(
+      "Dr Casey Clinician",
+    );
+    await expect(page.getByLabel("fhirUser reference")).toHaveValue(
+      "Practitioner/clinician-1",
+    );
+
+    // And nothing is editable. Both directions of FR-010: the inputs are disabled,
+    // and the controls that write are absent rather than present-and-failing.
+    await expect(page.getByLabel("Display name")).toBeDisabled();
+    await expect(page.getByLabel("fhirUser reference")).toBeDisabled();
+    await expect(page.getByLabel("Roles")).toBeDisabled();
+    await expect(page.getByLabel("Patients")).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+    await expect(page.getByLabel("New password")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Disable" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Delete user" })).toHaveCount(
+      0,
+    );
   });
 });
 

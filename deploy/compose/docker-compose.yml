@@ -105,6 +105,31 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # A second console identity, so the suite can prove that a role below admin is
+  # shown everything and offered nothing. There is no admin API route that creates
+  # a console account - an invitation flow that made identities from an email
+  # address would let a tenant admin mint them on a shared deployment - so the only
+  # way to have one is the bootstrap command. It arrives as an owner of the tenant
+  # it bootstraps into and the seed downgrades it; bootstrap leaves an existing
+  # membership alone, so re-running the stack does not promote it back.
+  bootstrap-viewer:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["node", "dist/index.js", "bootstrap"]
+    environment:
+      SIGNET_DATABASE_URL: postgres://signet_app:signet_app@postgres:5432/signet
+      SIGNET_BOOTSTRAP_TENANT: demo
+      SIGNET_BOOTSTRAP_TENANT_NAME: Demo Hospital
+      SIGNET_BOOTSTRAP_EMAIL: viewer@example.org
+      SIGNET_BOOTSTRAP_PASSWORD: read only horse battery staple
+      SIGNET_BOOTSTRAP_NAME: Viewer
+    depends_on:
+      # After the first bootstrap rather than beside it: both would otherwise race
+      # to create the tenant, and only one of them can win the insert.
+      bootstrap:
+        condition: service_completed_successfully
+
   signet:
     build:
       context: ../..
@@ -136,7 +161,7 @@ services:
       # network namespace. See the header.
       - "${PATHLING_PORT:-8080}:${PATHLING_PORT:-8080}"
     depends_on:
-      bootstrap:
+      bootstrap-viewer:
         condition: service_completed_successfully
 
   # Creates the endpoint, policy, clients and accounts the suite launches

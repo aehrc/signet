@@ -37,6 +37,16 @@ export const SEED_USER = {
   password: "clinician-password",
 };
 
+/**
+ * The console identity the suite reads the console with but cannot write through.
+ *
+ * Created by the compose stack's `bootstrap-viewer` service, because the admin API
+ * deliberately has no route that creates a console account. This script only sets
+ * its role.
+ */
+const VIEWER_EMAIL =
+  process.env["SIGNET_SEED_VIEWER_EMAIL"] ?? "viewer@example.org";
+
 let cookie = "";
 
 /** Makes an admin API request, carrying the session cookie once there is one. */
@@ -287,6 +297,27 @@ await ensure("the clinician account", "POST", `${endpointPath}/users`, {
   fhirUserReference: "Practitioner/clinician-1",
   roles: ["clinician"],
 });
+
+// Downgraded rather than created here: no admin API route makes a console
+// identity, so `bootstrap-viewer` in the compose stack creates this one and it
+// arrives as an owner. A PUT is idempotent, so re-seeding simply restates it.
+const viewerMembership = await api("PUT", `/tenants/${TENANT}/members`, {
+  email: VIEWER_EMAIL,
+  role: "viewer",
+});
+if (viewerMembership.ok) {
+  console.log(`set ${VIEWER_EMAIL} to viewer`);
+} else if (viewerMembership.status === 404) {
+  // A stack bootstrapped without the viewer identity. Only the read-only console
+  // test needs it, so this is reported rather than fatal.
+  console.log(
+    `no console account for ${VIEWER_EMAIL}; skipping its membership`,
+  );
+} else {
+  throw new Error(
+    `could not set ${VIEWER_EMAIL} to viewer: ${viewerMembership.status} ${await viewerMembership.text()}`,
+  );
+}
 
 await ensure("a patient persona", "POST", `${endpointPath}/users`, {
   username: "pat",

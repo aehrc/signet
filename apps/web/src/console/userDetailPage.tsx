@@ -157,7 +157,10 @@ export function UserDetailPage() {
         </DetailList>
       </Panel>
 
-      <Panel title="Edit">
+      <Panel
+        title="Edit"
+        description="Only the fields you change are sent, so saving with nothing changed writes nothing. A value the API refuses is reported under the field that caused it."
+      >
         <form
           className="flex flex-col gap-3"
           onSubmit={(event) => {

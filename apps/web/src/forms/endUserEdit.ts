@@ -25,6 +25,8 @@
  * Author: John Grimes
  */
 
+import { attributeStringList } from "@signet/core";
+
 import { changedFields, formatList, parseList } from "./lists.js";
 
 import type { EndUserView } from "../api/types.js";
@@ -42,27 +44,6 @@ export interface EndUserFormValues {
   readonly patients: string;
   /** Candidate encounter identifiers, one per line. */
   readonly encounters: string;
-}
-
-/**
- * Reads a string list out of an attributes record.
- *
- * The record is opaque to the rest of the console, so nothing guarantees the shape.
- * Anything that is not a list of strings reads as no list at all, which shows as an
- * empty field rather than as `[object Object]` in a textarea.
- *
- * @param attributes - The user's attributes record.
- * @param name - The key to read.
- * @returns The strings under that key, in order.
- */
-function candidateList(
-  attributes: Readonly<Record<string, unknown>>,
-  name: string,
-): readonly string[] {
-  const value = attributes[name];
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string")
-    : [];
 }
 
 /**
@@ -163,8 +144,8 @@ export function endUserFormValues(user: EndUserView): EndUserFormValues {
     defaultPatient: contextField("patient"),
     defaultEncounter: contextField("encounter"),
     intent: contextField("intent"),
-    patients: formatList(candidateList(user.attributes, "patients")),
-    encounters: formatList(candidateList(user.attributes, "encounters")),
+    patients: formatList(attributeStringList(user.attributes, "patients")),
+    encounters: formatList(attributeStringList(user.attributes, "encounters")),
   };
 }
 

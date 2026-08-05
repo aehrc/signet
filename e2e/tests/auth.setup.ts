@@ -4,7 +4,12 @@
 
 import { expect, test as setup } from "@playwright/test";
 
-import { CONSOLE_STORAGE_STATE, SEED, SIGNET } from "../support/stack.js";
+import {
+  CONSOLE_STORAGE_STATE,
+  SEED,
+  SIGNET,
+  VIEWER_STORAGE_STATE,
+} from "../support/stack.js";
 
 /**
  * Signs in to the console once and saves the session for the suite.
@@ -24,4 +29,21 @@ setup("authenticate as an operator", async ({ page }) => {
 
   await expect(page.getByRole("link", { name: "pathling" })).toBeVisible();
   await page.context().storageState({ path: CONSOLE_STORAGE_STATE });
+});
+
+/**
+ * The same, for the read-only identity.
+ *
+ * A viewer sees the console and can write nothing through it. Proving that needs a
+ * session that holds the role, which no amount of asserting from the admin session
+ * can substitute for.
+ */
+setup("authenticate as a viewer", async ({ page }) => {
+  await page.goto(`${SIGNET}/console`);
+  await page.getByLabel("Email").fill(SEED.viewerEmail);
+  await page.getByLabel("Password").fill(SEED.viewerPassword);
+  await page.getByRole("button", { name: /sign in/i }).click();
+
+  await expect(page.getByRole("link", { name: "pathling" })).toBeVisible();
+  await page.context().storageState({ path: VIEWER_STORAGE_STATE });
 });
