@@ -15,29 +15,42 @@
  * Author: John Grimes
  */
 
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { endpointRoute } from "./routes.js";
-import { useEndpointContext } from "./useConsole.js";
-import { describeError } from "../api/errors.js";
-import { useEndUser } from "../api/queries.js";
+import { roleAllows, useEndpointContext } from "./useConsole.js";
+import { describeError, issuesByField } from "../api/errors.js";
+import { useEndUser, useUpdateEndUser } from "../api/queries.js";
+import { ListField, SubmitButton, TextField } from "../components/fields.js";
 import {
   DetailList,
   DetailRow,
   ErrorAlert,
+  InfoAlert,
   Loading,
   PageHeader,
   Panel,
 } from "../components/layout.js";
 import { StatusBadge } from "../components/table.js";
 import { formatInstant } from "../formatting/values.js";
+import { endUserFormValues, endUserPatch } from "../forms/endUserEdit.js";
 
 /** One user's detail page. */
 export function UserDetailPage() {
-  const { tenant, endpointSlug } = useEndpointContext();
+  const { tenant, endpointSlug, role } = useEndpointContext();
   const { userId } = useParams<{ userId: string }>();
 
   const user = useEndUser(tenant, endpointSlug, userId ?? "");
+  const update = useUpdateEndUser(tenant, endpointSlug);
+
+  // One piece of state per field, undefined until edited, so the rendered value is
+  // `edited ?? current` and a save elsewhere on the page shows through immediately.
+  const [displayName, setDisplayName] = useState<string | undefined>();
+  const [fhirUser, setFhirUser] = useState<string | undefined>();
+  const [roles, setRoles] = useState<string | undefined>();
+
+  const mayWrite = roleAllows(role, "admin");
 
   if (user.isPending) {
     return <Loading label="Loading the user…" />;
@@ -49,6 +62,13 @@ export function UserDetailPage() {
   }
 
   const current = user.data;
+  const loaded = endUserFormValues(current);
+  const issues = issuesByField(update.error);
+  const edited = {
+    displayName: displayName ?? loaded.displayName,
+    fhirUser: fhirUser ?? loaded.fhirUser,
+    roles: roles ?? loaded.roles,
+  };
 
   return (
     <>
@@ -113,6 +133,55 @@ export function UserDetailPage() {
             {formatInstant(current.createdAt)}
           </DetailRow>
         </DetailList>
+      </Panel>
+
+      <Panel title="Edit">
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            update.mutate({
+              userId: current.id,
+              body: endUserPatch(edited, current),
+            });
+          }}
+        >
+          <TextField
+            label="Display name"
+            value={edited.displayName}
+            onChange={setDisplayName}
+            error={issues["displayName"]}
+            disabled={!mayWrite}
+          />
+          <TextField
+            label="fhirUser reference"
+            value={edited.fhirUser}
+            onChange={setFhirUser}
+            error={issues["fhirUserReference"]}
+            hint="A relative FHIR reference such as Practitioner/123. Released to apps granted the fhirUser scope. Clearing this removes it."
+            disabled={!mayWrite}
+          />
+          <ListField
+            label="Roles"
+            value={edited.roles}
+            onChange={setRoles}
+            error={issues["roles"] ?? issues["roles.0"]}
+            hint="One per line. A policy rule can require one of these before granting a scope."
+            rows={2}
+            disabled={!mayWrite}
+          />
+
+          {update.isError && Object.keys(issues).length === 0 ? (
+            <ErrorAlert message={describeError(update.error)} />
+          ) : null}
+          {update.isSuccess ? <InfoAlert>User saved.</InfoAlert> : null}
+
+          {mayWrite ? (
+            <div>
+              <SubmitButton pending={update.isPending}>Save</SubmitButton>
+            </div>
+          ) : null}
+        </form>
       </Panel>
     </>
   );
