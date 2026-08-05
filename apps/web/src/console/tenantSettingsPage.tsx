@@ -206,7 +206,7 @@ function MembersPanel({
             );
           }}
         >
-          <div className="grid items-end gap-3 sm:grid-cols-3">
+          <div className="grid items-start gap-3 sm:grid-cols-3">
             <TextField
               label="Email"
               type="email"
@@ -223,6 +223,9 @@ function MembersPanel({
               error={issues["role"]}
             />
             <div>
+              <div className="label invisible">
+                <span className="label-text">Action</span>
+              </div>
               <SubmitButton pending={setRole.isPending}>
                 Add or change
               </SubmitButton>
@@ -373,7 +376,7 @@ function TokensPanel({
             );
           }}
         >
-          <div className="grid items-end gap-3 sm:grid-cols-3">
+          <div className="grid items-start gap-3 sm:grid-cols-3">
             <TextField
               label="Name"
               value={name}
@@ -389,6 +392,9 @@ function TokensPanel({
               error={issues["role"]}
             />
             <div>
+              <div className="label invisible">
+                <span className="label-text">Action</span>
+              </div>
               <SubmitButton pending={create.isPending}>Mint token</SubmitButton>
             </div>
           </div>
