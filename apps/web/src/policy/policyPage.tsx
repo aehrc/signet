@@ -141,28 +141,31 @@ function PolicyEditor({
         title="Policy"
         description="What this endpoint grants, and what its tokens carry. Versions are immutable: editing creates a new one, and publishing points the endpoint at it."
         actions={
-          <div role="tablist" className="tabs tabs-box tabs-sm">
-            <button
-              type="button"
-              role="tab"
-              className={`tab ${mode === "builder" ? "tab-active" : ""}`}
-              onClick={() => {
-                setMode("builder");
-              }}
-            >
-              Builder
-            </button>
-            <button
-              type="button"
-              role="tab"
-              className={`tab ${mode === "code" ? "tab-active" : ""}`}
-              onClick={() => {
-                setMode("code");
-              }}
-            >
-              Code
-            </button>
-          </div>
+          <>
+            <DraftStatus changed={changed} issueCount={issues.length} />
+            <div role="tablist" className="tabs tabs-box tabs-sm">
+              <button
+                type="button"
+                role="tab"
+                className={`tab ${mode === "builder" ? "tab-active" : ""}`}
+                onClick={() => {
+                  setMode("builder");
+                }}
+              >
+                Builder
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`tab ${mode === "code" ? "tab-active" : ""}`}
+                onClick={() => {
+                  setMode("code");
+                }}
+              >
+                Code
+              </button>
+            </div>
+          </>
         }
       />
 
@@ -198,6 +201,7 @@ function PolicyEditor({
 
           {mayEdit ? (
             <Panel
+              id="save-panel"
               title="Save"
               description="Creates a new version. Publishing it makes it the one every token is issued under."
             >
@@ -308,7 +312,9 @@ function PolicyEditor({
           ) : null}
         </div>
 
-        <div>
+        {/* Sticky, so the simulator stays beside the rule being edited: the
+            edit-simulate loop is the point of the page. */}
+        <div className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start xl:overflow-y-auto">
           <SimulatePanel
             tenant={tenant}
             endpointSlug={endpointSlug}
@@ -327,6 +333,35 @@ function PolicyEditor({
       </div>
     </>
   );
+}
+
+/**
+ * What state the draft is in, kept in the header so it is never scrolled away.
+ *
+ * Nothing is shown while the editor matches the published version: the badge
+ * appearing is the signal, and a permanent "saved" would bury it.
+ */
+function DraftStatus({
+  changed,
+  issueCount,
+}: Readonly<{ readonly changed: boolean; readonly issueCount: number }>) {
+  if (issueCount > 0) {
+    return (
+      <span className="badge badge-error self-center">Draft has problems</span>
+    );
+  }
+  if (changed) {
+    return (
+      <a
+        href="#save-panel"
+        className="badge badge-warning self-center"
+        title="Go to the save panel"
+      >
+        Unsaved changes
+      </a>
+    );
+  }
+  return null;
 }
 
 /**

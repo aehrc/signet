@@ -44,6 +44,8 @@ export function PageHeader({
 }
 
 interface PanelProps {
+  /** Anchor target, for a link that scrolls to this panel. */
+  readonly id?: string;
   readonly title?: string;
   readonly description?: ReactNode;
   readonly actions?: ReactNode;
@@ -52,13 +54,17 @@ interface PanelProps {
 
 /** A titled card. The console's only container. */
 export function Panel({
+  id,
   title,
   description,
   actions,
   children,
 }: Readonly<PanelProps>) {
   return (
-    <section className="card bg-base-100 border-base-300 mb-6 border shadow-sm">
+    <section
+      id={id}
+      className="card bg-base-100 border-base-300 mb-6 border shadow-sm"
+    >
       <div className="card-body gap-4">
         {title === undefined && actions === undefined ? null : (
           <div className="flex flex-wrap items-start justify-between gap-3">

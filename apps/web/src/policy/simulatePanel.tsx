@@ -20,6 +20,7 @@
 
 import { useState } from "react";
 
+import { policiesDiffer } from "./document.js";
 import { describeError } from "../api/errors.js";
 import { useClients, useEndUsers, useSimulate } from "../api/queries.js";
 import { SelectField, TextField } from "../components/fields.js";
@@ -54,9 +55,19 @@ export function SimulatePanel({
   );
   const [patient, setPatient] = useState("pat-1");
   const [encounter, setEncounter] = useState("");
+  // The document the last run evaluated, so a result can say when it is stale.
+  const [simulated, setSimulated] = useState<PolicyDocument | undefined>();
 
   const chosenClient = clientId === "" ? clients.data?.[0]?.clientId : clientId;
   const isBackend = grantType === "client_credentials";
+
+  // A result computed from an earlier draft reads as if it were current, which is
+  // the one dishonesty a simulator must not commit.
+  const stale =
+    simulate.data !== undefined &&
+    (document === undefined ||
+      simulated === undefined ||
+      policiesDiffer(simulated, document));
 
   return (
     <Panel
@@ -143,6 +154,7 @@ export function SimulatePanel({
               if (chosenClient === undefined) {
                 return;
               }
+              setSimulated(document);
               simulate.mutate({
                 clientId: chosenClient,
                 requestedScopes: scopes,
@@ -174,7 +186,17 @@ export function SimulatePanel({
         ) : null}
 
         {simulate.data === undefined ? null : (
-          <SimulationResult result={simulate.data} />
+          <>
+            {stale ? (
+              <p className="text-warning text-xs" role="status">
+                The document has changed since this result. Simulate again to
+                see the current draft.
+              </p>
+            ) : null}
+            <div className={stale ? "opacity-60" : ""}>
+              <SimulationResult result={simulate.data} />
+            </div>
+          </>
         )}
       </div>
     </Panel>
