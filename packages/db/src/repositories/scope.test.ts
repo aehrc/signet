@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   clientScopeFromRow,
@@ -43,7 +43,7 @@ import type { Tenant } from "../schema/tenancy.js";
  * is exactly the gate the property is supposed to hold at.
  *
  * Written here rather than in a file of their own deliberately. A file containing
- * only type fixtures either fails Vitest for defining no tests or lowers the
+ * only type fixtures either fails the runner for defining no tests or lowers the
  * coverage floor for holding statements nothing executes; the `it` at the foot of
  * this block reads every one of them, so they are compiled *and* run.
  */

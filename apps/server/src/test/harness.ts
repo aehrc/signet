@@ -13,9 +13,9 @@
  * CI provides one; a developer without one still gets the unit suites.
  *
  * Every fixture is created under a fresh tenant with a unique slug and deleted
- * afterwards, rather than by truncating. Vitest runs files in parallel, and a suite
- * that emptied shared tables would break whichever file happened to be running beside
- * it.
+ * afterwards, rather than by truncating. The tables are shared with every other suite
+ * in the run and with a second `bun test` against the same database, and a suite that
+ * emptied them would break both.
  *
  * Author: John Grimes
  */
@@ -108,9 +108,9 @@ export interface TestStack {
   /**
    * What this stack's database connections call themselves.
    *
-   * Vitest runs files in parallel and every worker connects as the same role, so a
-   * test observing `pg_stat_activity` has to be able to tell this stack's backends
-   * from everybody else's.
+   * Every stack in the run connects as the same role, as does a second `bun test`
+   * against the same database, so a test observing `pg_stat_activity` has to be able
+   * to tell this stack's backends from everybody else's.
    */
   readonly applicationName: string;
   /** A public client with PKCE, registered for the code and refresh grants. */
@@ -184,10 +184,11 @@ let sequence = 0;
 /**
  * Migrates and grants the serving role, if nothing else has.
  *
- * Normally a no-op: the Vitest global setup does both once before any worker
- * starts, precisely so that no DDL runs while other workers hold row locks. This
- * is the fallback for running a single file outside that setup, and it closes the
- * owning connection before returning so nothing keeps a privileged handle open.
+ * Normally a no-op: the preload does both once before any test file is imported,
+ * precisely so that no DDL runs while another suite holds row locks. This is the
+ * fallback for running a file where Bun found no `bunfig.toml` and so ran no
+ * preload, and it closes the owning connection before returning so nothing keeps a
+ * privileged handle open.
  *
  * @param ownerUrl - The owning identity's URL, as configured by the developer.
  */
@@ -227,7 +228,7 @@ async function connect(ownerUrl: string, applicationName: string) {
     url: servingRoleUrl(ownerUrl),
     maxConnections: 5,
     // Names this stack's backends in `pg_stat_activity`, so a test can observe what
-    // *this* application is holding while other workers hold their own.
+    // *this* application is holding while other connections hold their own.
     applicationName,
   });
 }

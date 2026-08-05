@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { simulateIssuance } from "./simulate.js";
 import { PATHLING_PRESET, SMART_BASELINE_PRESET } from "../policy/presets.js";

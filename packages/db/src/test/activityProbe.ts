@@ -11,9 +11,9 @@
  * `pg_stat_activity` reports every backend, but nulls `state` and `query` for
  * backends belonging to another role - so the probe connects as the same role as the
  * application it is observing. It filters on `application_name` rather than on the
- * role, because Vitest runs files in parallel and every worker connects as that same
- * role: without the filter, another worker's open transaction would fail this one's
- * assertion.
+ * role, because every suite in the run connects as that same role, as does a second
+ * `bun test` against the same database: without the filter, somebody else's open
+ * transaction would fail this suite's assertion.
  *
  * Lives here, and is exported from the package, for the reason `privilegeProbe.ts`
  * is: `apps/server` needs it and cannot write raw SQL, because only this package

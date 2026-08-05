@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { evaluatePolicy } from "./evaluate.js";
 import { narrowScopeToPattern, parseScopePattern } from "./pattern.js";

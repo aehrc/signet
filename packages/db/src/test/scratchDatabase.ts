@@ -4,9 +4,9 @@
  * One of the startup check's four outcomes is that the covered tables do not
  * exist, and it is the outcome an operator hits first: a fresh deployment whose
  * migration has not run. Asserting it requires a database on which nothing has
- * been created, and the shared test database cannot be it - other workers are
- * using the tables, so dropping them to observe their absence would break every
- * suite running beside this one.
+ * been created, and the shared test database cannot be it - every other suite is
+ * using those tables, so dropping them to observe their absence would break the
+ * rest of the run and anything else connected to the same database.
  *
  * So the suite creates its own, uses it, and drops it. `create database` is DDL
  * outside any transaction and takes a brief lock on the template, which is why it
@@ -29,8 +29,8 @@ function quoted(name: string): string {
  *
  * @param db - A connection with authority to create databases, which for a
  *   throwaway test database is the identity the developer configured.
- * @param name - The name to create. Unique per worker, since Vitest runs files in
- *   parallel against one server.
+ * @param name - The name to create. Unique per run, so that a second `bun test`
+ *   against the same server does not collide with this one.
  * @throws {Error} When the statement fails, including when the database already
  *   exists - a leftover from an interrupted run holds a schema this suite would
  *   then wrongly report as absent.

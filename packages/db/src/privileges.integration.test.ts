@@ -31,12 +31,12 @@
  * Author: John Grimes
  */
 
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { PRIVILEGED_ROUTINES } from "./privileges.js";
 import { createAdminUser } from "./repositories/adminUsers.js";
@@ -99,9 +99,9 @@ describeWithDatabase("the serving role's privileged surface", () => {
     ownerSql = postgres(databaseUrl ?? "", { max: 2, onnotice: () => {} });
     owner = drizzle(ownerSql);
 
-    // Normally the Vitest global setup did all of this once, before any worker
-    // started. The fallback covers running this file on its own, and takes the
-    // same advisory lock so two runs cannot interleave their DDL.
+    // Normally the preload did all of this once, before any test file was imported.
+    // The fallback covers running this file on its own, and takes the same advisory
+    // lock so two runs cannot interleave their DDL.
     if (!isTestSchemaReady()) {
       await ownerSql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
       try {
@@ -120,7 +120,7 @@ describeWithDatabase("the serving role's privileged surface", () => {
 
     mine = await seed("mine");
     theirs = await seed("theirs");
-  }, 120_000);
+  });
 
   afterAll(async () => {
     // Cascades through every tenant-owned table, so the suite leaves the shared

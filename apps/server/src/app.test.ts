@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
 
 import { createApp } from "./app.js";
 import { createUnlimitedStore } from "./http/rateLimit.js";
@@ -37,7 +37,7 @@ function contextWith(execute: () => Promise<unknown>): ServerContext {
 
 describe("createApp", () => {
   it("serves a liveness probe without touching the database", async () => {
-    const execute = vi.fn(() => Promise.resolve());
+    const execute = mock(() => Promise.resolve());
     const response = await createApp(contextWith(execute)).request("/healthz");
 
     expect(response.status).toBe(200);
@@ -46,7 +46,7 @@ describe("createApp", () => {
   });
 
   it("serves a readiness probe that checks the database", async () => {
-    const execute = vi.fn(() => Promise.resolve());
+    const execute = mock(() => Promise.resolve());
     const response = await createApp(contextWith(execute)).request("/readyz");
 
     expect(response.status).toBe(200);

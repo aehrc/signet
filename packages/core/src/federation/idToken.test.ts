@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   MAX_UPSTREAM_ID_TOKEN_AGE_SECONDS,

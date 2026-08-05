@@ -18,10 +18,10 @@
  * Author: John Grimes
  */
 
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
 
 /** The repository root, from this file's location within it. */
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
@@ -102,22 +102,25 @@ function contentsOf(file: string): string {
 }
 
 describe("what the repository claims about tenant isolation", () => {
-  it.each(DOCUMENTS)("finds $file", ({ file }) => {
+  it.each([...DOCUMENTS])("finds $file", ({ file }) => {
     // Guards the guard: a root that resolved wrongly would throw here rather than
     // silently making every assertion below vacuous.
     expect(contentsOf(file).length).toBeGreaterThan(100);
   });
 
-  it.each(DOCUMENTS)("$file states the current posture", ({ file, states }) => {
-    const source = contentsOf(file);
-    for (const pattern of states) {
-      expect(source, `${file} does not state ${String(pattern)}`).toMatch(
-        pattern,
-      );
-    }
-  });
+  it.each([...DOCUMENTS])(
+    "$file states the current posture",
+    ({ file, states }) => {
+      const source = contentsOf(file);
+      for (const pattern of states) {
+        expect(source, `${file} does not state ${String(pattern)}`).toMatch(
+          pattern,
+        );
+      }
+    },
+  );
 
-  it.each(DOCUMENTS)("$file makes no retired claim", ({ file }) => {
+  it.each([...DOCUMENTS])("$file makes no retired claim", ({ file }) => {
     const source = contentsOf(file);
     for (const pattern of RETIRED_CLAIMS) {
       expect(source, `${file} still claims ${String(pattern)}`).not.toMatch(

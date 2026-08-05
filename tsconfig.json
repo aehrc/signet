@@ -5,6 +5,9 @@
     { "path": "./packages/contracts" },
     { "path": "./packages/db" },
     { "path": "./apps/server" },
-    { "path": "./apps/web" }
+    { "path": "./apps/web" },
+    // The test files, which the projects above exclude. See its header for why they
+    // are checked separately.
+    { "path": "./tsconfig.tests.json" }
   ]
 }

@@ -10,5 +10,10 @@
     // `TextEncoder` - all of which Node has provided since v18.
     "lib": ["ES2023", "DOM"]
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  // The tests are typechecked by the root `tsconfig.tests.json`, which is the only
+  // project carrying Bun's types. Keeping them out of this one is what preserves the
+  // restriction above: `bun:test` cannot be seen without `bun-types`, and
+  // `bun-types` references `@types/node`.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

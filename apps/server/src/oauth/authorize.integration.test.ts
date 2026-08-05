@@ -10,7 +10,7 @@
  */
 
 import { getAuthorizationSession, withTenantScope } from "@signet/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import {
   authorize,
@@ -34,7 +34,7 @@ describeWithDatabase("the authorization endpoint", () => {
   beforeAll(async () => {
     stack = await createTestStack();
     challenge = (await pkcePair()).challenge;
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await stack.close();
@@ -211,7 +211,7 @@ describeWithDatabase("the EHR launch", () => {
 
   beforeAll(async () => {
     stack = await createTestStack();
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await stack.close();

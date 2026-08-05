@@ -92,8 +92,8 @@ export async function roleCanExecute(
  *
  * The backstop for a migration that adds a table and nobody remembering to grant
  * it. Reads `pg_default_acl` rather than creating a table, because creating one
- * in a shared test database is DDL that would take a lock while other workers
- * are running.
+ * in a shared test database is DDL that would take a lock while the rest of the
+ * run, or a second `bun test`, is using it.
  *
  * @param db - A connection that may read the catalogues.
  * @param role - The role to ask about.
@@ -263,8 +263,8 @@ export interface ProbeRoleOptions {
  * opposite.
  *
  * @param db - A connection with authority to create roles.
- * @param role - The name to create. Unique per worker, since Vitest runs files
- *   in parallel against one database.
+ * @param role - The name to create. Unique per run, so that a second `bun test`
+ *   against the same database does not collide with this one.
  * @param options - Deviations from the login-less default.
  */
 export async function createProbeRole(

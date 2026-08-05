@@ -16,9 +16,9 @@
  * Author: John Grimes
  */
 
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
 
 import { resolveMigrationsFolder } from "./migrations.js";
 import { RLS_TABLES, TENANT_POLICY_NAME, TENANT_SETTING } from "./rls.js";
@@ -62,29 +62,32 @@ describe("the migration folder", () => {
 });
 
 describe("tenant isolation is installed by migration", () => {
-  it.each(RLS_TABLES)("enables row level security on %s", (table) => {
+  it.each([...RLS_TABLES])("enables row level security on %s", (table) => {
     expect(migrationSql).toContain(
       `alter table ${table} enable row level security`,
     );
   });
 
-  it.each(RLS_TABLES)("creates the isolation policy on %s", (table) => {
+  it.each([...RLS_TABLES])("creates the isolation policy on %s", (table) => {
     expect(migrationSql).toContain(
       `create policy ${TENANT_POLICY_NAME} on ${table} for all using (`,
     );
   });
 
-  it.each(RLS_TABLES)("scopes %s to the current tenant setting", (table) => {
-    // The policy must read the session variable. A policy created with, say,
-    // `using (true)` would satisfy the two assertions above and isolate nothing,
-    // so the predicate itself is checked rather than merely its existence.
-    const policy = migrationSql.slice(
-      migrationSql.indexOf(
-        `create policy ${TENANT_POLICY_NAME} on ${table} for all using (`,
-      ),
-    );
-    const statement = policy.slice(0, policy.indexOf(";"));
+  it.each([...RLS_TABLES])(
+    "scopes %s to the current tenant setting",
+    (table) => {
+      // The policy must read the session variable. A policy created with, say,
+      // `using (true)` would satisfy the two assertions above and isolate nothing,
+      // so the predicate itself is checked rather than merely its existence.
+      const policy = migrationSql.slice(
+        migrationSql.indexOf(
+          `create policy ${TENANT_POLICY_NAME} on ${table} for all using (`,
+        ),
+      );
+      const statement = policy.slice(0, policy.indexOf(";"));
 
-    expect(statement).toContain(`current_setting('${TENANT_SETTING}', true)`);
-  });
+      expect(statement).toContain(`current_setting('${TENANT_SETTING}', true)`);
+    },
+  );
 });

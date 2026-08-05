@@ -8,7 +8,7 @@
     "build": "tsc --build && vite build",
     "dev": "vite",
     "preview": "vite preview",
-    "test": "vitest --run"
+    "test": "bun test src/ --timeout 120000"
   },
   "dependencies": {
     "@signet/contracts": "workspace:*",

@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, spyOn } from "bun:test";
 
 import { logRecord, shouldLog } from "./log.js";
 
@@ -33,9 +33,9 @@ describe("shouldLog", () => {
 describe("logRecord", () => {
   it("writes one line of JSON carrying the level and message", () => {
     const written: string[] = [];
-    const spy = vi
-      .spyOn(console, "log")
-      .mockImplementation((line: unknown) => written.push(String(line)));
+    const spy = spyOn(console, "log").mockImplementation((line: unknown) => {
+      written.push(String(line));
+    });
 
     logRecord("info", "info", "signet.test", { a: 1 });
     spy.mockRestore();
@@ -50,9 +50,9 @@ describe("logRecord", () => {
 
   it("writes warnings and errors to stderr", () => {
     const written: string[] = [];
-    const spy = vi
-      .spyOn(console, "error")
-      .mockImplementation((line: unknown) => written.push(String(line)));
+    const spy = spyOn(console, "error").mockImplementation((line: unknown) => {
+      written.push(String(line));
+    });
 
     logRecord("debug", "warn", "signet.warned");
     spy.mockRestore();
@@ -61,10 +61,8 @@ describe("logRecord", () => {
   });
 
   it("writes nothing when the threshold suppresses the record", () => {
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const error = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
+    const log = spyOn(console, "log").mockImplementation(() => undefined);
+    const error = spyOn(console, "error").mockImplementation(() => undefined);
 
     logRecord("error", "info", "signet.quiet");
 

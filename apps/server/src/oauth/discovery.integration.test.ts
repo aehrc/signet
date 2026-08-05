@@ -10,7 +10,7 @@
  * Author: John Grimes
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { issuerPath } from "../test/flows.js";
 import { createTestStack, testDatabaseUrl } from "../test/harness.js";
@@ -25,7 +25,7 @@ describeWithDatabase("discovery documents", () => {
 
   beforeAll(async () => {
     stack = await createTestStack();
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await stack.close();
@@ -161,7 +161,7 @@ describeWithDatabase("an endpoint with capabilities turned off", () => {
         supportsV1Scopes: false,
       },
     });
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await stack.close();

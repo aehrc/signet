@@ -2,8 +2,8 @@
  * Author: John Grimes
  */
 
+import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
 
 import { createRateLimitStore, rateLimit, RATE_LIMITS } from "./rateLimit.js";
 

@@ -16,7 +16,7 @@ import {
   setTenantMemberRole,
   withTenantScope,
 } from "@signet/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { adminRequest, tenantPath } from "../test/adminApi.js";
 import {
@@ -66,7 +66,7 @@ describe.skipIf(testDatabaseUrl === undefined)(
         });
         const body = (await response.json()) as {
           user: { email: string; totpEnrolled: boolean };
-          tenants: { slug: string; role: string }[];
+          tenants: { slug: string; name: string; role: string }[];
         };
 
         expect(body.user.email).toBe(stack.admin.email);

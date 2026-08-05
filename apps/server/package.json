@@ -9,7 +9,7 @@
     "build": "bun build src/index.ts --target=node --outdir=dist --sourcemap=linked",
     "dev": "bun --watch src/index.ts",
     "start": "node dist/index.js",
-    "test": "vitest --run"
+    "test": "bun test src/ --timeout 120000"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.12",

@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { parseScope, parseScopes } from "./parse.js";
 import { formatScope } from "./serialise.js";

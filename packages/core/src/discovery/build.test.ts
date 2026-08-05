@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { buildOpenIdConfiguration, buildSmartConfiguration } from "./build.js";
 import { defaultEndpointCapabilities } from "./capabilities.js";

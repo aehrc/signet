@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { decodeBase64Url, encodeBase64Url } from "./encoding.js";
 import { decryptSecret, encryptSecret, EnvelopeError } from "./envelope.js";

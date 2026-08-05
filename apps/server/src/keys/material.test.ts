@@ -3,8 +3,8 @@
  */
 
 import { decryptSecret } from "@signet/db";
+import { describe, expect, it } from "bun:test";
 import { jwtVerify, importJWK } from "jose";
-import { describe, expect, it } from "vitest";
 
 import {
   ENDPOINT_KEY_ALGORITHMS,
@@ -51,7 +51,7 @@ describe("isEndpointKeyAlgorithm", () => {
   });
 });
 
-describe.each(ENDPOINT_KEY_ALGORITHMS)(
+describe.each([...ENDPOINT_KEY_ALGORITHMS])(
   "generateEndpointKey (%s)",
   (algorithm) => {
     it("publishes a self-describing public JWK", async () => {

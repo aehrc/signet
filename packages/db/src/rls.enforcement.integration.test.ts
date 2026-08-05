@@ -26,12 +26,12 @@
  * Author: John Grimes
  */
 
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { recordAuditEvent } from "./audit/record.js";
 import { classifyEnforcement, observeEnforcement } from "./enforcement.js";
@@ -141,9 +141,9 @@ describeWithDatabase("row-level security as the serving role", () => {
     ownerSql = postgres(databaseUrl ?? "", { max: 2, onnotice: () => {} });
     owner = drizzle(ownerSql);
 
-    // Normally all of this was done once by the Vitest global setup, before any
-    // worker started. The fallback covers running this file on its own, and takes
-    // the same advisory lock so two runs cannot interleave their DDL.
+    // Normally all of this was done once by the preload, before any test file was
+    // imported. The fallback covers running this file on its own, and takes the
+    // same advisory lock so two runs cannot interleave their DDL.
     if (!isTestSchemaReady()) {
       await ownerSql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
       try {
@@ -166,7 +166,7 @@ describeWithDatabase("row-level security as the serving role", () => {
     theirs = await seed("theirs");
     myRows = await rowsVisibleTo(mine.tenantScope);
     theirRows = await rowsVisibleTo(theirs.tenantScope);
-  }, 120_000);
+  });
 
   afterAll(async () => {
     // Cascades through every tenant-owned table, so the suite leaves the shared
@@ -467,13 +467,13 @@ describeWithDatabase("row-level security as the serving role", () => {
   }
 
   describe("with no tenant declared", () => {
-    it.each(RLS_TABLES)("returns no rows from %s", async (table) => {
+    it.each([...RLS_TABLES])("returns no rows from %s", async (table) => {
       // Fail-closed, from the database: both tenants have a row in this table and
       // the connection that declared nothing sees neither.
       expect(await rowsOf(serving, table)).toEqual([]);
     });
 
-    it.each(RLS_TABLES)("refuses an insert into %s", async (table) => {
+    it.each([...RLS_TABLES])("refuses an insert into %s", async (table) => {
       const row = myRows[table];
       expect(row).toBeDefined();
 
@@ -506,7 +506,7 @@ describeWithDatabase("row-level security as the serving role", () => {
       );
     });
 
-    it.each(RLS_TABLES)(
+    it.each([...RLS_TABLES])(
       "shows the declared tenant's row and not the other's in %s",
       (table) => {
         // Each tenant seeded exactly one row here, and `rowsVisibleTo` asserted
@@ -518,7 +518,7 @@ describeWithDatabase("row-level security as the serving role", () => {
       },
     );
 
-    it.each(RLS_TABLES)("shows a row this tenant owns in %s", (table) => {
+    it.each([...RLS_TABLES])("shows a row this tenant owns in %s", (table) => {
       const row = myRows[table];
       const checks = identityOf(table).filter(
         (check) => row?.[check[0]] !== undefined && row[check[0]] !== null,
@@ -634,7 +634,7 @@ describeWithDatabase("row-level security as the serving role", () => {
     // policy is doing its job returns nothing - and a suite that could not tell
     // them apart would report the first as the second and call it enforcement.
 
-    it.each(RLS_TABLES)("holds select and insert on %s", async (table) => {
+    it.each([...RLS_TABLES])("holds select and insert on %s", async (table) => {
       expect(
         await roleHasTablePrivilege(owner, SERVING_TEST_ROLE, table, "select"),
         `${table} select`,
@@ -727,9 +727,9 @@ describeWithDatabase("row-level security as the serving role", () => {
 
     it("stops emptying the read when the policy is taken away", async () => {
       // A fixture table rather than a covered one: dropping `signet_tenant_isolation`
-      // from `tenants` would leave every other worker's suite unprotected for as
-      // long as this test held it. Created by the owning identity, carrying the same
-      // shape of policy, and dropped again in `finally`.
+      // from `tenants` would leave every other suite unprotected for as long as this
+      // test held it - and a concurrent run with it. Created by the owning identity,
+      // carrying the same shape of policy, and dropped again in `finally`.
       const table = `rls_control_${String(process.pid)}`;
       const tenantId = mine.tenantScope.tenantId;
 

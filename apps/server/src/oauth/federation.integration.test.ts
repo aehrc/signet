@@ -21,7 +21,14 @@ import {
   servingRoleUrl,
   withTenantScope,
 } from "@signet/db";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
 import { adminRequest, endpointPath, tenantPath } from "../test/adminApi.js";
 import { issuerPath, pkcePair, startAuthorization } from "../test/flows.js";
@@ -180,7 +187,7 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
     expect(response.status).toBe(302);
     const location = new URL(response.headers.get("location") ?? "");
     expect(location.origin + location.pathname).toBe(
-      stack.publicClient.redirectUris[0],
+      stack.publicClient.redirectUris[0]!,
     );
     expect(location.searchParams.get("code")).not.toBeNull();
 

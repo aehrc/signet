@@ -1,0 +1,48 @@
+# Bun's configuration for this repository.
+#
+# `bun test` is the whole test runner: there is no per-package runner config, so
+# `bun run test` from the repository root discovers every `*.test.ts` under
+# `packages/` and `apps/` and runs them in one process.
+#
+# Bun resolves this file from the working directory and does not search upwards, so
+# it applies to `bun test` run from the root and not to `bun test` run from inside a
+# package. Nothing here is load-bearing for correctness - the integration suites
+# migrate for themselves when the preload has not run, and the coverage gate is only
+# meaningful over the whole suite anyway.
+#
+# **Why the scripts pass `src/`.** `tsc --build` emits the composite packages into
+# `dist`, test files included, and Bun's default discovery would run those too -
+# doubling every assertion and reporting a stale copy of a test as if it were the
+# current one. Bun 1.3 has no ignore-patterns setting (`pathIgnorePatterns` is
+# documented but not implemented), so the scripts narrow discovery with a positional
+# filter instead. Every test file in this repository lives under a package's `src`,
+# which is what makes that filter equivalent to excluding `dist`. A test file placed
+# anywhere else would not be run, so do not place one anywhere else.
+
+[test]
+# Migrates the test database and creates the serving role before the first test
+# file is imported. See the file's header for why this is not done lazily.
+preload = ["./packages/db/src/test/preload.ts"]
+
+coverageSkipTestFiles = true
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+
+# Bun instruments the files the suite actually loads, so anything listed here is
+# excluded from the denominator rather than counted as uncovered.
+coveragePathIgnorePatterns = [
+  # Test helpers and fixtures are not the subject under test.
+  "**/test/**",
+  # Barrel files: re-exports with no logic, whose coverage measures nothing.
+  "**/index.ts",
+  # The console. Every piece of its logic lives in a plain function that is unit
+  # tested here; the components composing those functions are covered by the
+  # Playwright suite against a real browser, which this reporter cannot see.
+  "apps/web/**",
+]
+
+# No `coverageThreshold`, deliberately. Bun applies it to every file separately, so
+# a floor of 0.8 demands 80% of each of two hundred files rather than 80% of the
+# code, and its "All files" row is the unweighted mean of the per-file percentages
+# rather than a total. The floor this project actually gates on is the total, which
+# `scripts/checkCoverage.mjs` computes from the lcov report `test:coverage` writes.

@@ -2,13 +2,15 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
 
 import {
   checkOutboundUrl,
   fetchGuardedJson,
   DEFAULT_OUTBOUND_MAX_BYTES,
 } from "./outboundFetch.js";
+
+import type { OutboundFetchOptions } from "./outboundFetch.js";
 
 describe("checkOutboundUrl", () => {
   it("accepts an https URL with a DNS name", () => {
@@ -72,9 +74,12 @@ describe("checkOutboundUrl", () => {
   });
 });
 
-/** A `fetch` that answers with a JSON body and never touches the network. */
-function jsonFetch(body: unknown, status = 200): typeof fetch {
-  return vi.fn(() =>
+/** A transport that answers with a JSON body and never touches the network. */
+function jsonFetch(
+  body: unknown,
+  status = 200,
+): NonNullable<OutboundFetchOptions["fetchImpl"]> {
+  return mock(() =>
     Promise.resolve(
       Response.json(body, {
         status,
@@ -140,7 +145,7 @@ describe("fetchGuardedJson", () => {
   });
 
   it("skips resolution when private addresses are allowed", async () => {
-    const resolve = vi.fn(() => Promise.resolve(["10.0.0.1"]));
+    const resolve = mock(() => Promise.resolve(["10.0.0.1"]));
     const result = await fetchGuardedJson("http://keycloak:8080/jwks", {
       allowPrivateAddresses: true,
       resolve,

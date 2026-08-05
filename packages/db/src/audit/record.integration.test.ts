@@ -12,11 +12,11 @@
  * Author: John Grimes
  */
 
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { queryAuditEvents, recordAuditEvent } from "./record.js";
 import { tenantScopeFromRow } from "../repositories/scope.js";
@@ -42,9 +42,10 @@ const migrationsFolder = fileURLToPath(
 /**
  * Lock key for serialising migrations across test files.
  *
- * Vitest runs files in parallel, and two processes applying the same migration
- * folder at once is a race. An arbitrary constant is enough: nothing else in the
- * product takes a session-level advisory lock.
+ * Two `bun test` invocations against one database are a thing a developer does, and
+ * two processes applying the same migration folder at once is a race. An arbitrary
+ * constant is enough: nothing else in the product takes a session-level advisory
+ * lock.
  */
 const MIGRATION_LOCK_KEY = 5_348_464;
 
@@ -57,8 +58,8 @@ describeWithDatabase("the audit log against Postgres", () => {
 
   beforeAll(async () => {
     // The owning identity, used for the schema and for nothing else. Normally the
-    // Vitest global setup has already done all of this, before any worker started,
-    // so that no DDL takes table locks while another worker holds row locks.
+    // preload has already done all of this, before any test file was imported, so
+    // that no DDL takes table locks while another suite holds row locks.
     if (!isTestSchemaReady()) {
       const ownerSql = postgres(databaseUrl ?? "", {
         max: 1,
@@ -97,7 +98,7 @@ describeWithDatabase("the audit log against Postgres", () => {
     });
     tenantId = tenant.id;
     tenantScope = tenantScopeFromRow(tenant);
-  }, 60_000);
+  });
 
   afterAll(async () => {
     if (sql === undefined) {
@@ -294,8 +295,10 @@ describeWithDatabase("the audit log against Postgres", () => {
 
     // The connection must still be usable afterwards: an audit failure that
     // poisoned the pool would take the whole server down with it.
-    await expect(
-      connection.select().from(auditEvents).limit(1),
-    ).resolves.toBeDefined();
+    //
+    // Awaited rather than asserted through `.resolves`, which wants a real promise:
+    // Drizzle's query builder is a thenable, and `expect` refuses it.
+    const rows = await connection.select().from(auditEvents).limit(1);
+    expect(rows).toBeDefined();
   });
 });

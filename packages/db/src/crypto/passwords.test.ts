@@ -2,8 +2,8 @@
  * Author: John Grimes
  */
 
+import { describe, expect, it } from "bun:test";
 import { argon2id } from "hash-wasm";
-import { describe, expect, it } from "vitest";
 
 import { encodeBase64 } from "./encoding.js";
 import { hashPassword, needsRehash, verifyPassword } from "./passwords.js";

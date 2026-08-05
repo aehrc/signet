@@ -18,7 +18,7 @@ import {
   listPolicyVersions,
   withTenantScope,
 } from "@signet/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import {
   adminJson,

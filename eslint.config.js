@@ -3,8 +3,8 @@
  */
 
 import js from "@eslint/js";
-import vitest from "@vitest/eslint-plugin";
 import importPlugin from "eslint-plugin-import";
+import jest from "eslint-plugin-jest";
 import jsdoc from "eslint-plugin-jsdoc";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import react from "eslint-plugin-react";
@@ -12,7 +12,6 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import unicorn from "eslint-plugin-unicorn";
 import tseslint from "typescript-eslint";
-// eslint-plugin-vitest was renamed to @vitest/eslint-plugin; this is the maintained package.
 
 export default tseslint.config(
   {
@@ -227,13 +226,35 @@ export default tseslint.config(
 
   {
     files: ["**/*.test.{ts,tsx}", "**/test/**/*.ts", "e2e/**/*.ts"],
-    plugins: { vitest },
+    plugins: { jest },
+    // Bun's test API is Jest's, so this plugin's checks apply unchanged. Listed
+    // individually rather than spread from `recommended`: these are the ones the
+    // suite relies on, and a preset that gained a rule would fail the build for a
+    // reason nobody here chose.
     rules: {
-      ...vitest.configs.recommended.rules,
+      // A test with no assertion passes unconditionally.
+      "jest/expect-expect": "error",
+      // A committed `.only` silently skips the rest of its file under `bun test`.
+      "jest/no-focused-tests": "error",
+      // Two tests with one name: the second reads as coverage the suite lacks.
+      "jest/no-identical-title": "error",
+      "jest/no-commented-out-tests": "error",
+      "jest/valid-title": "error",
+      "jest/valid-expect": "error",
+      "jest/valid-describe-callback": "error",
+
       "jsdoc/require-jsdoc": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
-      // Vitest matcher helpers such as `expect.stringContaining` are typed `any`.
+      // Matcher helpers such as `expect.stringContaining` are typed `any`, both
+      // where the result is bound and where it is passed straight to a matcher.
       "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      // `bun-types` declares every matcher as returning `void`, including the ones
+      // reached through `.resolves` and `.rejects`, so `await expect(p).resolves
+      // .toBe(x)` reads to this rule as awaiting nothing. The await stays: it is how
+      // the assertion is written everywhere, and it is what will keep the assertion
+      // enforced if a later `bun-types` types these as the promises they are.
+      "@typescript-eslint/await-thenable": "off",
       // Whitespace in test fixtures is deliberate and literal.
       "unicorn/prefer-string-repeat": "off",
       "unicorn/no-useless-undefined": "off",

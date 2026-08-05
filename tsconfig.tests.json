@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // The test files, and only the test files.
+  //
+  // They are here rather than in their packages' projects because `bun:test` is an
+  // ambient module declaration: seeing it means having `bun-types` in the program,
+  // and `bun-types` references `@types/node` and overrides web globals with Bun's
+  // wider versions - `fetch.preconnect`, `ReadableStreamDefaultReader.readMany`.
+  // Typing a package's source that way describes a runtime none of it runs on.
+  // `packages/core` runs in the browser, `apps/web` is the browser, and
+  // `apps/server` ships as `node dist/index.js`, so each of those projects still
+  // names the types of the runtime it actually has, and each excludes its tests.
+  //
+  // The tests are the one thing that does run under Bun, so this is where Bun's
+  // types belong. Source files reached by an import from a test are pulled in here
+  // too and so are checked twice; the strict pass is the one in the package's own
+  // project, which is what the gate rests on.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    // Union of what the tested trees need: Node and Bun for the server and data
+    // layers, DOM and JSX for the console.
+    "types": ["node", "bun"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    // Nothing consumes this project's output; tsc's only job here is typechecking.
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true
+  },
+  "include": ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts"]
+}

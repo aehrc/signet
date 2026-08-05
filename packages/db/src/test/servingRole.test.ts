@@ -11,7 +11,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { SERVING_TEST_ROLE, servingRoleUrl } from "./servingRole.js";
 

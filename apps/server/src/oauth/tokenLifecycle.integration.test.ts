@@ -17,7 +17,7 @@ import {
   queryAuditEvents,
   withTenantScope,
 } from "@signet/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import {
   authorizeToCode,
@@ -47,7 +47,7 @@ describeWithDatabase("the refresh_token grant", () => {
 
   beforeAll(async () => {
     stack = await createTestStack();
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await stack.close();
@@ -252,7 +252,7 @@ describeWithDatabase("introspection, revocation and UserInfo", () => {
 
   beforeAll(async () => {
     stack = await createTestStack();
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await stack.close();
@@ -497,7 +497,7 @@ describeWithDatabase("an endpoint with no signing key", () => {
 
   beforeAll(async () => {
     stack = await createTestStack({ withoutSigningKey: true });
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await stack.close();

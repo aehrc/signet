@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "test": "vitest --run"
+    "test": "bun test src/ --timeout 120000"
   },
   "dependencies": {
     "@signet/core": "workspace:*",

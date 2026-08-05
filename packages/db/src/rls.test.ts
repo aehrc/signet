@@ -2,9 +2,9 @@
  * Author: John Grimes
  */
 
+import { describe, expect, it } from "bun:test";
 import { getTableName, is } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
-import { describe, expect, it } from "vitest";
 
 import {
   endpointScopeFromRow,
@@ -236,7 +236,7 @@ describe("withTenantScope", () => {
       expect(inner.tenantId).toBe(tenant.id);
       // The transaction, not the connection: a bound scope that carried the pool
       // would issue its reads outside the transaction that declared the tenant.
-      expect(executorFor(inner)).toBe(fake.transactions[0]);
+      expect(executorFor(inner)).toBe(fake.transactions[0]!);
       return Promise.resolve(undefined);
     });
 
@@ -340,7 +340,7 @@ describe("withTenantScope", () => {
 
     await withTenantScope(fake.db, resolved, (inner) => {
       expect(isBoundScope(inner)).toBe(true);
-      expect(executorFor(inner)).toBe(fake.transactions[1]);
+      expect(executorFor(inner)).toBe(fake.transactions[1]!);
       return Promise.resolve(undefined);
     });
 

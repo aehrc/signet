@@ -26,7 +26,7 @@ import {
   roleHasDefaultTablePrivileges,
   roleHasTablePrivilege,
 } from "@signet/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { runMigrateCommand } from "./migrate.js";
 import { testDatabaseUrl } from "./test/harness.js";
@@ -34,7 +34,7 @@ import { testDatabaseUrl } from "./test/harness.js";
 import type { Database, DatabaseHandle } from "@signet/db";
 
 /**
- * A throwaway serving role, unique to this worker.
+ * A throwaway serving role, unique to this run.
  *
  * Login-less, because nothing here connects as it: the question is what it is
  * permitted to do, which `has_*_privilege` answers without a session.
@@ -92,7 +92,7 @@ describe.skipIf(testDatabaseUrl === undefined)(
       },
     );
 
-    it.each(RLS_TABLES)(
+    it.each([...RLS_TABLES])(
       "makes %s reachable by the serving role",
       async (table) => {
         // Reachable, not visible. The policies decide what rows come back;

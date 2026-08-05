@@ -34,10 +34,10 @@
  * Author: John Grimes
  */
 
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
 
 /** The variable naming the owning identity. */
 const OWNER_VARIABLE = "SIGNET_TEST_DATABASE_URL";
@@ -61,8 +61,8 @@ const scanned = ["packages/db/src", "apps/server/src"];
  * kind, which is the point of enumerating them.
  */
 const OWNER_IDENTITY_FILES: Readonly<Record<string, string>> = {
-  "packages/db/src/test/globalSetup.ts":
-    "Migrates and creates the serving role once, before any worker starts. The only place in the suite that performs DDL, and it closes the connection before any test runs.",
+  "packages/db/src/test/preload.ts":
+    "Migrates and creates the serving role once, before the first test file is imported. The only place in the suite that performs DDL, and it closes the connection before any test runs.",
   "packages/db/src/repositories/repositories.integration.test.ts":
     "Holds the expiry sweep's own tests. The sweep is cross-tenant by design and requires the owning identity, so this suite must connect as it explicitly - and asserts the converse, that the same sweep attempted as the serving role deletes nothing. Every other connection it makes is the serving role.",
   "packages/db/src/rls.enforcement.integration.test.ts":

@@ -7,16 +7,15 @@
  * without a single test noticing.
  *
  * This module makes the serving role the ordinary path rather than a fixture one
- * file opts into. A developer still configures one variable: `globalSetup` uses
- * `SIGNET_TEST_DATABASE_URL` - the owning identity - to migrate, create this
- * role and grant it, and every suite connects on a URL derived from that one by
- * swapping the credential.
+ * file opts into. A developer still configures one variable: the preload in
+ * `./preload.ts` uses `SIGNET_TEST_DATABASE_URL` - the owning identity - to
+ * migrate, create this role and grant it, and every suite connects on a URL
+ * derived from that one by swapping the credential.
  *
  * The role is created with a login and a fixed password. That is not a secret
  * and is not treated as one: it exists only in a throwaway test database, and a
- * generated password would have to be communicated between the global setup and
- * every worker process, which is a mechanism with more ways to go wrong than the
- * problem has.
+ * generated password would have to be communicated from the preload to every
+ * suite, which is a mechanism with more ways to go wrong than the problem has.
  *
  * Author: John Grimes
  */
@@ -31,9 +30,9 @@ import type { Executor } from "../repositories/executor.js";
 /**
  * The role the suites connect as.
  *
- * Fixed rather than per-worker: the grants are applied once from the global
- * setup, before any worker starts, for the same reason the migrations are - see
- * `./schemaReady.ts`.
+ * Fixed rather than generated per run: the grants are applied once from the
+ * preload, before any test file is imported, for the same reason the migrations
+ * are - see `./schemaReady.ts`.
  */
 export const SERVING_TEST_ROLE = "signet_app_test";
 
@@ -74,7 +73,7 @@ export function servingRoleUrl(ownerUrl: string): string {
  *
  * Idempotent, so a second run over the same database is a no-op rather than an
  * error - which is what lets a developer run the suite repeatedly. Called from
- * the global setup, before any worker starts, because `create role` and
+ * the preload, before any test file is imported, because `create role` and
  * `grant ... on all tables` are catalogue writes that should not race with the
  * suites they exist to enable.
  *

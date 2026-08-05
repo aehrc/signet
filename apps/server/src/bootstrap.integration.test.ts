@@ -17,7 +17,7 @@ import {
   servingRoleUrl,
   withTenantScope,
 } from "@signet/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { bootstrapOptionsFrom, runBootstrapCommand } from "./bootstrap.js";
 import { adminRequest } from "./test/adminApi.js";

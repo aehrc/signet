@@ -19,8 +19,8 @@ import {
   queryAuditEvents,
   withTenantScope,
 } from "@signet/db";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { createLocalJWKSet, jwtVerify } from "jose";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   authorizeToCode,
@@ -78,7 +78,7 @@ describeWithDatabase("the authorization_code grant", () => {
 
   beforeAll(async () => {
     stack = await createTestStack();
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await stack.close();
@@ -389,7 +389,7 @@ describeWithDatabase("client authentication at the token endpoint", () => {
 
   beforeAll(async () => {
     stack = await createTestStack();
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await stack.close();
@@ -523,7 +523,7 @@ describeWithDatabase("the client_credentials grant", () => {
 
   beforeAll(async () => {
     stack = await createTestStack({ policy: PATHLING_PRESET });
-  }, 60_000);
+  });
 
   afterAll(async () => {
     await stack.close();

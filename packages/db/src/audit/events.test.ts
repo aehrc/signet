@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   AUDIT_ACTION_CATEGORIES,
@@ -61,7 +61,7 @@ const REQUIRED_ACTIONS: readonly AuditAction[] = [
 ];
 
 describe("the audit action vocabulary", () => {
-  it.each(REQUIRED_ACTIONS)("includes %s", (action) => {
+  it.each([...REQUIRED_ACTIONS])("includes %s", (action) => {
     expect(AUDIT_ACTIONS).toContain(action);
   });
 

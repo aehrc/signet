@@ -93,7 +93,14 @@ export interface OutboundFetchOptions {
   /** Refuses a response body larger than this many bytes. */
   readonly maxBytes?: number;
   readonly resolve?: AddressResolver;
-  readonly fetchImpl?: typeof fetch;
+  /**
+   * The transport, for the tests.
+   *
+   * The one call this module makes, rather than `typeof fetch`: the global carries
+   * runtime-specific extras - `preconnect` under Bun's types, absent under Node's -
+   * and a stub would have to grow them for no reason but to satisfy a signature.
+   */
+  readonly fetchImpl?: (input: URL, init: RequestInit) => Promise<Response>;
   /**
    * Sends a form-encoded POST instead of a GET.
    *

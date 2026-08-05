@@ -19,7 +19,7 @@
  *   - an empty database, which is a deployment whose migration has not run.
  *
  * The last is a database of its own rather than the shared test database with its
- * tables dropped: other workers are using those tables.
+ * tables dropped: every other suite is using those tables.
  *
  * Creating a role with `BYPASSRLS` requires the configured identity to hold it,
  * and creating a database requires `CREATEDB`. Both hold for the throwaway
@@ -41,15 +41,7 @@ import {
   SERVING_TEST_ROLE,
   servingRoleUrl,
 } from "@signet/db";
-import {
-  afterAll,
-  beforeAll,
-  describe,
-  expect,
-  it,
-  onTestFinished,
-  vi,
-} from "vitest";
+import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 
 import { ConfigError } from "./config.js";
 import { verifyEnforcement } from "./enforcement.js";
@@ -67,7 +59,7 @@ import type { Database, DatabaseHandle } from "@signet/db";
  */
 const PROBE_PASSWORD = "probe-credential-never-in-a-message";
 
-/** Unique per worker: Vitest runs files in parallel against one server. */
+/** Unique per run, so a second `bun test` against the same server cannot collide. */
 const suffix = String(process.pid);
 
 /** Exempt everywhere, and granted everything the serving role is granted. */
@@ -163,7 +155,7 @@ describe.skipIf(testDatabaseUrl === undefined)(
       // database already carrying a schema would be reported healthy.
       await dropScratchDatabase(owner.db, ABSENT_DATABASE);
       await createScratchDatabase(owner.db, ABSENT_DATABASE);
-    }, 120_000);
+    });
 
     afterAll(async () => {
       for (const handle of opened) {
@@ -245,19 +237,24 @@ describe.skipIf(testDatabaseUrl === undefined)(
 
     it("accepts the serving role and reports what it verified", async () => {
       const lines: string[] = [];
-      const log = vi
-        .spyOn(console, "log")
-        .mockImplementation((...written: unknown[]) => {
+      const log = spyOn(console, "log").mockImplementation(
+        (...written: unknown[]) => {
           lines.push(String(written[0]));
-        });
-      onTestFinished(() => {
-        log.mockRestore();
-      });
-
-      const verdict = await verifyEnforcement(
-        connect(servingRoleUrl(ownerUrl)),
-        "info",
+        },
       );
+
+      // Restored in `finally` rather than through a teardown hook: an assertion
+      // below that failed while `console.log` was still captured would take the
+      // reporter's own output with it.
+      let verdict: Awaited<ReturnType<typeof verifyEnforcement>>;
+      try {
+        verdict = await verifyEnforcement(
+          connect(servingRoleUrl(ownerUrl)),
+          "info",
+        );
+      } finally {
+        log.mockRestore();
+      }
 
       expect(verdict.outcome).toBe("healthy");
       expect(verdict.role).toBe(SERVING_TEST_ROLE);

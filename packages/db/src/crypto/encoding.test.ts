@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   decodeBase32,
@@ -13,9 +13,15 @@ import {
   encodeBase64Url,
 } from "./encoding.js";
 
-/** The bytes of an ASCII string, for the RFC 4648 vectors. */
-function ascii(text: string): Uint8Array {
-  return new TextEncoder().encode(text);
+/**
+ * The bytes of an ASCII string, for the RFC 4648 vectors.
+ *
+ * Copied into a plain `ArrayBuffer` view, which is what the decoders return.
+ * `TextEncoder` promises only `ArrayBufferLike`, and a `Uint8Array` over a
+ * `SharedArrayBuffer` is not the same type as one over an `ArrayBuffer`.
+ */
+function ascii(text: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(new TextEncoder().encode(text));
 }
 
 describe("base64url", () => {

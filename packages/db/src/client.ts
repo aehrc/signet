@@ -20,7 +20,7 @@ export interface DatabaseOptions {
    * Ordinary operational hygiene - an operator looking at a busy database should be
    * able to tell Signet's backends from a reporting job's - and it is also what lets
    * a test observe the transactions one particular application is holding while
-   * other test workers hold their own.
+   * other connections to the same database hold their own.
    */
   readonly applicationName?: string;
 }

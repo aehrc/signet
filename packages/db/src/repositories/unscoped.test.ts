@@ -2,9 +2,9 @@
  * Author: John Grimes
  */
 
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
 
 import {
   SWEEP_FUNCTIONS,

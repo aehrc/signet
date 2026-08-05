@@ -11,7 +11,7 @@
  * Author: John Grimes
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { RATE_LIMITS } from "./rateLimit.js";
 import { adminRequest } from "../test/adminApi.js";

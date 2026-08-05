@@ -64,9 +64,10 @@ export function resolveMigrationsFolder(): string {
 /**
  * Advisory lock serialising migration across processes.
  *
- * Needed by the test suites, which Vitest runs in parallel against one database:
- * two processes running the migrator at once race on the journal table. It is also
- * a cheap safeguard for a deployment whose hook Job is somehow run twice.
+ * Needed by the test suites: `bun test` migrates once from its preload, but two
+ * `bun test` invocations against one database are a thing a developer does, and two
+ * processes running the migrator at once race on the journal table. It is also a
+ * cheap safeguard for a deployment whose hook Job is somehow run twice.
  */
 const MIGRATION_LOCK_KEY = 5_348_464;
 

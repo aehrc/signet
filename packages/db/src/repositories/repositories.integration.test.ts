@@ -19,18 +19,19 @@
  * yet, and a suite that connected regardless would fail the build.
  *
  * Every test creates its own tenants and deletes them afterwards rather than
- * truncating: Vitest runs files in parallel, and a suite that emptied shared tables
- * would break whichever file happened to be running beside it.
+ * truncating: the tables are shared with every other suite in the run and with a
+ * second `bun test` against the same database, and a suite that emptied them would
+ * break both.
  *
  * Author: John Grimes
  */
 
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { withTenantScope } from "../rls.js";
 import {
@@ -199,7 +200,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     owner = ownerConnection;
 
     // See the audit suite: the schema is normally already there, migrated once by
-    // the Vitest global setup before any worker started.
+    // the preload before any test file was imported.
     if (!isTestSchemaReady()) {
       await ownerSql`select pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
       try {
@@ -222,7 +223,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     // `drizzle(sql)` and `Executor` differ in a phantom schema type parameter
     // only; the query surface used here is identical.
     db = connection as unknown as Executor;
-  }, 60_000);
+  });
 
   afterEach(async () => {
     // Cascades through every tenant-owned table, so each test starts clean without

@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { decodeBase32, encodeBase32 } from "./encoding.js";
 import { generateTotpSecret, totpUri, verifyTotp } from "./totp.js";

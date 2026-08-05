@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   PATHLING_PRESET,
@@ -72,10 +72,18 @@ describe("validatePolicy - document shape", () => {
   it("returns the document itself on success", () => {
     const input = minimal();
     const result = validatePolicy(input);
-    expect(result.ok && result.policy).toBe(input);
+    // Identity, not equality: a caller holds the object it passed in, and a
+    // validator that returned a copy would leave it holding the wrong one. Widened
+    // to `unknown` because the comparison is of references, and the two sides are
+    // the same object described by two different types.
+    expect<unknown>(result.ok && result.policy).toBe(input);
   });
 
-  it.each([null, undefined, 1, "policy", true, []])(
+  // Each case is wrapped in a one-element tuple because `each` spreads an array
+  // case across the callback's parameters: a bare `[]` would arrive as no
+  // arguments at all, and the runner would read the unfilled parameter as a
+  // `done` callback and wait for it.
+  it.each([[null], [undefined], [1], ["policy"], [true], [[]]])(
     "rejects %j as a document",
     (input) => {
       expect(issues(input)).toEqual([

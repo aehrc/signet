@@ -9,9 +9,9 @@
  * Author: John Grimes
  */
 
+import { describe, expect, it } from "bun:test";
 import { is } from "drizzle-orm";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
-import { describe, expect, it } from "vitest";
 
 import {
   auditActorTypeEnum,
@@ -236,7 +236,7 @@ describe("credential storage", () => {
     { table: "clients", hashColumn: "secret_hash", forbidden: ["secret"] },
   ];
 
-  it.each(BEARER_CREDENTIALS)(
+  it.each([...BEARER_CREDENTIALS])(
     "stores $table.$hashColumn hashed and nothing in clear",
     ({ table: name, hashColumn, forbidden }) => {
       const config = table(name);

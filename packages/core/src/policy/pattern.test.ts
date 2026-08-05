@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   parseScopePattern,
@@ -76,7 +76,7 @@ describe("parseScopePattern", () => {
   });
 
   it("accepts every scope context", () => {
-    for (const context of ["patient", "user", "system"]) {
+    for (const context of ["patient", "user", "system"] as const) {
       expect(parseScopePattern(`${context}/*.r`)?.context).toBe(context);
     }
   });

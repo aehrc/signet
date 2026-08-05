@@ -2,8 +2,8 @@
  * Author: John Grimes
  */
 
+import { describe, expect, it, mock } from "bun:test";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { describe, expect, it, vi } from "vitest";
 
 import {
   AUDIT_DETAIL_RESERVED_KEYS,
@@ -277,7 +277,7 @@ describe("recordAuditEvent", () => {
   });
 
   it("never fails the operation being audited", async () => {
-    const reportFailure = vi.fn();
+    const reportFailure = mock();
     const failure = new Error("connection terminated");
 
     await expect(
@@ -297,7 +297,7 @@ describe("recordAuditEvent", () => {
   });
 
   it("hands the reporter a redacted row, not the caller's blob", async () => {
-    const reportFailure = vi.fn();
+    const reportFailure = mock();
 
     await recordAuditEvent(
       insertingExecutor({ rows: [], fail: new Error("down") }),
@@ -327,7 +327,7 @@ describe("recordAuditEvent", () => {
 
 describe("createAuditRecorder", () => {
   it("binds the reporter so no call site has to remember it", async () => {
-    const reportFailure = vi.fn();
+    const reportFailure = mock();
     const recorder = createAuditRecorder(reportFailure);
 
     await recorder.record(
@@ -526,10 +526,8 @@ describe("queryAuditEvents", () => {
     });
 
     expect(page.events).toHaveLength(2);
-    expect(page.nextCursor).toEqual({
-      at: page.events[1]?.at,
-      id: page.events[1]?.id,
-    });
+    const last = page.events[1];
+    expect(page.nextCursor).toEqual({ at: last!.at, id: last!.id });
   });
 
   it("reports the end of the trail with a null cursor", async () => {

@@ -18,7 +18,7 @@ import {
   recordConsent,
   withTenantScope,
 } from "@signet/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { adminRequest, endpointPath } from "../test/adminApi.js";
 import { authorizeToCode, issuerPath, postForm } from "../test/flows.js";

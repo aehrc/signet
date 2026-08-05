@@ -2,7 +2,7 @@
  * Author: John Grimes
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { evaluatePolicy } from "./evaluate.js";
 import { formatScope, parseScopes } from "../scopes/index.js";
@@ -161,8 +161,13 @@ describe("evaluatePolicy - scope grants", () => {
       }),
       context({ requested: "patient/Observation.d" }),
     );
-    expect(result.deniedScopes[0]).toEqual({
-      scope: result.deniedScopes[0]?.scope,
+    const denied = result.deniedScopes[0];
+    expect(denied).toBeDefined();
+    // The whole object, so a fourth field appearing here would fail rather than go
+    // unnoticed. The scope itself is asserted elsewhere; this test is about the two
+    // fields that explain the decision.
+    expect(denied).toEqual({
+      scope: denied!.scope,
       reason: 'Denied by rule no-deletes matching "*/*.d"',
       ruleId: "no-deletes",
     });
