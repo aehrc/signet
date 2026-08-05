@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "description": "Multi-tenant SMART on FHIR authorization server",
-  "license": "Apache-2.0",
+  "license": "UNLICENSED",
   "workspaces": [
     "apps/*",
     "packages/*",

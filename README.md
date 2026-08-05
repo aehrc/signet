@@ -185,6 +185,10 @@ Pathling builds its own `/.well-known/smart-configuration` by merging from the
 issuer's OpenID Connect discovery document, so pointing the issuer at a Signet
 endpoint is the entire integration.
 
-## Licence
+## Copyright
 
-Apache 2.0
+Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
+(CSIRO) ABN 41 687 119 230.
+
+All rights reserved. Signet is not open source and carries no licence to use,
+copy, modify or distribute it.
