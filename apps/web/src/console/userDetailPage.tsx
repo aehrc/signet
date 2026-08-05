@@ -49,6 +49,13 @@ export function UserDetailPage() {
   const [displayName, setDisplayName] = useState<string | undefined>();
   const [fhirUser, setFhirUser] = useState<string | undefined>();
   const [roles, setRoles] = useState<string | undefined>();
+  const [defaultPatient, setDefaultPatient] = useState<string | undefined>();
+  const [defaultEncounter, setDefaultEncounter] = useState<
+    string | undefined
+  >();
+  const [intent, setIntent] = useState<string | undefined>();
+  const [patients, setPatients] = useState<string | undefined>();
+  const [encounters, setEncounters] = useState<string | undefined>();
 
   const mayWrite = roleAllows(role, "admin");
 
@@ -68,6 +75,11 @@ export function UserDetailPage() {
     displayName: displayName ?? loaded.displayName,
     fhirUser: fhirUser ?? loaded.fhirUser,
     roles: roles ?? loaded.roles,
+    defaultPatient: defaultPatient ?? loaded.defaultPatient,
+    defaultEncounter: defaultEncounter ?? loaded.defaultEncounter,
+    intent: intent ?? loaded.intent,
+    patients: patients ?? loaded.patients,
+    encounters: encounters ?? loaded.encounters,
   };
 
   return (
@@ -168,6 +180,47 @@ export function UserDetailPage() {
             error={issues["roles"] ?? issues["roles.0"]}
             hint="One per line. A policy rule can require one of these before granting a scope."
             rows={2}
+            disabled={!mayWrite}
+          />
+
+          <TextField
+            label="Default patient"
+            value={edited.defaultPatient}
+            onChange={setDefaultPatient}
+            error={issues["defaultContext.patient"] ?? issues["defaultContext"]}
+            disabled={!mayWrite}
+          />
+          <TextField
+            label="Default encounter"
+            value={edited.defaultEncounter}
+            onChange={setDefaultEncounter}
+            error={issues["defaultContext.encounter"]}
+            disabled={!mayWrite}
+          />
+          <TextField
+            label="Intent"
+            value={edited.intent}
+            onChange={setIntent}
+            error={issues["defaultContext.intent"]}
+            hint="Seeds the launch context when a launch does not supply one. Emptying all three clears it."
+            disabled={!mayWrite}
+          />
+
+          <ListField
+            label="Patients"
+            value={edited.patients}
+            onChange={setPatients}
+            error={issues["attributes"]}
+            hint="One per line. Offered by the patient picker at authorisation time."
+            rows={3}
+            disabled={!mayWrite}
+          />
+          <ListField
+            label="Encounters"
+            value={edited.encounters}
+            onChange={setEncounters}
+            hint="One per line. Offered by the encounter picker at authorisation time."
+            rows={3}
             disabled={!mayWrite}
           />
 
