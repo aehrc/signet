@@ -16,12 +16,13 @@
  */
 
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 
 import { endpointRoute } from "./routes.js";
 import { roleAllows, useEndpointContext } from "./useConsole.js";
 import { describeError, issuesByField } from "../api/errors.js";
 import {
+  useDeleteEndUser,
   useEndUser,
   useSetEndUserPassword,
   useUpdateEndUser,
@@ -44,9 +45,14 @@ import { endUserFormValues, endUserPatch } from "../forms/endUserEdit.js";
 export function UserDetailPage() {
   const { tenant, endpointSlug, role } = useEndpointContext();
   const { userId } = useParams<{ userId: string }>();
+  const navigate = useNavigate();
 
   const user = useEndUser(tenant, endpointSlug, userId ?? "");
   const update = useUpdateEndUser(tenant, endpointSlug);
+  // A second instance rather than a shared one, so that disabling reports itself in
+  // the state panel instead of announcing "User saved." under the edit form.
+  const toggle = useUpdateEndUser(tenant, endpointSlug);
+  const destroy = useDeleteEndUser(tenant, endpointSlug);
 
   // One piece of state per field, undefined until edited, so the rendered value is
   // `edited ?? current` and a save elsewhere on the page shows through immediately.
@@ -244,6 +250,60 @@ export function UserDetailPage() {
       {current.isPersona || !mayWrite ? null : (
         <SetPasswordPanel userId={current.id} />
       )}
+
+      {mayWrite ? (
+        <Panel
+          title="Account state"
+          description="Disabling stops authentication on the next request and keeps this account's name attached to its audit trail. Deleting takes the consents and tokens with it."
+        >
+          {toggle.isError ? (
+            <ErrorAlert message={describeError(toggle.error)} />
+          ) : null}
+          {destroy.isError ? (
+            <ErrorAlert message={describeError(destroy.error)} />
+          ) : null}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={toggle.isPending}
+              onClick={() => {
+                toggle.mutate({
+                  userId: current.id,
+                  body: { disabled: current.disabledAt === null },
+                });
+              }}
+            >
+              {current.disabledAt === null ? "Disable" : "Enable"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-error btn-outline btn-sm"
+              disabled={destroy.isPending}
+              onClick={() => {
+                // A native confirm rather than a modal: this is destructive and
+                // rare, and the browser's own dialogue cannot be dismissed by a
+                // stray click the way a modal overlay can.
+                if (
+                  globalThis.confirm(
+                    `Delete ${current.username}? Their stored consents and tokens go with them. Disabling keeps the audit trail readable.`,
+                  )
+                ) {
+                  destroy.mutate(current.id, {
+                    onSuccess: () => {
+                      void navigate(
+                        endpointRoute(tenant, endpointSlug, "/users"),
+                      );
+                    },
+                  });
+                }
+              }}
+            >
+              Delete user
+            </button>
+          </div>
+        </Panel>
+      ) : null}
     </>
   );
 }

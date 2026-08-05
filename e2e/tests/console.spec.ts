@@ -218,6 +218,58 @@ test.describe("an authenticated operator", () => {
     await expect(page.getByLabel("Display name")).toHaveValue("Persona Target");
   });
 
+  test("disables and re-enables a user from their detail page", async ({
+    page,
+  }) => {
+    const username = uniqueUsername("state-target");
+    await createUser(page, {
+      username,
+      displayName: "State Target",
+      password: "state-target-password",
+    });
+
+    await page.getByRole("link", { name: "State Target" }).click();
+    await expect(page.getByRole("button", { name: "Disable" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Disable" }).click();
+    // The control flipping is the page's own report of the state it just changed;
+    // the summary row is the same fact read back off the server's answer.
+    await expect(page.getByRole("button", { name: "Enable" })).toBeVisible();
+    await expect(page.getByText(/^Disabled /)).toBeVisible();
+
+    await page.getByRole("button", { name: "Enable" }).click();
+    await expect(page.getByRole("button", { name: "Disable" })).toBeVisible();
+    await expect(page.getByText("Enabled", { exact: true })).toBeVisible();
+  });
+
+  test("deletes a user and returns to the users table", async ({ page }) => {
+    const username = uniqueUsername("delete-target");
+    await createUser(page, {
+      username,
+      displayName: "Delete Target",
+      password: "delete-target-password",
+    });
+
+    await page.getByRole("link", { name: "Delete Target" }).click();
+
+    // The confirmation has to say what is lost and what the alternative is, so it
+    // is asserted rather than merely accepted.
+    const confirmations: string[] = [];
+    page.on("dialog", (dialog) => {
+      confirmations.push(dialog.message());
+      void dialog.accept();
+    });
+
+    await page.getByRole("button", { name: "Delete user" }).click();
+
+    await expect(page).toHaveURL(USERS);
+    await expect(page.getByRole("link", { name: "Delete Target" })).toHaveCount(
+      0,
+    );
+    expect(confirmations[0]).toContain("consents and tokens");
+    expect(confirmations[0]).toContain("Disabling");
+  });
+
   test("shows the launches the other suite performed", async ({ page }) => {
     await page.goto(`${SIGNET}/console/t/demo/audit`);
 
