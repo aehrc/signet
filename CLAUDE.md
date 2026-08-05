@@ -145,12 +145,28 @@ document that still advertises the old behaviour.
   implementation exists.
 - CI MUST be green before merge, and the gates MUST NOT be weakened to make a
   change pass: `format:check`, `lint`, `typecheck`, `lint:duplication` at a
-  threshold of 0, `test:coverage` at 80% of lines, functions, branches and
-  statements, `build`, the container image build and smoke test, the Helm chart
-  lint and render, and the end-to-end suite. Coverage thresholds are a floor.
+  threshold of 0, `test:coverage` at 80% of lines and functions across the whole
+  suite, `build`, the container image build and smoke test, the Helm chart lint and
+  render, and the end-to-end suite. Coverage thresholds are a floor.
+
+  Lines and functions, not branches: `bun test --coverage` produces no branch data,
+  so a branch floor is not something this repository can machine-check. Whether a
+  change exercises both sides of the decisions it adds is therefore a review
+  question, and reviewers MUST ask it - a rule with a false branch and a rule with
+  none are the same line count and the same function count.
+
+  The floor is a total, not a per-file rule. Bun's own `coverageThreshold` is
+  applied file by file and its "All files" row is the unweighted mean of the
+  per-file percentages, so neither expresses this gate; `scripts/checkCoverage.mjs`
+  computes the totals from the lcov report and is what `test:coverage` fails on.
+
 - A test MUST NOT pass by not running. The data layer's integration tests skip
   themselves when `SIGNET_TEST_DATABASE_URL` is unset, so any workflow that is
   supposed to cover them MUST provide a database.
+- Every test file MUST live under a package's `src`. `bun test` has no
+  ignore-patterns setting, so the scripts narrow discovery with a `src/` filter to
+  keep the copies `tsc --build` emits into `dist` from being run as well; a test
+  placed outside `src` would silently not run.
 - The runtime container ships no `node_modules`; the server is bundled into one
   self-contained file. A dependency that cannot be bundled MUST fail
   `scripts/checkBundle.mjs` in the Docker build rather than the deployment.
