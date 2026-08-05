@@ -29,7 +29,15 @@ import { GrantRuleFields } from "./grantRuleFields.js";
 import { MappingRuleFields } from "./mappingRuleFields.js";
 import { DEFAULT_PATTERN, formatPattern } from "./patterns.js";
 import { RuleCard } from "./ruleCard.js";
-import { appendRule, isRuleEnabled, replaceRule, rulesIn } from "./rules.js";
+import {
+  appendRule,
+  generateRuleId,
+  isRuleEnabled,
+  replaceRule,
+  rulesIn,
+  usedRuleIds,
+} from "./rules.js";
+import { summariseRule } from "./summaries.js";
 import { TextField } from "../components/fields.js";
 import { EmptyState, Panel } from "../components/layout.js";
 import { parsePositiveInteger } from "../forms/lists.js";
@@ -137,7 +145,7 @@ interface RuleSectionProps {
   readonly newRule: () => AnyRule;
 }
 
-/** One list of rules, with its ordering explained. */
+/** One list of rules, collapsed to summaries, with its ordering explained. */
 function RuleSection({
   list,
   document,
@@ -147,6 +155,24 @@ function RuleSection({
 }: Readonly<RuleSectionProps>) {
   const rules = rulesIn(document, list);
   const meta = LIST_DESCRIPTIONS[list];
+
+  // Which rules are open for editing. Collapsed by default so the list reads as a
+  // list; a rule the operator has just added opens itself, because the next thing
+  // they will do is fill it in.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+
+  /** Opens or closes one rule. */
+  const toggle = (key: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   return (
     <Panel
@@ -158,7 +184,11 @@ function RuleSection({
             type="button"
             className="btn btn-outline btn-sm"
             onClick={() => {
-              onChange(appendRule(document, list, newRule()));
+              // The identifier is chosen here rather than left to appendRule, so
+              // the new card can be expanded for editing.
+              const id = generateRuleId(list, usedRuleIds(document));
+              onChange(appendRule(document, list, { ...newRule(), id }));
+              setExpanded((current) => new Set(current).add(id));
             }}
           >
             Add rule
@@ -185,8 +215,13 @@ function RuleSection({
                 rule={rule}
                 position={index + 1}
                 total={rules.length}
+                summary={summariseRule(list, rule)}
                 enabled={isRuleEnabled(rule)}
                 disabled={disabled}
+                expanded={expanded.has(rule.id ?? String(index))}
+                onToggle={() => {
+                  toggle(rule.id ?? String(index));
+                }}
                 onChange={onChange}
               >
                 {renderFields(list, rule, disabled, (next) => {
