@@ -56,8 +56,15 @@ export function RequestsPage() {
         description={
           <>
             Developers request a client from the portal at{" "}
-            <code className="font-mono text-xs">{endpoint.issuer}/apps</code>.
-            Approving one registers it and reveals its secret once.
+            <a
+              className="link font-mono text-xs"
+              href={`${endpoint.issuer}/apps`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {endpoint.issuer}/apps
+            </a>
+            . Approving one registers it and reveals its secret once.
           </>
         }
       />
