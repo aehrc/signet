@@ -22,16 +22,51 @@ adding a rule rather than by remembering to remove one.
 
 ## Pathling
 
-[Pathling authorization](https://pathling.csiro.au/docs/server/authorization).
+[Pathling authorization](https://pathling.csiro.au/docs/server/authorization),
+and the `@OperationAccess` annotations in the
+[`release/server/3.0.0`](https://github.com/aehrc/pathling/tree/release/server/3.0.0)
+server source, which the preset is written against. The source is cited as well as
+the page because the page's authority table omits `create`, `sqlquery-run` and
+`sqlquery-export`.
 
 Pathling does not read SMART scopes. It authorises off a Spring Security style
 `authorities` claim, and the rule that makes the mapping non-obvious is that an
 operation authority is required _in addition to_ a read or write authority:
 `pathling:search` alone does not permit searching. So `patient/Observation.rs`
-becomes `["pathling:read:Observation", "pathling:search"]`.
+becomes a `pathling:read:Observation` data authority followed by the operation
+authorities its permissions imply.
 
-The preset never grants the administrative authorities - import, batch, bulk
-submit, the SQL-on-FHIR view operations - because no SMART scope implies them.
+Reads and searches both yield the data authority, because a Pathling search
+returns the resources it matched. A read permission also yields the operations
+that read a population rather than a single resource - export, the two
+ViewDefinition operations and the two SQL query operations - each still bounded by
+the data authority beside it, so a typed scope cannot project a type it did not
+name. These are not narrowed by launch context, because a Pathling authority
+carries no patient compartment: `pathling:read:Observation` already reads every
+Observation in the warehouse, whether it came from a patient-context scope or a
+system one. If a deployment needs the compartment enforced, that has to come from
+Pathling's configuration, not from the token.
+
+On the write side, 3.0.0 separates create from update, so a create-only scope
+cannot overwrite an existing resource. Any write yields `pathling:batch`, and a
+create additionally yields the bulk loading operations - import, ping-and-pull
+import and bulk submit.
+
+Nothing grants a write by default. The only rule that names one requires the user
+to hold the `pathling-admin` role; a user without it who asks for
+`user/Patient.cruds` is narrowed to `user/Patient.rs` rather than refused. A
+separate rule, shipped disabled, covers an unattended data loader running as a
+backend service, and is separate because a `client_credentials` grant has no user
+and so no role to check.
+
+One limitation is worth knowing before you debug it. Pathling's read-by-id
+interaction demands the operation authority `pathling:read`, which is the same
+string as the all-types read data authority, so `pathling:read:Observation` does
+not satisfy it: a typed read scope can search a resource type but cannot fetch one
+by id. Emitting the bare authority would grant read across every type and defeat
+the narrowing, so the preset does not. The collision is reported upstream as
+[aehrc/pathling#2702](https://github.com/aehrc/pathling/issues/2702), which
+proposes renaming the operation authority to `pathling:read-resource`.
 
 ## Aidbox
 

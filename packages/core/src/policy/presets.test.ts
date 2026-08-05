@@ -22,7 +22,7 @@ import type {
   PolicyDocument,
 } from "./types.js";
 import type { LaunchContext } from "../launch/types.js";
-import type { Permission, Scope, ScopeContext } from "../scopes/types.js";
+import type { Permission, Scope } from "../scopes/types.js";
 
 /** Parses a space-delimited scope string, failing on anything unparseable. */
 function scopes(raw: string): readonly Scope[] {
@@ -113,18 +113,6 @@ function authoritiesFor(
 // silently ignored by Pathling, which is indistinguishable from a policy that
 // grants nothing at all.
 const DATA_AUTHORITY = /^pathling:(?:read|write)(?::[A-Z][A-Za-z]*)?$/;
-const OPERATION_AUTHORITIES = new Set<string>([
-  "pathling:search",
-  "pathling:import",
-  "pathling:import-pnp",
-  "pathling:update",
-  "pathling:delete",
-  "pathling:batch",
-  "pathling:bulk-submit",
-  "pathling:export",
-  "pathling:view-run",
-  "pathling:view-export",
-]);
 
 /** Operation authorities that need a read authority to be usable. */
 const READ_OPERATIONS = new Set<string>([
@@ -132,32 +120,65 @@ const READ_OPERATIONS = new Set<string>([
   "pathling:export",
   "pathling:view-run",
   "pathling:view-export",
+  "pathling:sqlquery-run",
+  "pathling:sqlquery-export",
 ]);
 
 /** Operation authorities that need a write authority to be usable. */
 const WRITE_OPERATIONS = new Set<string>([
-  "pathling:import",
-  "pathling:import-pnp",
+  "pathling:create",
   "pathling:update",
   "pathling:delete",
   "pathling:batch",
+  "pathling:import",
+  "pathling:import-pnp",
   "pathling:bulk-submit",
 ]);
 
 /**
- * Administrative operations no SMART scope may ever imply.
+ * Operation authorities usable with a data authority of either kind.
  *
- * Bulk import can overwrite a whole data warehouse and the view operations can
- * read across every resource type at once, so both must be granted deliberately.
+ * Only `pathling:jobs`, which lists the caller's own asynchronous jobs. Jobs are
+ * started by read operations and write operations alike, so pairing it with one
+ * kind would leave the other unable to see what it started.
  */
-const NEVER_IMPLIED: readonly string[] = [
+const ANY_DATA_OPERATIONS = new Set<string>(["pathling:jobs"]);
+
+/**
+ * Every operation authority in Pathling `release/server/3.0.0`.
+ *
+ * Taken from the `@OperationAccess` annotations in the server source rather than
+ * from the documentation table, which omits `create`, `read`, `sqlquery-run` and
+ * `sqlquery-export`. Anything outside this grammar would be silently ignored by
+ * Pathling, which is indistinguishable from a policy that grants nothing at all.
+ *
+ * `pathling:read` is absent as an operation authority even though `ReadProvider`
+ * demands one, because the string is indistinguishable from the all-types read
+ * data authority - the subject of aehrc/pathling#2702, and the reason
+ * {@link DATA_AUTHORITY} already covers it.
+ */
+const OPERATION_AUTHORITIES = new Set<string>([
+  ...READ_OPERATIONS,
+  ...WRITE_OPERATIONS,
+  ...ANY_DATA_OPERATIONS,
+]);
+
+/**
+ * The write-side operations that can reshape a whole data warehouse.
+ *
+ * These follow from a create scope, which the preset grants to nobody by
+ * default: an operator reaches them either by holding {@link ADMIN_ROLE} or by
+ * enabling the disabled backend service grant. The test below proves both halves
+ * of that, because a mapping is only as narrow as the grant feeding it.
+ */
+const BULK_LOAD_OPERATIONS: readonly string[] = [
   "pathling:import",
   "pathling:import-pnp",
-  "pathling:batch",
   "pathling:bulk-submit",
-  "pathling:view-run",
-  "pathling:view-export",
 ];
+
+/** The role the preset's write grant requires. */
+const ADMIN_ROLE = "pathling-admin";
 
 /** All non-empty permission subsets, in canonical `cruds` order. */
 function permissionSubsets(): readonly (readonly Permission[])[] {
@@ -177,15 +198,19 @@ function permissionSubsets(): readonly (readonly Permission[])[] {
 /**
  * The authority set a scope should map to, derived independently from the rules
  * as documented rather than from the preset's structure.
+ *
+ * Deliberately written as a second statement of the mapping table. It is only
+ * worth having because it is not the implementation: if it were derived from the
+ * rules it would agree with them however wrong they both were.
  */
 function expectedAuthorities(
-  scopeContext: ScopeContext,
   resourceType: string,
   permissions: readonly Permission[],
 ): readonly string[] {
   const suffix = resourceType === "*" ? "" : `:${resourceType}`;
   const has = (permission: Permission): boolean =>
     permissions.includes(permission);
+  const writes = has("c") || has("u") || has("d");
   const expected: string[] = [];
 
   if (has("r") || has("s")) {
@@ -194,106 +219,180 @@ function expectedAuthorities(
   if (has("s")) {
     expected.push("pathling:search");
   }
-  if (scopeContext === "system" && has("r")) {
-    expected.push("pathling:export");
+  if (has("r")) {
+    expected.push(
+      "pathling:export",
+      "pathling:view-run",
+      "pathling:view-export",
+      "pathling:sqlquery-run",
+      "pathling:sqlquery-export",
+    );
   }
-  if (has("c") || has("u") || has("d")) {
+  expected.push("pathling:jobs");
+  if (writes) {
     expected.push(`pathling:write${suffix}`);
   }
-  if (has("c") || has("u")) {
+  if (has("c")) {
+    expected.push("pathling:create");
+  }
+  if (has("u")) {
     expected.push("pathling:update");
   }
   if (has("d")) {
     expected.push("pathling:delete");
   }
+  if (writes) {
+    expected.push("pathling:batch");
+  }
+  if (has("c")) {
+    expected.push(
+      "pathling:import",
+      "pathling:import-pnp",
+      "pathling:bulk-submit",
+    );
+  }
   return expected;
 }
 
+/**
+ * The operation authorities a read permission yields, in emission order.
+ *
+ * Spelled out once and reused, because writing all five into every row of the
+ * table below would bury the part of each row that actually varies.
+ */
+const READ_DERIVED: readonly string[] = [
+  "pathling:export",
+  "pathling:view-run",
+  "pathling:view-export",
+  "pathling:sqlquery-run",
+  "pathling:sqlquery-export",
+];
+
 describe("PATHLING_PRESET - the two mandated cases", () => {
-  it("maps patient/Observation.rs to a read and a search authority", () => {
+  it("maps patient/Observation.rs to a typed read plus the read operations", () => {
     expect(authoritiesFor("patient/Observation.rs")).toEqual([
       "pathling:read:Observation",
       "pathling:search",
+      ...READ_DERIVED,
+      "pathling:jobs",
     ]);
   });
 
-  it("maps system/*.rs to read, search and export", () => {
+  it("maps system/*.rs to an all-types read plus the read operations", () => {
     expect(
       authoritiesFor("system/*.rs", { grantType: "client_credentials" }),
-    ).toEqual(["pathling:read", "pathling:search", "pathling:export"]);
+    ).toEqual([
+      "pathling:read",
+      "pathling:search",
+      ...READ_DERIVED,
+      "pathling:jobs",
+    ]);
   });
 });
 
 describe("PATHLING_PRESET - authority table", () => {
   it.each([
-    ["patient/Observation.r", ["pathling:read:Observation"]],
-    ["patient/Observation.s", ["pathling:read:Observation", "pathling:search"]],
     [
-      "patient/Observation.rs",
-      ["pathling:read:Observation", "pathling:search"],
+      "patient/Observation.r",
+      ["pathling:read:Observation", ...READ_DERIVED, "pathling:jobs"],
     ],
-    ["patient/*.r", ["pathling:read"]],
-    ["patient/*.rs", ["pathling:read", "pathling:search"]],
-    ["user/Patient.r", ["pathling:read:Patient"]],
-    ["user/Patient.rs", ["pathling:read:Patient", "pathling:search"]],
-    ["user/*.rs", ["pathling:read", "pathling:search"]],
-    ["system/Patient.r", ["pathling:read:Patient", "pathling:export"]],
+    // Search yields no export or view authority: those follow from `r`, and a
+    // search-only scope has not asked to read a whole population at once.
     [
-      "system/Patient.rs",
-      ["pathling:read:Patient", "pathling:search", "pathling:export"],
+      "patient/Observation.s",
+      ["pathling:read:Observation", "pathling:search", "pathling:jobs"],
     ],
-    ["system/*.r", ["pathling:read", "pathling:export"]],
-    ["system/*.s", ["pathling:read", "pathling:search"]],
-    ["system/*.rs", ["pathling:read", "pathling:search", "pathling:export"]],
+    ["patient/*.r", ["pathling:read", ...READ_DERIVED, "pathling:jobs"]],
+    [
+      "user/Patient.r",
+      ["pathling:read:Patient", ...READ_DERIVED, "pathling:jobs"],
+    ],
+    ["system/*.s", ["pathling:read", "pathling:search", "pathling:jobs"]],
     [
       "patient/Observation.c",
-      ["pathling:write:Observation", "pathling:update"],
+      [
+        "pathling:jobs",
+        "pathling:write:Observation",
+        "pathling:create",
+        "pathling:batch",
+        "pathling:import",
+        "pathling:import-pnp",
+        "pathling:bulk-submit",
+      ],
     ],
     [
       "patient/Observation.u",
-      ["pathling:write:Observation", "pathling:update"],
+      [
+        "pathling:jobs",
+        "pathling:write:Observation",
+        "pathling:update",
+        "pathling:batch",
+      ],
     ],
     [
       "patient/Observation.d",
-      ["pathling:write:Observation", "pathling:delete"],
+      [
+        "pathling:jobs",
+        "pathling:write:Observation",
+        "pathling:delete",
+        "pathling:batch",
+      ],
     ],
+    // Create and update are separate authorities in 3.0.0, so a `cu` scope
+    // yields both rather than the single `pathling:update` of earlier versions.
     [
       "patient/Observation.cu",
-      ["pathling:write:Observation", "pathling:update"],
-    ],
-    [
-      "patient/Observation.cud",
-      ["pathling:write:Observation", "pathling:update", "pathling:delete"],
+      [
+        "pathling:jobs",
+        "pathling:write:Observation",
+        "pathling:create",
+        "pathling:update",
+        "pathling:batch",
+        "pathling:import",
+        "pathling:import-pnp",
+        "pathling:bulk-submit",
+      ],
     ],
     [
       "user/Patient.cruds",
       [
         "pathling:read:Patient",
         "pathling:search",
+        ...READ_DERIVED,
+        "pathling:jobs",
         "pathling:write:Patient",
+        "pathling:create",
         "pathling:update",
         "pathling:delete",
-      ],
-    ],
-    [
-      "system/*.cruds",
-      [
-        "pathling:read",
-        "pathling:search",
-        "pathling:export",
-        "pathling:write",
-        "pathling:update",
-        "pathling:delete",
+        "pathling:batch",
+        "pathling:import",
+        "pathling:import-pnp",
+        "pathling:bulk-submit",
       ],
     ],
     // A v1 scope is normalised before mapping, so it behaves as its v2 form.
     [
       "patient/Observation.read",
-      ["pathling:read:Observation", "pathling:search"],
+      [
+        "pathling:read:Observation",
+        "pathling:search",
+        ...READ_DERIVED,
+        "pathling:jobs",
+      ],
     ],
     [
       "patient/Observation.write",
-      ["pathling:write:Observation", "pathling:update", "pathling:delete"],
+      [
+        "pathling:jobs",
+        "pathling:write:Observation",
+        "pathling:create",
+        "pathling:update",
+        "pathling:delete",
+        "pathling:batch",
+        "pathling:import",
+        "pathling:import-pnp",
+        "pathling:bulk-submit",
+      ],
     ],
   ])("maps %s to %j", (requested, expected) => {
     expect(
@@ -310,9 +409,16 @@ describe("PATHLING_PRESET - authority table", () => {
       "pathling:read:Observation",
       "pathling:read:Condition",
       "pathling:search",
+      ...READ_DERIVED,
+      "pathling:jobs",
       "pathling:write:Observation",
+      "pathling:create",
       "pathling:update",
       "pathling:delete",
+      "pathling:batch",
+      "pathling:import",
+      "pathling:import-pnp",
+      "pathling:bulk-submit",
     ]);
   });
 
@@ -320,6 +426,8 @@ describe("PATHLING_PRESET - authority table", () => {
     expect(authoritiesFor("patient/*.r patient/Observation.r")).toEqual([
       "pathling:read",
       "pathling:read:Observation",
+      ...READ_DERIVED,
+      "pathling:jobs",
     ]);
   });
 
@@ -345,7 +453,7 @@ describe("PATHLING_PRESET - invariants across every scope shape", () => {
       const requested = `${scopeContext}/${resourceType}.${permissions.join("")}`;
       expect(
         authoritiesFor(requested, { grantType: "client_credentials" }),
-      ).toEqual(expectedAuthorities(scopeContext, resourceType, permissions));
+      ).toEqual(expectedAuthorities(resourceType, permissions));
     },
   );
 
@@ -373,6 +481,14 @@ describe("PATHLING_PRESET - invariants across every scope shape", () => {
       )) {
         expect(hasWrite, `${operation} without a write authority`).toBe(true);
       }
+      for (const operation of authorities.filter((authority) =>
+        ANY_DATA_OPERATIONS.has(authority),
+      )) {
+        expect(
+          hasRead || hasWrite,
+          `${operation} without any data authority`,
+        ).toBe(true);
+      }
     },
   );
 
@@ -395,14 +511,20 @@ describe("PATHLING_PRESET - invariants across every scope shape", () => {
   );
 
   it.each(cases)(
-    "never implies an administrative operation for %s/%s.%s",
+    "ties bulk loading to a create permission for %s/%s.%s",
     (scopeContext, resourceType, permissions) => {
       const requested = `${scopeContext}/${resourceType}.${permissions.join("")}`;
       const authorities = authoritiesFor(requested, {
         grantType: "client_credentials",
       });
-      for (const administrative of NEVER_IMPLIED) {
-        expect(authorities).not.toContain(administrative);
+      // Import, ping-and-pull import and bulk submit all write whole resource
+      // types at once. Nothing short of an explicit create permission may reach
+      // them, and a scope that only reads, updates or deletes never does.
+      for (const operation of BULK_LOAD_OPERATIONS) {
+        expect(
+          authorities.includes(operation),
+          `${operation} for ${requested}`,
+        ).toBe(permissions.includes("c"));
       }
     },
   );
@@ -444,17 +566,47 @@ describe("PATHLING_PRESET - invariants across every scope shape", () => {
     }
   });
 
-  it("never emits an export authority outside the system context", () => {
+  it("ties every read operation to a read permission, in any context", () => {
+    // Export and the projection operations follow from `r` regardless of
+    // context, because Pathling's authorities carry no compartment: a
+    // patient-context read authority already reads the whole resource type.
     for (const [scopeContext, resourceType, permissions] of cases) {
-      if (scopeContext === "system") {
-        continue;
+      const authorities = authoritiesFor(
+        `${scopeContext}/${resourceType}.${permissions.join("")}`,
+        { grantType: "client_credentials" },
+      );
+      for (const operation of READ_DERIVED) {
+        expect(
+          authorities.includes(operation),
+          `${operation} for ${scopeContext}/${resourceType}`,
+        ).toBe(permissions.includes("r"));
       }
+    }
+  });
+
+  it("emits the jobs authority for any resource scope, read or write", () => {
+    // A job can be started by an export or by an import, so tying `jobs` to one
+    // side would leave the other unable to list what it started.
+    for (const [scopeContext, resourceType, permissions] of cases) {
       expect(
         authoritiesFor(
           `${scopeContext}/${resourceType}.${permissions.join("")}`,
+          { grantType: "client_credentials" },
         ),
-      ).not.toContain("pathling:export");
+      ).toContain("pathling:jobs");
     }
+  });
+
+  it("cannot read a resource by id with a typed read authority alone", () => {
+    // Pathling's read interaction demands the bare `pathling:read`, which is the
+    // same string as the all-types read data authority, so a typed scope can
+    // search but not read by id. See aehrc/pathling#2702. Emitting the bare
+    // authority to fix that would grant read across every resource type, so the
+    // preset does not: this test records the limitation deliberately, and should
+    // be revisited if the upstream rename to `pathling:read-resource` lands.
+    const authorities = authoritiesFor("patient/Observation.rs");
+    expect(authorities).toContain("pathling:read:Observation");
+    expect(authorities).not.toContain("pathling:read");
   });
 });
 
@@ -472,6 +624,8 @@ describe("PATHLING_PRESET - as shipped", () => {
     expect(withPatient.claims["authorities"]).toEqual([
       "pathling:read:Observation",
       "pathling:search",
+      ...READ_DERIVED,
+      "pathling:jobs",
     ]);
   });
 
@@ -487,11 +641,12 @@ describe("PATHLING_PRESET - as shipped", () => {
     expect(backend.claims["authorities"]).toEqual([
       "pathling:read",
       "pathling:search",
-      "pathling:export",
+      ...READ_DERIVED,
+      "pathling:jobs",
     ]);
   });
 
-  it("denies writes, because the write grant ships disabled", () => {
+  it("denies a backend write, because the system write grant ships disabled", () => {
     const result = evaluatePolicy(
       PATHLING_PRESET,
       context({
@@ -505,12 +660,85 @@ describe("PATHLING_PRESET - as shipped", () => {
     expect(result.claims["authorities"]).toBeUndefined();
   });
 
-  it("never emits the import authority, because that mapping ships disabled", () => {
-    // Checked through the harness so the disabled grant rule is not what makes
-    // this pass.
-    expect(
-      authoritiesFor("system/*.cruds", { grantType: "client_credentials" }),
-    ).not.toContain("pathling:import");
+  it("denies a write to a user who does not hold the admin role", () => {
+    const result = evaluatePolicy(
+      PATHLING_PRESET,
+      context({ requested: "user/Patient.cud" }),
+    );
+    expect(result.grantedScopes).toEqual([]);
+    expect(result.deniedScopes[0]?.reason).toContain("default is to deny");
+    expect(result.claims["authorities"]).toBeUndefined();
+  });
+
+  it("narrows an ordinary user's full request down to reads", () => {
+    // The admin grant is the only rule naming a write, so a non-admin asking for
+    // everything degrades to read rather than being refused outright.
+    const result = evaluatePolicy(
+      PATHLING_PRESET,
+      context({ requested: "user/Patient.cruds" }),
+    );
+    expect(result.grantedScopes.map(formatScope)).toEqual(["user/Patient.rs"]);
+    expect(result.claims["authorities"]).toEqual([
+      "pathling:read:Patient",
+      "pathling:search",
+      ...READ_DERIVED,
+      "pathling:jobs",
+    ]);
+  });
+
+  it("grants writes and bulk loading to a user holding the admin role", () => {
+    const result = evaluatePolicy(
+      PATHLING_PRESET,
+      context({
+        requested: "user/Patient.cruds",
+        user: { ...USER, roles: [ADMIN_ROLE] },
+      }),
+    );
+    expect(result.grantedScopes.map(formatScope)).toEqual([
+      "user/Patient.cruds",
+    ]);
+    expect(result.claims["authorities"]).toEqual([
+      "pathling:read:Patient",
+      "pathling:search",
+      ...READ_DERIVED,
+      "pathling:jobs",
+      "pathling:write:Patient",
+      "pathling:create",
+      "pathling:update",
+      "pathling:delete",
+      "pathling:batch",
+      "pathling:import",
+      "pathling:import-pnp",
+      "pathling:bulk-submit",
+    ]);
+  });
+
+  it("confines the admin grant to the resource types the app asked for", () => {
+    // The role decides whether writing is possible at all; the scope still
+    // decides what may be written.
+    const result = evaluatePolicy(
+      PATHLING_PRESET,
+      context({
+        requested: "user/Patient.cud",
+        user: { ...USER, roles: [ADMIN_ROLE] },
+      }),
+    );
+    expect(result.claims["authorities"]).toContain("pathling:write:Patient");
+    expect(result.claims["authorities"]).not.toContain("pathling:write");
+  });
+
+  it("does not let the admin role reach the system context", () => {
+    // System scopes belong to the client credentials grant, where there is no
+    // user and so no role. Only the disabled backend grant opens that path.
+    const result = evaluatePolicy(
+      PATHLING_PRESET,
+      context({
+        requested: "system/Patient.cud",
+        grantType: "client_credentials",
+        user: null,
+      }),
+    );
+    expect(result.grantedScopes).toEqual([]);
   });
 
   it("grants refresh tokens only to a confidential client", () => {

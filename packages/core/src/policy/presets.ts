@@ -166,17 +166,36 @@ export const SMART_BASELINE_PRESET: PolicyDocument = {
 };
 
 /**
+ * The role a user must hold before this preset will grant a write scope.
+ *
+ * Namespaced rather than a plain `admin`, so a deployment running several
+ * resource servers behind one identity provider can hold a distinct
+ * administrator role per server. An operator whose provider issues a different
+ * name edits this one rule.
+ */
+const PATHLING_ADMIN_ROLE = "pathling-admin";
+
+/**
  * Translates SMART scopes into Pathling's `authorities` claim.
  *
- * Pathling does not read SMART scopes. It authorises off a Spring Security style
- * `authorities` claim, whose grammar is:
+ * Written against Pathling `release/server/3.0.0`, and covering every authority
+ * that release understands. Pathling does not read SMART scopes; it authorises
+ * off a Spring Security style `authorities` claim, whose grammar is:
  *
- *   - `pathling:read:{ResourceType}` / `pathling:write:{ResourceType}`, or the
- *     bare `pathling:read` / `pathling:write` for every type;
- *   - operation authorities `pathling:search`, `pathling:import`,
- *     `pathling:import-pnp`, `pathling:update`, `pathling:delete`,
- *     `pathling:batch`, `pathling:bulk-submit`, `pathling:export`,
- *     `pathling:view-run`, `pathling:view-export`.
+ *   - data authorities `pathling:read:{ResourceType}` and
+ *     `pathling:write:{ResourceType}`, or the bare `pathling:read` /
+ *     `pathling:write` covering every type;
+ *   - operation authorities `pathling:search`, `pathling:create`,
+ *     `pathling:update`, `pathling:delete`, `pathling:batch`,
+ *     `pathling:import`, `pathling:import-pnp`, `pathling:bulk-submit`,
+ *     `pathling:export`, `pathling:view-run`, `pathling:view-export`,
+ *     `pathling:sqlquery-run`, `pathling:sqlquery-export` and `pathling:jobs`;
+ *   - the bare `pathling`, which subsumes all of the above and which this preset
+ *     never emits.
+ *
+ * The operation list is taken from the `@OperationAccess` annotations in the
+ * server source rather than from the documentation table, which as at
+ * `a163e02` omits `create`, `sqlquery-run` and `sqlquery-export`.
  *
  * The rule that makes this non-obvious: an operation authority is required *in
  * addition to* a read or write authority. `pathling:search` alone does not
@@ -184,27 +203,59 @@ export const SMART_BASELINE_PRESET: PolicyDocument = {
  * with the rule that emits the corresponding data authority, and the pairing is
  * asserted exhaustively in the tests.
  *
- * The mapping is deliberately narrow. Reads and searches follow from `r` and
- * `s`; bulk export follows from a system-context read, since `$export` is a
- * whole-population read; creates and updates map to `pathling:update` (Pathling
- * has no separate create authority) and deletes to `pathling:delete`. The
- * administrative operations - import, batch, bulk submit and the SQL-on-FHIR view
- * operations - have no SMART scope that implies them and are never granted
- * implicitly. An operator who wants them adds a rule, as the disabled import
- * rule below illustrates.
+ * **What follows from a read.** `r` and `s` both yield the data authority, since
+ * a search returns the resources it matched and search without read is an
+ * authority set that cannot serve a single request. `s` additionally yields
+ * `pathling:search`. `r` yields the operations that read a population rather than
+ * a single resource: export, the two ViewDefinition operations and the two SQL
+ * query operations. Each is still bounded by the data authority beside it, so a
+ * typed scope cannot project a type it did not name. Note that these are not
+ * narrowed by launch context, because a Pathling authority carries no patient
+ * compartment: `pathling:read:Observation` already reads every Observation in the
+ * warehouse whether it came from a patient-context scope or a system one.
  *
- * `s` also yields a read authority: a Pathling search returns the resources it
- * matched, so search without read would be an authority set that cannot serve a
- * single request.
+ * **What follows from a write.** `c`, `u` and `d` yield the data authority; `c`
+ * yields `pathling:create`, `u` yields `pathling:update` and `d` yields
+ * `pathling:delete`. 3.0.0 separates create from update, so unlike earlier
+ * versions a create-only scope does not carry the authority to overwrite an
+ * existing resource. Any write yields `pathling:batch`, which is the transport
+ * for the same three interactions in a bundle. `c` also yields the bulk loading
+ * operations - import, ping-and-pull import and bulk submit - each of which
+ * remains bounded to the types named by the write authorities beside it.
+ *
+ * **Who can write at all.** Nobody, by default. The only rule naming a write is
+ * `grant-admin-write`, which requires the user to hold {@link
+ * PATHLING_ADMIN_ROLE}; a user without it who asks for `user/Patient.cruds` is
+ * narrowed to `user/Patient.rs` rather than refused. The separate
+ * `grant-system-write` covers an unattended data loader running as a backend
+ * service, and ships disabled because a `client_credentials` grant has no user
+ * and therefore no role to check.
+ *
+ * **A limitation worth knowing.** Pathling's read-by-id interaction demands the
+ * operation authority `pathling:read`, which is the same string as the all-types
+ * read data authority - so `pathling:read:Observation` does not satisfy it, and a
+ * typed read scope can search a resource type but not fetch one by id. Emitting
+ * the bare authority to fix that would grant read across every type, defeating
+ * the narrowing, so this preset does not. The collision is reported upstream as
+ * aehrc/pathling#2702, which proposes renaming the operation authority to
+ * `pathling:read-resource`; if that lands, this preset should emit it from `r`.
  */
 export const PATHLING_PRESET: PolicyDocument = {
   version: 1,
   scopeGrants: [
+    {
+      id: "grant-admin-write",
+      description: `Full access for a user holding the ${PATHLING_ADMIN_ROLE} role. The only rule here that names a write.`,
+      match: "user/*.cruds",
+      allow: true,
+      narrow: true,
+      requireUserRole: [PATHLING_ADMIN_ROLE],
+    },
     ...SMART_READ_GRANTS,
     {
       id: "grant-system-write",
       description:
-        "Enable this to let a backend service write to the data warehouse.",
+        "Enable this to let an unattended backend service write to the data warehouse. Separate from the admin rule because a client credentials grant has no user, and so no role to check.",
       match: "system/*.cud",
       allow: true,
       enabled: false,
@@ -232,10 +283,50 @@ export const PATHLING_PRESET: PolicyDocument = {
     {
       id: "pathling-export",
       description:
-        "Bulk export is a whole-population read, so it follows from a system-context read.",
-      forEachScope: "system/*.r",
+        "Bulk export is a whole-population read, bounded by the read authorities beside it.",
+      forEachScope: "*/*.r",
       appendTo: "authorities",
       values: ["pathling:export"],
+    },
+    {
+      id: "pathling-view-run",
+      description:
+        "Runs a ViewDefinition. Needs read on every type the view projects, and on ViewDefinition itself when the view is resolved from storage rather than supplied inline.",
+      forEachScope: "*/*.r",
+      appendTo: "authorities",
+      values: ["pathling:view-run"],
+    },
+    {
+      id: "pathling-view-export",
+      description:
+        "Exports the result of a ViewDefinition. Same read requirements as running one.",
+      forEachScope: "*/*.r",
+      appendTo: "authorities",
+      values: ["pathling:view-export"],
+    },
+    {
+      id: "pathling-sqlquery-run",
+      description:
+        "Runs a SQL query. Needs read on every projected type, and on Library when the query is resolved from storage.",
+      forEachScope: "*/*.r",
+      appendTo: "authorities",
+      values: ["pathling:sqlquery-run"],
+    },
+    {
+      id: "pathling-sqlquery-export",
+      description:
+        "Exports the result of a SQL query. Same read requirements as running one.",
+      forEachScope: "*/*.r",
+      appendTo: "authorities",
+      values: ["pathling:sqlquery-export"],
+    },
+    {
+      id: "pathling-jobs",
+      description:
+        "Lists the caller's own asynchronous jobs. Follows from any resource access, because an export and an import can both start one.",
+      forEachScope: "*/*.cruds",
+      appendTo: "authorities",
+      values: ["pathling:jobs"],
     },
     {
       id: "pathling-write",
@@ -245,10 +336,17 @@ export const PATHLING_PRESET: PolicyDocument = {
       values: ["pathling:write{{ scope.resourceTypeSuffix }}"],
     },
     {
-      id: "pathling-update",
+      id: "pathling-create",
       description:
-        "Operation authority covering both create and update; Pathling has no separate create.",
-      forEachScope: "*/*.cu",
+        "Operation authority for create. Separate from update since Pathling 3.0.0, so a create-only scope cannot overwrite an existing resource.",
+      forEachScope: "*/*.c",
+      appendTo: "authorities",
+      values: ["pathling:create"],
+    },
+    {
+      id: "pathling-update",
+      description: "Operation authority for update.",
+      forEachScope: "*/*.u",
       appendTo: "authorities",
       values: ["pathling:update"],
     },
@@ -260,13 +358,35 @@ export const PATHLING_PRESET: PolicyDocument = {
       values: ["pathling:delete"],
     },
     {
+      id: "pathling-batch",
+      description:
+        "Operation authority for a batch bundle, the transport for the same three interactions.",
+      forEachScope: "*/*.cud",
+      appendTo: "authorities",
+      values: ["pathling:batch"],
+    },
+    {
       id: "pathling-import",
       description:
-        "Bulk import is administrative and is never implied by a SMART scope. Enable it deliberately.",
-      enabled: false,
-      forEachScope: "system/*.c",
+        "Bulk import, bounded to the types named by the write authorities beside it.",
+      forEachScope: "*/*.c",
       appendTo: "authorities",
       values: ["pathling:import"],
+    },
+    {
+      id: "pathling-import-pnp",
+      description: "Ping and pull import, which loads from a Bulk Data server.",
+      forEachScope: "*/*.c",
+      appendTo: "authorities",
+      values: ["pathling:import-pnp"],
+    },
+    {
+      id: "pathling-bulk-submit",
+      description:
+        "Submits a bulk export to another server and ingests the result.",
+      forEachScope: "*/*.c",
+      appendTo: "authorities",
+      values: ["pathling:bulk-submit"],
     },
   ],
   contextRules: SMART_CONTEXT_RULES,
@@ -440,13 +560,19 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
   {
     id: "pathling",
     name: "Pathling",
-    description:
-      "Translates SMART scopes into Pathling's authorities claim, pairing each operation authority with the data authority it needs.",
+    description: `Translates SMART scopes into Pathling's authorities claim, pairing each operation authority with the data authority it needs. Covers every authority in Pathling 3.0.0. Reads are open to any user; writing requires the ${PATHLING_ADMIN_ROLE} role.`,
     policy: PATHLING_PRESET,
     references: [
       {
         label: "Pathling - Authorization",
         url: "https://pathling.csiro.au/docs/server/authorization",
+      },
+      {
+        // The documentation table omits create, sqlquery-run and
+        // sqlquery-export, so the annotations are the citable source for the
+        // operation authorities this preset emits.
+        label: "Pathling release/server/3.0.0 - OperationAccess annotations",
+        url: "https://github.com/aehrc/pathling/tree/release/server/3.0.0/server/src/main/java/au/csiro/pathling",
       },
     ],
   },

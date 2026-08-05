@@ -20,9 +20,10 @@ Built for two things at once:
 
 Resource servers do not agree on what an access token should look like, and some
 do not read SMART scopes at all. [Pathling](https://pathling.csiro.au)
-authorises off its own `authorities` claim, so `patient/Observation.rs` has to
-become `["pathling:read:Observation", "pathling:search"]` before Pathling will
-honour it.
+authorises off its own `authorities` claim, so before Pathling will honour
+`patient/Observation.rs` that scope has to become a data authority naming the
+resource type, `pathling:read:Observation`, plus one operation authority for
+each interaction the scope allows - `pathling:search` and the rest.
 
 Signet makes that translation a declarative, versioned policy you edit in the UI
 and test against a live token simulator, rather than a code change in the

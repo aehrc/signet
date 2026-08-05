@@ -541,12 +541,18 @@ describeWithDatabase("the client_credentials grant", () => {
     );
 
     // The whole point of the policy engine: SMART scopes in, vendor authorities out.
-    // `pathling:export` comes with a system-context read, because `$export` is a
-    // whole-population read - see the preset's commentary.
+    // The operations after `search` all follow from the `r` permission, and each is
+    // still bounded by the typed read authority in front of them - see the preset's
+    // commentary.
     expect(claims["authorities"]).toEqual([
       "pathling:read:Observation",
       "pathling:search",
       "pathling:export",
+      "pathling:view-run",
+      "pathling:view-export",
+      "pathling:sqlquery-run",
+      "pathling:sqlquery-export",
+      "pathling:jobs",
     ]);
     // The backend service is its own subject.
     expect(claims["sub"]).toBe(stack.backendClient.client.clientId);

@@ -166,6 +166,12 @@ describe("evaluatePolicy - narrowing", () => {
     expect(result.claims["authorities"]).toEqual([
       "pathling:read",
       "pathling:search",
+      "pathling:export",
+      "pathling:view-run",
+      "pathling:view-export",
+      "pathling:sqlquery-run",
+      "pathling:sqlquery-export",
+      "pathling:jobs",
     ]);
   });
 
