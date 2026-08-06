@@ -199,7 +199,13 @@ services:
   # the one the seed creates; Pathling builds its own smart-configuration by
   # merging from it, so this is the whole integration.
   pathling:
-    image: aehrc/pathling:7.2.0
+    # The server 3.0.0 pre-release, which the Pathling preset is written against.
+    # It has to be this one rather than a Docker Hub release: 7.2.0's authority
+    # grammar has no hyphen in the action segment, and an authority it cannot
+    # parse raises rather than being ignored, so a token carrying `view-run` or
+    # `sqlquery-run` fails every request with a 500 - including the ones it was
+    # entitled to make. Published to GHCR, which is where the server images moved.
+    image: ghcr.io/aehrc/pathling:3.0.0-SNAPSHOT
     # Shares Signet's network stack so that `localhost` means the same host in
     # both, and one issuer identifier works from the browser and from here.
     network_mode: "service:signet"

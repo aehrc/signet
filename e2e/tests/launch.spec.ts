@@ -53,10 +53,20 @@ test.describe("a standalone launch", () => {
     expect(claims["aud"]).toBe(FHIR);
     expect(claims["fhirUser"]).toBe("Practitioner/clinician-1");
     // The whole point of the Pathling preset: SMART scopes in, Pathling's own
-    // authorities out.
-    expect(claims["authorities"]).toEqual(
-      expect.arrayContaining(["pathling:read", "pathling:search"]),
-    );
+    // authorities out. Asserted in full rather than by `arrayContaining`, because
+    // the hyphenated operation authorities are the ones a Pathling older than
+    // 3.0.0 cannot parse - and it does not ignore what it cannot parse, it fails
+    // the whole request. A containment check would let that regression through.
+    expect(claims["authorities"]).toEqual([
+      "pathling:read",
+      "pathling:search",
+      "pathling:export",
+      "pathling:view-run",
+      "pathling:view-export",
+      "pathling:sqlquery-run",
+      "pathling:sqlquery-export",
+      "pathling:jobs",
+    ]);
 
     // And the token works. Nothing else in this repository can assert that.
     await expect(page.getByTestId("fhir-status")).toContainText(

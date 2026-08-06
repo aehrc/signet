@@ -29,6 +29,15 @@ server source, which the preset is written against. The source is cited as well 
 the page because the page's authority table omits `create`, `sqlquery-run` and
 `sqlquery-export`.
 
+That version is a prerequisite, not a preference. Pathling's authority grammar
+only admitted a hyphen in the action segment from November 2025, and a Pathling
+that cannot parse an authority raises rather than ignoring it - so a token
+carrying `pathling:view-run` fails every request against an older server with a
+500, including the requests it was entitled to make. The end-to-end stack
+therefore runs `ghcr.io/aehrc/pathling:3.0.0-SNAPSHOT`, and an operator on a
+released Pathling should disable the six hyphenated operation rules until they
+upgrade.
+
 Pathling does not read SMART scopes. It authorises off a Spring Security style
 `authorities` claim, and the rule that makes the mapping non-obvious is that an
 operation authority is required _in addition to_ a read or write authority:

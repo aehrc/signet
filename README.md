@@ -127,7 +127,11 @@ bun test src/ -t "refuses a wrong password"     # by test name
 
 ## The end-to-end stack
 
-Signet, Pathling, Postgres and a stub SMART app, built from the production image:
+Signet, Pathling, Postgres and a stub SMART app, built from the production image.
+Pathling is `ghcr.io/aehrc/pathling:3.0.0-SNAPSHOT`, the pre-release the Pathling
+preset is written against; a released Pathling cannot parse the hyphenated
+operation authorities the preset mints, and fails every request rather than
+ignoring what it does not recognise.
 
 ```sh
 bun run stack:up      # build and start; waits for health

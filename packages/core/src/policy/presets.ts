@@ -197,6 +197,14 @@ const PATHLING_ADMIN_ROLE = "pathling-admin";
  * server source rather than from the documentation table, which as at
  * `a163e02` omits `create`, `sqlquery-run` and `sqlquery-export`.
  *
+ * **3.0.0 is a prerequisite, not a preference.** Pathling's authority grammar only
+ * admitted a hyphen in the action segment from November 2025, and an authority it
+ * cannot parse raises rather than being ignored - so against an older server a
+ * token carrying `pathling:view-run` fails *every* request with a 500, including
+ * the ones it was entitled to make. An operator on a released Pathling should
+ * disable the six hyphenated rules below - view run and export, SQL query run and
+ * export, ping-and-pull import, and bulk submit - until they upgrade.
+ *
  * The rule that makes this non-obvious: an operation authority is required *in
  * addition to* a read or write authority. `pathling:search` alone does not
  * permit searching, so every rule that emits an operation authority is paired
