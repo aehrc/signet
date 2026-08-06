@@ -660,6 +660,42 @@ describe("PATHLING_PRESET - as shipped", () => {
     expect(result.claims["authorities"]).toBeUndefined();
   });
 
+  it("lets a backend service write once that grant is enabled", () => {
+    // The other half of the disabled rule. Asserting only that it refuses while
+    // off would pass just as well against a rule that is broken when on, and the
+    // unattended loader is the whole reason the rule is kept.
+    const enabled: PolicyDocument = {
+      ...PATHLING_PRESET,
+      scopeGrants: PATHLING_PRESET.scopeGrants.map((rule) =>
+        rule.id === "grant-system-write" ? { ...rule, enabled: true } : rule,
+      ),
+    };
+    const result = evaluatePolicy(
+      enabled,
+      context({
+        requested: "system/Patient.cud",
+        grantType: "client_credentials",
+        user: null,
+      }),
+    );
+    expect(result.grantedScopes.map(formatScope)).toEqual([
+      "system/Patient.cud",
+    ]);
+    // No user, so no role: the loader reaches bulk import through its scope
+    // alone, and is still confined to the resource type it named.
+    expect(result.claims["authorities"]).toEqual([
+      "pathling:jobs",
+      "pathling:write:Patient",
+      "pathling:create",
+      "pathling:update",
+      "pathling:delete",
+      "pathling:batch",
+      "pathling:import",
+      "pathling:import-pnp",
+      "pathling:bulk-submit",
+    ]);
+  });
+
   it("denies a write to a user who does not hold the admin role", () => {
     const result = evaluatePolicy(
       PATHLING_PRESET,
