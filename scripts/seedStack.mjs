@@ -17,19 +17,110 @@
  * Author: John Grimes
  */
 
-const BASE = process.env["SIGNET_BASE_URL"] ?? "http://localhost:3000";
-const TENANT = process.env["SIGNET_SEED_TENANT"] ?? "demo";
-const EMAIL = process.env["SIGNET_BOOTSTRAP_EMAIL"] ?? "ops@example.org";
+import { readFileSync, readdirSync } from "node:fs";
+
+/** The variables that move the stack, and that only the shell can carry. */
+const PORT_VARIABLES = ["SIGNET_PORT", "PATHLING_PORT", "APP_PORT"];
+
+/**
+ * Refuses to seed when a port variable was declared in a `.env` file.
+ *
+ * Bun loads a `.env` file into this process and does not pass what it loaded to the
+ * processes it spawns, so a port declared in one moves the URLs this script stores
+ * while leaving the ports `docker compose` publishes at their defaults. The result
+ * is an endpoint pointing at a Pathling nobody served, and a suite failing a long
+ * way from the cause.
+ *
+ * Refusing rather than warning, because there is no reading of a port in a `.env`
+ * file under which this script should carry on: it is either the value compose
+ * used, in which case the shell has it too and the file is redundant, or it is not,
+ * in which case seeding writes the wrong URLs.
+ *
+ * Nothing to do inside the container, which has no such files.
+ *
+ * @throws {Error} if a `.env` file in the working directory declares one.
+ */
+function refuseFileSourcedPorts() {
+  // `.env` and `.env.<something>`, which is the shape of every file Bun loads, and
+  // deliberately not everything beginning with `.env`: `.envrc` is direnv's, and
+  // what direnv declares *is* exported into the shell - so it reaches compose and
+  // Playwright, and refusing it would refuse the workflow the README recommends.
+  // `.env.example` is documentation, and is the one `.env.` file Bun never loads.
+  const files = readdirSync(".").filter(
+    (name) =>
+      (name === ".env" || name.startsWith(".env.")) && name !== ".env.example",
+  );
+  for (const file of files) {
+    // Read through a symlink, which Bun does, but tolerate the two things that are
+    // not a port in a file: a directory whose name fits the pattern, and a symlink
+    // pointing at nothing.
+    let contents;
+    try {
+      contents = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    const declared = PORT_VARIABLES.filter((name) =>
+      new RegExp(String.raw`^[ \t]*(export[ \t]+)?${name}[ \t]*=`, "m").test(
+        contents,
+      ),
+    );
+    if (declared.length > 0) {
+      throw new Error(
+        `${file} declares ${declared.join(", ")}, where it does nothing. ` +
+          `Bun loads that file into this script but not into \`docker compose\`, ` +
+          `so the stack would keep its default ports while this seed wrote the ` +
+          `moved ones. Remove ${declared.length === 1 ? "it" : "them"} from ` +
+          `${file} and export ${declared.length === 1 ? "it" : "them"} instead: ` +
+          `\`export ${declared.map((name) => `${name}=...`).join(" ")}\`. ` +
+          `See the repository's .env.example.`,
+      );
+    }
+  }
+}
+
+refuseFileSourcedPorts();
+
+/**
+ * Reads a variable, treating an empty value as absent.
+ *
+ * An exported-but-cleared variable arrives as an empty string, and reading that
+ * as a port would produce `http://localhost:/fhir`.
+ *
+ * @param name - the variable to read.
+ * @returns the value, or `undefined` if it is unset or empty.
+ */
+function setting(name) {
+  const value = process.env[name];
+  return value === undefined || value === "" ? undefined : value;
+}
+
+// The ports the compose stack publishes on. Duplicated from `e2e/src/stackUrls.ts`
+// rather than imported: this script runs as bare `node` inside the runtime image,
+// which ships no `node_modules`, so it can import nothing. The three
+// `SIGNET_SEED_*` and `SIGNET_BASE_URL` variables below win where they are set,
+// and compose sets all of them - so the ports matter only when a developer runs
+// `bun run stack:seed` from the host.
+//
+// These have to be *exported* into the shell to have any effect: Bun does not pass
+// a variable it loaded from a `.env` file to the processes it spawns.
+const SIGNET_PORT = setting("SIGNET_PORT") ?? "3000";
+const PATHLING_PORT = setting("PATHLING_PORT") ?? "8080";
+const APP_PORT = setting("APP_PORT") ?? "4000";
+
+const BASE = setting("SIGNET_BASE_URL") ?? `http://localhost:${SIGNET_PORT}`;
+const TENANT = setting("SIGNET_SEED_TENANT") ?? "demo";
+const EMAIL = setting("SIGNET_BOOTSTRAP_EMAIL") ?? "ops@example.org";
 const PASSWORD =
-  process.env["SIGNET_BOOTSTRAP_PASSWORD"] ?? "correct horse battery staple";
+  setting("SIGNET_BOOTSTRAP_PASSWORD") ?? "correct horse battery staple";
 
 /** Where Pathling serves FHIR, as the browser reaches it. */
 const FHIR_BASE =
-  process.env["SIGNET_SEED_FHIR_BASE"] ?? "http://localhost:8080/fhir";
+  setting("SIGNET_SEED_FHIR_BASE") ?? `http://localhost:${PATHLING_PORT}/fhir`;
 
 /** Where the stub SMART app is served. */
 const APP_ORIGIN =
-  process.env["SIGNET_SEED_APP_ORIGIN"] ?? "http://localhost:4000";
+  setting("SIGNET_SEED_APP_ORIGIN") ?? `http://localhost:${APP_PORT}`;
 
 /** The end user the suite signs in as. */
 export const SEED_USER = {

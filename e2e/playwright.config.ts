@@ -4,6 +4,8 @@
 
 import { defineConfig, devices } from "@playwright/test";
 
+import { resolveStackUrls } from "./src/stackUrls.js";
+
 /**
  * The end-to-end suite.
  *
@@ -17,8 +19,11 @@ import { defineConfig, devices } from "@playwright/test";
  * is idempotent, so a suite against an already-running stack cannot fail for want
  * of a fixture.
  *
- * `SIGNET_PORT` moves the whole stack, issuer identifiers included, for a machine
- * where 3000 is taken. Set the same value here and in compose.
+ * `SIGNET_PORT`, `PATHLING_PORT` and `APP_PORT` move the stack, issuer identifiers
+ * included, for a machine where one of the default ports is taken. **Export them
+ * into the shell**, so that this suite and `docker compose` read the same values:
+ * Bun does not pass a variable it loaded from a `.env` file to the processes it
+ * spawns, and neither `docker compose` nor Playwright is Bun.
  *
  * **Running it twice inside a minute will fail, and that is the product working.**
  * End-user sign-ins are limited to ten a minute per address; one run of this suite
@@ -34,9 +39,7 @@ import { defineConfig, devices } from "@playwright/test";
  * sign-ins go to `POST /session/passkey`, which has an allowance of its own, so they
  * cost nothing here.
  */
-const signetPort = process.env["SIGNET_PORT"] ?? "3000";
-const baseURL =
-  process.env["SIGNET_BASE_URL"] ?? `http://localhost:${signetPort}`;
+const baseURL = resolveStackUrls(process.env).signet;
 
 export default defineConfig({
   testDir: "./tests",
@@ -44,7 +47,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env["CI"],
   retries: process.env["CI"] ? 2 : 0,
-  workers: process.env["CI"] ? 2 : undefined,
+  // Two on CI, and Playwright's own default locally. Spread rather than set to
+  // `undefined`, which `exactOptionalPropertyTypes` refuses and which Playwright
+  // would read as a configured value rather than an absent one.
+  ...(process.env["CI"] ? { workers: 2 } : {}),
   reporter: process.env["CI"]
     ? [["github"], ["html", { open: "never" }]]
     : [["list"], ["html", { open: "never" }]],

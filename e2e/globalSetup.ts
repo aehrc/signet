@@ -22,15 +22,12 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { resolveStackUrls } from "./src/stackUrls.js";
 import { SEED } from "./support/stack.js";
 
 const run = promisify(execFile);
 
-const SIGNET_PORT = process.env["SIGNET_PORT"] ?? "3000";
-const SIGNET =
-  process.env["SIGNET_BASE_URL"] ?? `http://localhost:${SIGNET_PORT}`;
-const FHIR = process.env["PATHLING_BASE_URL"] ?? "http://localhost:8080/fhir";
-const APP = process.env["APP_BASE_URL"] ?? "http://localhost:4000";
+const { signet: SIGNET, fhir: FHIR, app: APP } = resolveStackUrls(process.env);
 
 /** How long to wait for Pathling, which is the slow one by a wide margin. */
 const READY_TIMEOUT_MS = 300_000;
@@ -65,11 +62,17 @@ export default async function globalSetup(): Promise<void> {
 
   // The stack's own credentials, set last so a developer's `SIGNET_BOOTSTRAP_*`
   // cannot reach the seed. See `support/stack.ts` for why that matters.
+  //
+  // The three URLs are passed explicitly rather than left to the script's own
+  // defaults, so that what the seed *stores* is what this suite will *ask for*
+  // even if the two ever disagree about how to read the environment.
   const { stdout } = await run("bun", ["scripts/seedStack.mjs"], {
     cwd: new URL("..", import.meta.url).pathname,
     env: {
       ...process.env,
       SIGNET_BASE_URL: SIGNET,
+      SIGNET_SEED_FHIR_BASE: FHIR,
+      SIGNET_SEED_APP_ORIGIN: APP,
       SIGNET_BOOTSTRAP_EMAIL: SEED.adminEmail,
       SIGNET_BOOTSTRAP_PASSWORD: SEED.adminPassword,
     },
