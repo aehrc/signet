@@ -59,7 +59,7 @@ import type { AdminUser, AuditAction } from "@signet/db";
 import type { Context } from "hono";
 
 /** What the console is told about the signed-in person. */
-interface SessionView {
+export interface SessionView {
   readonly user: {
     readonly id: string;
     readonly email: string;
@@ -83,7 +83,7 @@ interface SessionView {
  * @param action - The event to record.
  * @param detail - Anything specific to this attempt. Never a credential.
  */
-async function recordAuthenticationEvent(
+export async function recordAuthenticationEvent(
   context: ServerContext,
   metadata: ReturnType<typeof requestMetadata>,
   user: AdminUser | undefined,
@@ -139,8 +139,15 @@ function signInRefusalReason(
   return "account-disabled";
 }
 
-/** The refusal every failed sign-in produces, whatever the reason. */
-function refuseSignIn(c: Context<SignetEnvironment>) {
+/**
+ * The refusal every failed sign-in produces, whatever the reason.
+ *
+ * Shared with the passkey sign-in route rather than repeated there, so that the two
+ * surfaces cannot drift into wording that distinguishes them - a caller able to tell
+ * "no such credential" from "that account is disabled" learns something from either
+ * one.
+ */
+export function refuseSignIn(c: Context<SignetEnvironment>) {
   return c.json(
     adminErrorBody("unauthenticated", "Those credentials were not accepted"),
     statusForAdminError("unauthenticated"),
@@ -153,7 +160,7 @@ function refuseSignIn(c: Context<SignetEnvironment>) {
  * @param context - The server's dependencies.
  * @param user - The signed-in account.
  */
-async function sessionView(
+export async function sessionView(
   context: ServerContext,
   user: AdminUser,
 ): Promise<SessionView> {
@@ -257,30 +264,60 @@ export function adminLoginHandler(context: ServerContext) {
       return refuseSignIn(c);
     }
 
-    const token = generateOpaqueToken();
-    await createAdminSession(context.db, {
-      adminUserId: user.id,
-      tokenHash: await hashToken(token),
-      expiresAt: new Date(
-        context.clock().getTime() + SESSION_TTL_SECONDS * 1000,
-      ),
-      ip: metadata.ip ?? null,
-      userAgent: metadata.userAgent ?? null,
-    });
-    await recordAdminLogin(context.db, user.id, context.clock());
-    await recordAuthenticationEvent(context, metadata, user, "admin.login", {});
-
-    c.header(
-      "Set-Cookie",
-      sessionCookie(token, {
-        secure: cookiesAreSecure(context.config.publicUrl),
-      }),
-    );
-    // A response that establishes a credential must never be cached, even though
-    // the credential itself is in a header rather than in the body.
-    c.header("Cache-Control", "no-store");
-    return c.json(await sessionView(context, user));
+    return await establishAdminSession(context, c, user, metadata, {});
   };
+}
+
+/**
+ * Opens a console session and answers with it.
+ *
+ * Shared by the two ways in - a password and a passkey - because "equivalent in
+ * every respect" is a promise the feature makes about the passkey session, and the
+ * only way to keep it is for both to reach the same code. A second copy would drift:
+ * one would gain a shorter lifetime, or lose the `no-store`, and nothing would say
+ * so.
+ *
+ * @param context - The server's dependencies.
+ * @param c - The request being answered.
+ * @param user - The account signing in, already authenticated.
+ * @param metadata - Where the request came from, for the session row and the trail.
+ * @param detail - What to record about how they signed in. Never a credential.
+ * @returns The session view, with the cookie set.
+ */
+export async function establishAdminSession(
+  context: ServerContext,
+  c: Context<SignetEnvironment>,
+  user: AdminUser,
+  metadata: ReturnType<typeof requestMetadata>,
+  detail: Record<string, unknown>,
+): Promise<Response> {
+  const token = generateOpaqueToken();
+  await createAdminSession(context.db, {
+    adminUserId: user.id,
+    tokenHash: await hashToken(token),
+    expiresAt: new Date(context.clock().getTime() + SESSION_TTL_SECONDS * 1000),
+    ip: metadata.ip ?? null,
+    userAgent: metadata.userAgent ?? null,
+  });
+  await recordAdminLogin(context.db, user.id, context.clock());
+  await recordAuthenticationEvent(
+    context,
+    metadata,
+    user,
+    "admin.login",
+    detail,
+  );
+
+  c.header(
+    "Set-Cookie",
+    sessionCookie(token, {
+      secure: cookiesAreSecure(context.config.publicUrl),
+    }),
+  );
+  // A response that establishes a credential must never be cached, even though
+  // the credential itself is in a header rather than in the body.
+  c.header("Cache-Control", "no-store");
+  return c.json(await sessionView(context, user));
 }
 
 /**

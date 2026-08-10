@@ -33,6 +33,8 @@
  * would make it look like fourteen decisions.
  */
 export const UNSCOPED_MODULES: Readonly<Record<string, string>> = {
+  "repositories/adminPasskeys":
+    "Reaches only admin_passkeys and admin_passkey_challenges, both exempt in RLS_EXEMPT_TABLES: a passkey hangs off admin_users, which is a person rather than a tenant's property, and sign-in resolves the account from the credential presented - which necessarily precedes any tenant being known.",
   "repositories/adminUsers":
     "Reaches only admin_users and admin_sessions, both exempt in RLS_EXEMPT_TABLES: a person is not a tenant's property, and the console session is what determines which tenants the caller may see, so it is resolved before any tenant is known.",
 };
@@ -92,6 +94,7 @@ export const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
  */
 export const SWEEP_FUNCTIONS: readonly string[] = [
   "repositories/accessTokens.deleteExpiredAccessTokens",
+  "repositories/adminPasskeys.deleteExpiredAdminPasskeyChallenges",
   "repositories/adminUsers.deleteExpiredAdminSessions",
   "repositories/authorizationCodes.deleteExpiredAuthorizationCodes",
   "repositories/authorizationSessions.deleteExpiredAuthorizationSessions",

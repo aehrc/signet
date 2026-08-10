@@ -12,12 +12,17 @@
  * Author: John Grimes
  */
 
+import {
+  browserSupportsWebAuthn,
+  startAuthentication,
+} from "@simplewebauthn/browser";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
+import { describeCeremonyFailure } from "./passkeys.js";
 import { CONSOLE_BASE } from "./routes.js";
 import { ApiError } from "../api/errors.js";
-import { useSignIn } from "../api/queries.js";
+import { usePasskeySignIn, useSignIn } from "../api/queries.js";
 import { CentredShell } from "../components/appShell.js";
 import { SubmitButton, TextField } from "../components/fields.js";
 import { ErrorAlert } from "../components/layout.js";
@@ -122,6 +127,68 @@ export function SignInPage() {
           <SubmitButton pending={signIn.isPending}>Sign in</SubmitButton>
         </div>
       </form>
+
+      <PasskeySignIn />
     </CentredShell>
+  );
+}
+
+/**
+ * The passkey alternative, shown only where the browser can honour it.
+ *
+ * Feature-detected rather than always offered: a browser without WebAuthn, or a page
+ * served over plain HTTP somewhere other than `localhost`, would raise a prompt that
+ * cannot succeed - and a button that never works is worse than no button. The
+ * password form above is untouched either way.
+ *
+ * No email is asked for first. The browser holds the credential and knows which
+ * accounts it can sign in, so the person presses one button and verifies themselves;
+ * the server never answers "does this address have a passkey?".
+ */
+function PasskeySignIn() {
+  const passkeySignIn = usePasskeySignIn();
+  const navigate = useNavigate();
+  const [failure, setFailure] = useState<string | undefined>();
+
+  if (!browserSupportsWebAuthn()) {
+    return null;
+  }
+
+  return (
+    <div className="mt-6">
+      <div className="divider text-base-content/50 text-xs">or</div>
+      <button
+        type="button"
+        className="btn btn-outline w-full"
+        disabled={passkeySignIn.isPending}
+        onClick={() => {
+          setFailure(undefined);
+          passkeySignIn.mutate(
+            async (options) =>
+              await startAuthentication({ optionsJSON: options }),
+            {
+              onSuccess: () => {
+                void navigate(CONSOLE_BASE, { replace: true });
+              },
+              onError: (error) => {
+                setFailure(describeCeremonyFailure(error, "sign-in"));
+              },
+            },
+          );
+        }}
+      >
+        {passkeySignIn.isPending
+          ? "Waiting for your browser…"
+          : "Sign in with a passkey"}
+      </button>
+      {failure === undefined ? null : (
+        <p
+          className="text-base-content/70 mt-2 text-center text-sm"
+          role="status"
+        >
+          {failure}
+        </p>
+      )}
+    </div>
   );
 }

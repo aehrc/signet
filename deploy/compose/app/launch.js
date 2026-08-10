@@ -104,6 +104,10 @@ async function beginLaunch(parameters) {
       iss: parameters.iss,
       clientId: parameters.clientId,
       tokenEndpoint: configuration.token_endpoint,
+      // Kept because the redirect back carries only `code` and `state`: the
+      // `aud` the launch was started with is gone from the URL by the time the
+      // token has been exchanged, and that is when the FHIR server is called.
+      fhirBase: fhirBaseFrom(),
     }),
   );
 
@@ -136,6 +140,11 @@ function redirectUri() {
  * launch that guesses it wrong is refused. The value is not in the discovery
  * document, so the app is told it - which is what a real app is too, at
  * registration time.
+ *
+ * Only meaningful while `aud` is still in the address bar, which is to say
+ * before the redirect back. The value is stashed in the launch session for the
+ * half of the flow that happens after it; the fallback here is the default port
+ * this stack publishes Pathling on, and is wrong for a stack moved off it.
  */
 function fhirBaseFrom() {
   return (
@@ -183,7 +192,7 @@ async function completeLaunch(parameters) {
   show("status", "Launch complete.");
   sessionStorage.removeItem(STORAGE_KEY);
 
-  await callFhirServer(body.access_token);
+  await callFhirServer(body.access_token, session.fhirBase);
 }
 
 /**
@@ -192,14 +201,14 @@ async function completeLaunch(parameters) {
  * A token that a FHIR server rejects is a token the app cannot use, and no
  * assertion about its claims substitutes for asking the server.
  */
-async function callFhirServer(accessToken) {
+async function callFhirServer(accessToken, fhirBase) {
   // A bare search, and the same one whether or not a patient is in context. The
   // question this asks is "does the FHIR server accept this token", and the
   // server behind this stack is an analytics server: it implements neither
   // instance reads nor `_id`, and a request it answers with "not supported"
   // would tell us nothing about the token. Which patient the token is for is
   // asserted from the token response instead.
-  const url = `${fhirBaseFrom()}/Patient?_count=1`;
+  const url = `${fhirBase ?? fhirBaseFrom()}/Patient?_count=1`;
   try {
     const response = await fetch(url, {
       headers: {

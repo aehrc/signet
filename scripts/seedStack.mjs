@@ -47,6 +47,17 @@ export const SEED_USER = {
 const VIEWER_EMAIL =
   process.env["SIGNET_SEED_VIEWER_EMAIL"] ?? "viewer@example.org";
 
+/**
+ * The console identity the passkey journey uses, and nothing else does.
+ *
+ * That journey signs out, which revokes the session the other console tests hold
+ * in their saved storage state - so it cannot share an identity with them. Created
+ * by the compose stack's `bootstrap-passkey` service, for the same reason the
+ * viewer is: no admin API route makes a console account.
+ */
+const PASSKEY_EMAIL =
+  process.env["SIGNET_SEED_PASSKEY_EMAIL"] ?? "passkeys@example.org";
+
 let cookie = "";
 
 /** Makes an admin API request, carrying the session cookie once there is one. */
@@ -298,26 +309,39 @@ await ensure("the clinician account", "POST", `${endpointPath}/users`, {
   roles: ["clinician"],
 });
 
-// Downgraded rather than created here: no admin API route makes a console
-// identity, so `bootstrap-viewer` in the compose stack creates this one and it
-// arrives as an owner. A PUT is idempotent, so re-seeding simply restates it.
-const viewerMembership = await api("PUT", `/tenants/${TENANT}/members`, {
-  email: VIEWER_EMAIL,
-  role: "viewer",
-});
-if (viewerMembership.ok) {
-  console.log(`set ${VIEWER_EMAIL} to viewer`);
-} else if (viewerMembership.status === 404) {
-  // A stack bootstrapped without the viewer identity. Only the read-only console
-  // test needs it, so this is reported rather than fatal.
-  console.log(
-    `no console account for ${VIEWER_EMAIL}; skipping its membership`,
-  );
-} else {
+/**
+ * Sets a console identity's role in the seeded tenant.
+ *
+ * Downgraded rather than created here: no admin API route makes a console
+ * identity, so the compose stack's bootstrap services create these and they arrive
+ * as owners. A PUT is idempotent, so re-seeding simply restates the role.
+ *
+ * A stack bootstrapped without the identity is reported rather than fatal - only
+ * one test needs each of them, and a developer running the seed against a partial
+ * stack should be told which one is missing rather than stopped.
+ */
+async function setMembership(email, role) {
+  const response = await api("PUT", `/tenants/${TENANT}/members`, {
+    email,
+    role,
+  });
+  if (response.ok) {
+    console.log(`set ${email} to ${role}`);
+    return;
+  }
+  if (response.status === 404) {
+    console.log(`no console account for ${email}; skipping its membership`);
+    return;
+  }
   throw new Error(
-    `could not set ${VIEWER_EMAIL} to viewer: ${viewerMembership.status} ${await viewerMembership.text()}`,
+    `could not set ${email} to ${role}: ${response.status} ${await response.text()}`,
   );
 }
+
+await setMembership(VIEWER_EMAIL, "viewer");
+// The passkey journey only reads the console; what it exercises is the account
+// menu and the dialog behind it, neither of which depends on a role.
+await setMembership(PASSKEY_EMAIL, "viewer");
 
 await ensure("a patient persona", "POST", `${endpointPath}/users`, {
   username: "pat",

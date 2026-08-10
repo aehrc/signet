@@ -83,6 +83,8 @@ export type AuditAction =
   | "admin.password-changed"
   | "admin.totp-enabled"
   | "admin.totp-disabled"
+  | "admin.passkey-registered"
+  | "admin.passkey-removed"
   | "end-user.login"
   | "end-user.login-failed"
   // Authorization.
@@ -147,6 +149,9 @@ export const AUDIT_ACTION_DESCRIPTIONS: Readonly<Record<AuditAction, string>> =
     "admin.password-changed": "Administrator password was changed",
     "admin.totp-enabled": "Two-factor authentication was enabled",
     "admin.totp-disabled": "Two-factor authentication was disabled",
+    "admin.passkey-registered":
+      "Passkey registered on an administrator account",
+    "admin.passkey-removed": "Passkey removed from an administrator account",
     "end-user.login": "End user signed in on an endpoint",
     "end-user.login-failed": "End user sign-in was refused",
 
@@ -209,6 +214,8 @@ export const AUDIT_ACTION_CATEGORIES: Readonly<
   "admin.password-changed": "authentication",
   "admin.totp-enabled": "authentication",
   "admin.totp-disabled": "authentication",
+  "admin.passkey-registered": "authentication",
+  "admin.passkey-removed": "authentication",
   "end-user.login": "authentication",
   "end-user.login-failed": "authentication",
 
@@ -293,6 +300,7 @@ export type AuditTargetType =
   | "tenant"
   | "tenant-member"
   | "admin-user"
+  | "admin-passkey"
   | "api-token"
   | "endpoint"
   | "endpoint-key"
@@ -319,6 +327,7 @@ const AUDIT_TARGET_TYPE_SET: Readonly<Record<AuditTargetType, true>> = {
   tenant: true,
   "tenant-member": true,
   "admin-user": true,
+  "admin-passkey": true,
   "api-token": true,
   endpoint: true,
   "endpoint-key": true,

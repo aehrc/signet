@@ -64,6 +64,17 @@ export const SEED = {
   viewerPassword:
     process.env["SIGNET_E2E_VIEWER_PASSWORD"] ??
     "read only horse battery staple",
+  /**
+   * The identity the passkey journey signs in and out as.
+   *
+   * Its own, because that journey signs out - which revokes the session the saved
+   * storage states hold, and would break every console test running beside it.
+   */
+  passkeyEmail:
+    process.env["SIGNET_E2E_PASSKEY_EMAIL"] ?? "passkeys@example.org",
+  passkeyPassword:
+    process.env["SIGNET_E2E_PASSKEY_PASSWORD"] ??
+    "passkey horse battery staple",
   backendClientId: "stub-backend",
   backendSecret: "stub-backend-secret-value-0000",
   /** The public client the stub app launches as. */

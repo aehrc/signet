@@ -9,6 +9,11 @@ import {
   clientPath,
   endpointPath,
   endUserPath,
+  passkeyPath,
+  PASSKEYS_PATH,
+  PASSKEY_OPTIONS_PATH,
+  PASSKEY_SIGN_IN_OPTIONS_PATH,
+  PASSKEY_SIGN_IN_PATH,
   tenantPath,
 } from "./paths.js";
 
@@ -23,6 +28,36 @@ describe("tenantPath", () => {
 
   it("encodes the slug", () => {
     expect(tenantPath("a b/c")).toBe("/api/v1/tenants/a%20b%2Fc");
+  });
+});
+
+describe("the passkey paths", () => {
+  it("hangs the account's passkeys off the account rather than a tenant", () => {
+    // A passkey belongs to the person, so no tenant slug appears anywhere in
+    // these; putting one in would imply a passkey could be scoped to one.
+    expect(PASSKEYS_PATH).toBe("/api/v1/account/passkeys");
+    expect(PASSKEY_OPTIONS_PATH).toBe("/api/v1/account/passkeys/options");
+  });
+
+  it("addresses one passkey by identifier", () => {
+    expect(passkeyPath("11111111-2222-3333-4444-555555555555")).toBe(
+      "/api/v1/account/passkeys/11111111-2222-3333-4444-555555555555",
+    );
+  });
+
+  it("encodes the identifier", () => {
+    // Identifiers come back from the API and are uuids in practice, but the rule
+    // here is that paths are built in one place with no exceptions to remember.
+    expect(passkeyPath("a b/c")).toBe("/api/v1/account/passkeys/a%20b%2Fc");
+  });
+
+  it("puts the sign-in ceremony under the session resource", () => {
+    // Both are unauthenticated, and both are named literally in the server's
+    // allowlist - so the two spellings have to agree exactly.
+    expect(PASSKEY_SIGN_IN_OPTIONS_PATH).toBe(
+      "/api/v1/session/passkey-options",
+    );
+    expect(PASSKEY_SIGN_IN_PATH).toBe("/api/v1/session/passkey");
   });
 });
 

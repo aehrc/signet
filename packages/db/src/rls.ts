@@ -175,6 +175,10 @@ export const RLS_EXEMPT_TABLES: Readonly<Record<string, string>> = {
     "A person, not a tenant's property. One human may belong to several tenants and must hold one password, so the identity cannot be scoped to any of them.",
   admin_sessions:
     "Belongs to an admin user rather than to a tenant, and is resolved before any tenant is known - the session is what determines which tenants the caller may see.",
+  admin_passkeys:
+    "Hangs off admin_users, which is a person rather than a tenant's property: one human administers several tenants and carries one set of authenticators across all of them. Sign-in also resolves the account from the credential presented, which necessarily precedes any tenant being known.",
+  admin_passkey_challenges:
+    "The other half of the sign-in ceremony, and issued before anybody has identified themselves at all - a discoverable credential names its account only once the assertion arrives, so an authentication challenge has no account, let alone a tenant.",
 };
 
 /** `EXISTS` through the row's own `endpoint_id`. */

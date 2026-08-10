@@ -37,6 +37,8 @@ type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 /** Every table the data model is required to define. */
 const EXPECTED_TABLES = [
   "access_tokens",
+  "admin_passkey_challenges",
+  "admin_passkeys",
   "admin_sessions",
   "admin_users",
   "api_tokens",

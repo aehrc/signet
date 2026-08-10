@@ -27,6 +27,11 @@ import {
   clientPath,
   endpointPath,
   endUserPath,
+  passkeyPath,
+  PASSKEYS_PATH,
+  PASSKEY_OPTIONS_PATH,
+  PASSKEY_SIGN_IN_OPTIONS_PATH,
+  PASSKEY_SIGN_IN_PATH,
   PRESETS_PATH,
   SESSION_PATH,
   tenantPath,
@@ -46,15 +51,23 @@ import type {
   EndUserView,
   LaunchSimulationView,
   MemberView,
+  PasskeyView,
   PolicyView,
   PresetView,
   SessionView,
   SimulationView,
 } from "./types.js";
+import type {
+  AuthenticationResponseJSON,
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+  RegistrationResponseJSON,
+} from "@simplewebauthn/browser";
 
 /** Every query key the console uses, so invalidation cannot miss one. */
 export const keys = {
   session: (): QueryKey => ["session"],
+  passkeys: (): QueryKey => ["passkeys"],
   presets: (): QueryKey => ["presets"],
   tenant: (tenant: string): QueryKey => ["tenant", tenant],
   members: (tenant: string): QueryKey => ["members", tenant],
@@ -159,6 +172,109 @@ export function useSignOut() {
       // credential that no longer exists, and some of it names other people.
       client.clear();
       await client.invalidateQueries();
+    },
+  });
+}
+
+/**
+ * The signed-in person's registered passkeys.
+ *
+ * Not fetched until the dialog is opened - `enabled` is what the caller passes -
+ * because most console sessions never open it, and a query that ran on every page
+ * load would spend a request per navigation to populate a menu item.
+ */
+export function usePasskeys(enabled = true) {
+  return useQuery({
+    queryKey: keys.passkeys(),
+    queryFn: async ({ signal }) =>
+      await getField<"passkeys", readonly PasskeyView[]>(
+        PASSKEYS_PATH,
+        "passkeys",
+        signal,
+      ),
+    enabled,
+  });
+}
+
+/**
+ * Asks the server to begin a registration, confirming the password.
+ *
+ * A mutation rather than a query for two reasons: it writes a challenge row, and it
+ * must happen when the person presses the button rather than when a component
+ * mounts. What it returns goes straight to the browser's own ceremony.
+ */
+export function useRegisterPasskeyOptions() {
+  return useMutation({
+    mutationFn: async (password: string) =>
+      await post<PublicKeyCredentialCreationOptionsJSON>(PASSKEY_OPTIONS_PATH, {
+        password,
+      }),
+  });
+}
+
+/** Stores the passkey the browser has just created. */
+export function useRegisterPasskey() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (registration: {
+      readonly name: string | null;
+      readonly response: RegistrationResponseJSON;
+    }) =>
+      await postField<"passkey", PasskeyView>(
+        PASSKEYS_PATH,
+        "passkey",
+        registration,
+      ),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: keys.passkeys() });
+    },
+  });
+}
+
+/** Removes a passkey, confirming the password. */
+export function useRemovePasskey() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (removal: {
+      readonly passkeyId: string;
+      readonly password: string;
+    }) => {
+      await remove(passkeyPath(removal.passkeyId), {
+        password: removal.password,
+      });
+    },
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: keys.passkeys() });
+    },
+  });
+}
+
+/**
+ * Signs in with a passkey: both halves of the ceremony, as one action.
+ *
+ * The two requests are one mutation because they are one thing the person did, and
+ * splitting them would put the browser prompt between two pending states the page
+ * would have to reconcile. The session is seeded rather than invalidated, for the
+ * reason {@link useSignIn} does it.
+ */
+export function usePasskeySignIn() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      ceremony: (
+        options: PublicKeyCredentialRequestOptionsJSON,
+      ) => Promise<AuthenticationResponseJSON>,
+    ) => {
+      const options = await post<PublicKeyCredentialRequestOptionsJSON>(
+        PASSKEY_SIGN_IN_OPTIONS_PATH,
+      );
+      return await post<SessionView>(
+        PASSKEY_SIGN_IN_PATH,
+        await ceremony(options),
+      );
+    },
+    onSuccess: (session) => {
+      client.setQueryData(keys.session(), session);
     },
   });
 }
