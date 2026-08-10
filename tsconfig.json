@@ -6,6 +6,10 @@
     { "path": "./packages/db" },
     { "path": "./apps/server" },
     { "path": "./apps/web" },
+    // The end-to-end suite. Not a build input - it is Playwright's to load - but it
+    // is TypeScript that ships in the repository, and until it was named here
+    // nothing typechecked it.
+    { "path": "./e2e" },
     // The test files, which the projects above exclude. See its header for why they
     // are checked separately.
     { "path": "./tsconfig.tests.json" }

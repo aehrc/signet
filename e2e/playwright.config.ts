@@ -47,7 +47,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env["CI"],
   retries: process.env["CI"] ? 2 : 0,
-  workers: process.env["CI"] ? 2 : undefined,
+  // Two on CI, and Playwright's own default locally. Spread rather than set to
+  // `undefined`, which `exactOptionalPropertyTypes` refuses and which Playwright
+  // would read as a configured value rather than an absent one.
+  ...(process.env["CI"] ? { workers: 2 } : {}),
   reporter: process.env["CI"]
     ? [["github"], ["html", { open: "never" }]]
     : [["list"], ["html", { open: "never" }]],
