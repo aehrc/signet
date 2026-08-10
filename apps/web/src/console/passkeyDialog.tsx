@@ -25,6 +25,7 @@ import {
   passkeyCountLabel,
   registrationBlockedReason,
 } from "./passkeys.js";
+import { describeError } from "../api/errors.js";
 import {
   usePasskeys,
   useRegisterPasskey,
@@ -170,7 +171,9 @@ function PasskeyList({
     return <Loading label="Reading your passkeys…" />;
   }
   if (failure !== null && failure !== undefined) {
-    return <ErrorAlert message={describeCeremonyFailure(failure, "sign-in")} />;
+    // Not a ceremony: reading the list raises no browser prompt, so the only
+    // thing that can arrive here is the server's own refusal.
+    return <ErrorAlert message={describeError(failure)} />;
   }
 
   const blocked = registrationBlockedReason(passkeys.length);
@@ -378,7 +381,10 @@ function RemoveForm({
               onRemoved(passkey.name);
             },
             onError: (error) => {
-              setFailure(describeCeremonyFailure(error, "registration"));
+              // Removal raises no browser prompt either: a wrong password and a
+              // passkey that is already gone are the only ways this fails, and
+              // the server words both.
+              setFailure(describeError(error));
             },
           },
         );
