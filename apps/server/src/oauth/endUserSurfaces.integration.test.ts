@@ -335,6 +335,109 @@ describe.skipIf(testDatabaseUrl === undefined)(
   },
 );
 
+describe.skipIf(testDatabaseUrl === undefined)(
+  "the management endpoint on an endpoint that stores no consents",
+  () => {
+    let stack: TestStack;
+
+    beforeAll(async () => {
+      // The harness default is `always` mode, where approving consent records no
+      // consent row - the very case that used to leave this page empty.
+      stack = await createTestStack();
+    });
+
+    afterAll(async () => {
+      await stack.close();
+    });
+
+    it("lists an app that holds live tokens even though no consent was stored", async () => {
+      const { code, verifier } = await authorizeToCode(stack, {
+        clientId: stack.publicClient.clientId,
+        scope: "openid patient/Observation.rs",
+      });
+      const issued = (await (
+        await postForm(stack, "/token", {
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: "https://app.test/cb",
+          client_id: stack.publicClient.clientId,
+          code_verifier: verifier,
+        })
+      ).json()) as { access_token: string };
+      expect(issued.access_token).toBeDefined();
+
+      const cookie = await manageSignIn(stack, {
+        username: "clinician",
+        password: TEST_PASSWORD,
+      });
+      const response = await stack.app.request(
+        `${issuerPath(stack)}/manage/authorizations`,
+        { headers: { cookie } },
+      );
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        authorizations: {
+          consentId: string | null;
+          clientId: string;
+          scope: string[];
+          active: boolean;
+          standing: boolean;
+        }[];
+        liveTokens: { access: number };
+      };
+      const entry = body.authorizations.find(
+        (candidate) => candidate.clientId === stack.publicClient.clientId,
+      );
+      // The token is the only record of the grant, and it must be enough.
+      expect(entry).toBeDefined();
+      expect(entry?.consentId).toBeNull();
+      expect(entry?.standing).toBe(false);
+      expect(entry?.active).toBe(true);
+      expect(entry?.scope).toContain("patient/Observation.rs");
+      expect(body.liveTokens.access).toBeGreaterThan(0);
+    });
+
+    it("withdraws that access, and the entry with it", async () => {
+      const cookie = await manageSignIn(stack, {
+        username: "clinician",
+        password: TEST_PASSWORD,
+      });
+      const revoked = await stack.app.request(
+        `${issuerPath(stack)}/manage/revoke`,
+        {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ clientId: stack.publicClient.clientId }),
+        },
+      );
+
+      expect(revoked.status).toBe(200);
+      const counts = (await revoked.json()) as {
+        accessTokensRevoked: number;
+      };
+      expect(counts.accessTokensRevoked).toBeGreaterThan(0);
+
+      // With every token revoked there is no access left to show, and a revoked
+      // token is not a "live" one the banner should count.
+      const after = (await (
+        await stack.app.request(`${issuerPath(stack)}/manage/authorizations`, {
+          headers: { cookie },
+        })
+      ).json()) as {
+        authorizations: { clientId: string }[];
+        liveTokens: { access: number; refresh: number };
+      };
+      expect(
+        after.authorizations.find(
+          (candidate) => candidate.clientId === stack.publicClient.clientId,
+        ),
+      ).toBeUndefined();
+      expect(after.liveTokens).toEqual({ access: 0, refresh: 0 });
+    });
+  },
+);
+
 describe.skipIf(testDatabaseUrl === undefined)("the developer portal", () => {
   let stack: TestStack;
 
