@@ -182,6 +182,7 @@ export function ClientDetailPage() {
             { value: "rejected", label: "Rejected" },
           ]}
           hint="Suspending revokes the access and refresh tokens this client already holds, as well as refusing new ones."
+          disabled={!mayWrite}
         />
         <ListField
           label="Redirect URIs"
