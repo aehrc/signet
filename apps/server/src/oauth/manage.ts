@@ -24,6 +24,7 @@
  * Author: John Grimes
  */
 
+import { buildAppAccess } from "@signet/core";
 import {
   clientScopeFromRow,
   createEndUserSession,
@@ -32,6 +33,7 @@ import {
   getClientByClientId,
   hashToken,
   listAccessTokensForSubject,
+  listClients,
   listConsentsForEndUser,
   listRefreshTokensForSubject,
   revokeAccessTokensForSubjectAndClient,
@@ -57,6 +59,7 @@ import type {
   ServerContext,
   SignetEnvironment,
 } from "../context.js";
+import type { IssuedToken } from "@signet/core";
 import type { AuthenticatedEndUser } from "@signet/db";
 import type { Context } from "hono";
 
@@ -268,9 +271,13 @@ export function manageSignOutHandler(context: ServerContext) {
 /**
  * Handles `GET {iss}/manage`: what this person has granted, and to whom.
  *
- * Revoked consents are included and marked. A page that dropped them would look, to
+ * The list merges two records of access, because either can exist without the other.
+ * Stored consents are the standing grants of a `remember`-mode endpoint, included
+ * even when revoked or expired and marked - a page that dropped them would look, to
  * somebody who had just withdrawn access, as though the record had been lost rather
- * than ended.
+ * than ended. Live tokens are the only record an `always`-mode endpoint keeps, so an
+ * app holding one is listed too, or the page would say "no apps have access" while
+ * apps hold usable tokens. The merge itself is `buildAppAccess` in `@signet/core`.
  *
  * @param context - The server's dependencies.
  */
@@ -288,7 +295,6 @@ export function manageAuthorizationsHandler(context: ServerContext) {
       issuerContext.scope,
       (bound) => listConsentsForEndUser(bound, user.id),
     );
-    const now = context.clock();
     const accessTokens = await withTenantScope(
       context.db,
       issuerContext.scope,
@@ -299,6 +305,33 @@ export function manageAuthorizationsHandler(context: ServerContext) {
       issuerContext.scope,
       (bound) => listRefreshTokensForSubject(bound, user.id),
     );
+    const clients = await withTenantScope(
+      context.db,
+      issuerContext.scope,
+      (bound) => listClients(bound),
+    );
+
+    const view = buildAppAccess({
+      consents: consents.map((entry) => ({
+        consentId: entry.consent.id,
+        clientId: entry.client.clientId,
+        clientName: entry.client.name,
+        logoUrl: entry.client.logoUrl,
+        scope: entry.consent.scope,
+        grantedAt: entry.consent.grantedAt,
+        expiresAt: entry.consent.expiresAt,
+        revokedAt: entry.consent.revokedAt,
+      })),
+      accessTokens: accessTokens.map(issuedTokenView),
+      refreshTokens: refreshTokens.map(issuedTokenView),
+      clients: clients.map((client) => ({
+        rowId: client.id,
+        clientId: client.clientId,
+        name: client.name,
+        logoUrl: client.logoUrl,
+      })),
+      now: context.clock(),
+    });
 
     c.header("Cache-Control", "no-store");
     return c.json({
@@ -307,27 +340,26 @@ export function manageAuthorizationsHandler(context: ServerContext) {
         username: user.username,
         fhirUser: user.fhirUserReference,
       },
-      authorizations: consents.map((entry) => ({
-        consentId: entry.consent.id,
-        clientId: entry.client.clientId,
-        clientName: entry.client.name,
-        logoUrl: entry.client.logoUrl,
-        scope: entry.consent.scope
-          .split(" ")
-          .filter((scope) => scope.length > 0),
-        grantedAt: entry.consent.grantedAt,
-        expiresAt: entry.consent.expiresAt,
-        revokedAt: entry.consent.revokedAt,
-        /** Whether this app can act right now, which is what a person wants to know. */
-        active:
-          entry.consent.revokedAt === null &&
-          (entry.consent.expiresAt === null || entry.consent.expiresAt > now),
-      })),
-      liveTokens: {
-        access: accessTokens.length,
-        refresh: refreshTokens.length,
-      },
+      authorizations: view.entries,
+      liveTokens: view.liveTokens,
     });
+  };
+}
+
+/** The lifecycle half of a token row, which is all the merge needs. */
+function issuedTokenView(token: {
+  readonly clientId: string;
+  readonly scope: string;
+  readonly issuedAt: Date;
+  readonly expiresAt: Date;
+  readonly revokedAt: Date | null;
+}): IssuedToken {
+  return {
+    clientRowId: token.clientId,
+    scope: token.scope,
+    issuedAt: token.issuedAt,
+    expiresAt: token.expiresAt,
+    revokedAt: token.revokedAt,
   };
 }
 
