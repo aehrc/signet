@@ -20,6 +20,7 @@ function healthyTable(table: string): TableObservation {
     table,
     present: true,
     policiesEnabled: true,
+    policiesForced: false,
     owner: OWNER,
     roleHasOwnerRights: false,
     readable: true,
@@ -182,6 +183,7 @@ describe("classifyEnforcement", () => {
           table: "tenants",
           present: false,
           policiesEnabled: false,
+          policiesForced: false,
           owner: null,
           roleHasOwnerRights: false,
           readable: false,
@@ -288,6 +290,44 @@ describe("classifySweepIdentity", () => {
 
     expect(verdict.outcome).toBe("role-constrained");
     expect(verdict.message).toContain("endpoints");
+  });
+
+  it("refuses an owner that a forced policy binds anyway", () => {
+    // `alter table ... force row level security` subjects the owner to the
+    // policies too, which is exactly the state ownership alone cannot see: the
+    // sweep would delete nothing and report zero, which is what the check exists
+    // to make impossible. See `force` in `./rls.ts`.
+    const verdict = classifySweepIdentity(
+      withTable(ownerObservations(), "endpoints", { policiesForced: true }),
+    );
+
+    expect(verdict.outcome).toBe("role-constrained");
+    expect(verdict.message).toContain("endpoints");
+    expect(verdict.message).toContain("force");
+  });
+
+  it("accepts BYPASSRLS against a forced policy", () => {
+    // The one identity a forced policy does not bind, and the reason `force` is
+    // documented as requiring it.
+    const forced = withTable(
+      ownerObservations({ bypassesPolicies: true }),
+      "endpoints",
+      { policiesForced: true },
+    );
+
+    expect(classifySweepIdentity(forced).outcome).toBe("healthy");
+  });
+
+  it("reports a table that has lost its policies as an absent schema", () => {
+    // The other half of the same filter as the case below: present, but with
+    // row-level security turned off. The remedy is still to migrate.
+    const verdict = classifySweepIdentity(
+      withTable(ownerObservations(), "tenants", { policiesEnabled: false }),
+    );
+
+    expect(verdict.outcome).toBe("schema-absent");
+    expect(verdict.message).toContain("tenants");
+    expect(verdict.message).toContain("migrate");
   });
 
   it("reports the schema absent ahead of anything about the role", () => {

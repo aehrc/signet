@@ -158,6 +158,22 @@ for (const { name, flags } of CONFIGURATIONS) {
     );
   }
 
+  // What each of them runs, and not only that it holds the credential. A pod spec
+  // carrying the owning identity is the most consequential thing in this chart,
+  // so which command it hands that identity to is worth naming: a CronJob running
+  // `migrate` nightly would otherwise pass every assertion above.
+  for (const [documents, command] of [
+    [migrationJobs, "migrate"],
+    [sweepJobs, "sweep"],
+  ]) {
+    for (const document of documents) {
+      check(
+        document.includes(`["node", "dist/index.js", "${command}"]`),
+        `${name}: ${nameOf(document) ?? "a job"} does not run the ${command} command`,
+      );
+    }
+  }
+
   for (const document of deployments) {
     check(
       !document.includes(OWNER_VARIABLE),

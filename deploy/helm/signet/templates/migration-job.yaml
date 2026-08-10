@@ -62,10 +62,12 @@ spec:
           securityContext: {{ toJson .Values.signet.securityContext }}
           command: ["node", "dist/index.js", "migrate"]
           env:
-            # The only pod spec in this chart carrying the owning identity. The
-            # server's Deployment gets `signet.env`, which is the serving role
-            # and nothing else, and `scripts/checkChartCredentials.mjs` asserts
-            # the difference against the rendered output.
+            # One of the two pod specs in this chart carrying the owning
+            # identity; the other is the sweep CronJob, which acts across
+            # tenants. The server's Deployment gets `signet.env`, which is the
+            # serving role and nothing else, and
+            # `scripts/checkChartCredentials.mjs` asserts the difference against
+            # the rendered output.
             {{- include "signet.migrationEnv" . | nindent 12 }}
           {{- if gt (len .Values.signet.secretConfig) 0 }}
           envFrom:

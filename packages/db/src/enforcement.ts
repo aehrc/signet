@@ -24,8 +24,15 @@
  * yet, which is exactly the state of a freshly migrated deployment.
  *
  * Split into observing and deciding on purpose: the decision is a pure function
- * over five facts per table, so every combination is asserted in
+ * over the facts below, so every combination is asserted in
  * `./enforcement.test.ts` without a database, and only the asking needs one.
+ *
+ * Two decisions are made over the same observations, in opposite directions. The
+ * server must be constrained by the policies, which {@link classifyEnforcement}
+ * requires; the expiry sweep must be exempt from them, which
+ * {@link classifySweepIdentity} requires. They are separate functions rather than
+ * one with a flag, because a shared implementation is one edit away from checking
+ * the wrong direction for one of its callers.
  *
  * Author: John Grimes
  */
@@ -43,6 +50,14 @@ export interface TableObservation {
   readonly present: boolean;
   /** Whether row-level security is enabled on it. */
   readonly policiesEnabled: boolean;
+  /**
+   * Whether those policies are forced, which binds the table's owner as well.
+   *
+   * Irrelevant to the server, whose role owns nothing either way, and decisive
+   * for the sweep: a forced policy leaves `BYPASSRLS` as the only identity that
+   * can act across tenants. See `force` in `./rls.ts`.
+   */
+  readonly policiesForced: boolean;
   /** The role that owns it, or null when the table is absent. */
   readonly owner: string | null;
   /**
@@ -278,6 +293,19 @@ export function classifySweepIdentity(
     };
   }
 
+  // Ownership is not exemption where the policies are forced, which is the state
+  // an ownership-only check would call healthy and then sweep nothing at all.
+  const forced = tables
+    .filter((observed) => observed.policiesForced)
+    .map((observed) => observed.table);
+  if (forced.length > 0) {
+    return {
+      outcome: "role-constrained",
+      role,
+      message: `The tenant isolation policies on ${listOf(forced)} are forced, which binds their owner as well, so a sweep run as ${role} would delete nothing there and report a clean database. A forced policy leaves BYPASSRLS as the only identity that can sweep: give SIGNET_DATABASE_OWNER_URL a role holding it.`,
+    };
+  }
+
   const hidden = tables
     .filter((observed) => !observed.roleHasOwnerRights)
     .map((observed) => observed.table);
@@ -300,6 +328,7 @@ export function classifySweepIdentity(
 interface CatalogueRow {
   readonly table_name: string;
   readonly rls_enabled: boolean;
+  readonly rls_forced: boolean;
   readonly owner: string;
   readonly owner_rights: boolean;
   readonly readable: boolean;
@@ -333,6 +362,7 @@ export async function observeEnforcement(
            coalesce(r.rolbypassrls, false) as bypasses,
            c.relname::text as table_name,
            c.relrowsecurity as rls_enabled,
+           c.relforcerowsecurity as rls_forced,
            pg_get_userbyid(c.relowner)::text as owner,
            pg_has_role(current_user, c.relowner, 'usage') as owner_rights,
            has_table_privilege(current_user, c.oid, 'select') as readable,
@@ -367,6 +397,7 @@ export async function observeEnforcement(
             table,
             present: false,
             policiesEnabled: false,
+            policiesForced: false,
             owner: null,
             roleHasOwnerRights: false,
             readable: false,
@@ -376,6 +407,7 @@ export async function observeEnforcement(
             table,
             present: true,
             policiesEnabled: row.rls_enabled,
+            policiesForced: row.rls_forced,
             owner: row.owner,
             roleHasOwnerRights: row.owner_rights,
             readable: row.readable,

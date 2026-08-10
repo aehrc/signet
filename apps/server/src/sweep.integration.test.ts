@@ -19,6 +19,9 @@
 
 import {
   clientScopeFromRow,
+  consumeAdminPasskeyChallenge,
+  countAdminPasskeyChallenges,
+  createAdminPasskeyChallenge,
   createLaunchContext,
   findAccessToken,
   findLaunchContext,
@@ -113,6 +116,49 @@ describe.skipIf(configuredOwnerUrl === undefined)("the sweep command", () => {
         findLaunchContext(bound, handleHash),
       ),
     ).toBeUndefined();
+  });
+
+  it("clears the passkey challenges a dismissed prompt left behind", async () => {
+    // The table this job exists for. A challenge row is written whenever a
+    // ceremony starts and deleted only when one completes, so every browser
+    // prompt somebody dismissed leaves one - and unlike the other runtime tables
+    // that happens in ordinary use rather than only when something goes wrong.
+    const dismissed = unique();
+    const live = unique();
+    await createAdminPasskeyChallenge(stack.context.db, {
+      challenge: dismissed,
+      purpose: "authentication",
+      adminUserId: null,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    await createAdminPasskeyChallenge(stack.context.db, {
+      challenge: live,
+      purpose: "authentication",
+      adminUserId: null,
+      expiresAt: new Date(Date.now() + 600_000),
+    });
+    const before = await countAdminPasskeyChallenges(stack.context.db);
+
+    const counts = await runSweepCommand({
+      ownerUrl,
+      accessTokenGraceMs: DAY_MS,
+    });
+
+    expect(counts.passkeyChallenges).toBeGreaterThan(0);
+    // The count it reported is the count it deleted, rather than a number nobody
+    // checked against the table.
+    expect(await countAdminPasskeyChallenges(stack.context.db)).toBe(
+      before - counts.passkeyChallenges,
+    );
+    // And a ceremony still in flight survives it: the sweep removes storage, never
+    // the ability to finish something that was started.
+    expect(
+      await consumeAdminPasskeyChallenge(
+        stack.context.db,
+        live,
+        "authentication",
+      ),
+    ).toBeDefined();
   });
 
   it("refuses the serving role rather than reporting a clean database", async () => {

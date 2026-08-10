@@ -233,9 +233,10 @@ nothing breaks on a deployment that skips a run. What makes it worth scheduling 
 ceremony starts and deleted only when one completes, so every browser prompt
 somebody dismisses leaves one behind, and the table grows in ordinary use.
 
-The Helm chart runs it as a CronJob at 03:17 daily, which `signet.sweep.enabled`
-turns off and `signet.sweep.schedule` moves. Elsewhere, run it on whatever
-scheduler the deployment has:
+The Helm chart runs it as a CronJob at 03:17 daily in the cluster's timezone -
+UTC unless the control plane says otherwise, since the chart sets no `timeZone` -
+which `signet.sweep.enabled` turns off and `signet.sweep.schedule` moves.
+Elsewhere, run it on whatever scheduler the deployment has:
 
 ```sh
 SIGNET_DATABASE_OWNER_URL=postgres://signet:...@db:5432/signet \
@@ -255,7 +256,9 @@ back zero, which is indistinguishable from a database with nothing to reclaim, s
 a job configured that way would report success nightly while the tables it was
 meant to be trimming grew. The command observes the role it was actually given -
 the same observation the server makes at startup, read the other way round - and
-exits non-zero naming the role and the remedy.
+exits non-zero naming the role and the remedy. Ownership is not enough on its own:
+where the policies were installed with `force`, which binds the owner too, the
+sweep needs a role holding `BYPASSRLS` and refuses anything less.
 
 Access token records lag behind the rest. They are a revocation list rather than
 runtime state: an introspection arriving a moment after a token expired should be
