@@ -18,6 +18,7 @@
 import { useState } from "react";
 import { useParams } from "react-router";
 
+import { describeEntry } from "./accessWording.js";
 import {
   useAuthorizations,
   useManageSignIn,
@@ -36,7 +37,7 @@ import {
   Panel,
 } from "../components/layout.js";
 import { StatusBadge } from "../components/table.js";
-import { countOf, formatInstant } from "../formatting/values.js";
+import { countOf } from "../formatting/values.js";
 
 /** The management page. */
 export function ManagePage() {
@@ -132,13 +133,11 @@ function Authorizations({
         ) : (
           data.authorizations.map((authorization) => (
             <Panel
-              key={authorization.consentId}
-              title={authorization.clientName}
-              description={
-                authorization.active
-                  ? `Allowed on ${formatInstant(authorization.grantedAt)}`
-                  : `Withdrawn on ${formatInstant(authorization.revokedAt)}`
+              key={
+                authorization.consentId ?? `tokens-${authorization.clientId}`
               }
+              title={authorization.clientName}
+              description={describeEntry(authorization)}
               actions={
                 authorization.active ? (
                   <button

@@ -137,7 +137,8 @@ export interface ManagementView {
     readonly fhirUser: string | null;
   };
   readonly authorizations: readonly {
-    readonly consentId: string;
+    /** The consent behind a standing grant, or null for access backed only by tokens. */
+    readonly consentId: string | null;
     readonly clientId: string;
     readonly clientName: string;
     readonly logoUrl: string | null;
@@ -146,6 +147,8 @@ export interface ManagementView {
     readonly expiresAt: string | null;
     readonly revokedAt: string | null;
     readonly active: boolean;
+    /** Whether a stored consent backs this entry, making it a standing grant. */
+    readonly standing: boolean;
   }[];
   readonly liveTokens: {
     readonly access: number;
