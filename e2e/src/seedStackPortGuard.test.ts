@@ -14,14 +14,14 @@
 
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 const SEED = path.join(import.meta.dir, "..", "..", "scripts", "seedStack.mjs");
 
 /** Part of the refusal, distinctive enough that nothing else prints it. */
-const REFUSAL = "export";
+const REFUSAL = "where it does nothing";
 
 /**
  * Runs the seed in a directory holding the given `.env` files.
@@ -62,6 +62,20 @@ describe("the seed script's env-file port guard", () => {
     expect(status).not.toBe(0);
     expect(output).toContain("SIGNET_PORT");
     expect(output).toContain(REFUSAL);
+    // The refusal has to say what to do instead, not only that it refused.
+    expect(output).toContain("export SIGNET_PORT=");
+  });
+
+  // `.envrc` is direnv's file, which the README recommends. It begins with `.env`
+  // but is not one of Bun's: direnv exports what it declares into the shell, so
+  // compose, Playwright and the seed all see it. Refusing it would refuse the
+  // documented workflow, and would make the end-to-end suite unrunnable for
+  // anybody using direnv - the global setup spawns this script.
+  test("allows a port exported by direnv from .envrc", () => {
+    const { output } = seedIn({
+      ".envrc": "export SIGNET_PORT=3100 PATHLING_PORT=8180 APP_PORT=4100\n",
+    });
+    expect(output).not.toContain(REFUSAL);
   });
 
   // Every `.env` file Bun might load, not just `.env.local`.
@@ -93,6 +107,20 @@ describe("the seed script's env-file port guard", () => {
   test("ignores a commented port", () => {
     const { output } = seedIn({ ".env.local": "# SIGNET_PORT=3100\n" });
     expect(output).not.toContain(REFUSAL);
+  });
+
+  // A directory whose name happens to fit the pattern would make a read of it
+  // throw EISDIR, which would fail the seed for a reason that has nothing to do
+  // with ports.
+  test("ignores a directory named like an env file", () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), "signet-seed-"));
+    mkdirSync(path.join(cwd, ".env.d"));
+    const env = { ...process.env, SIGNET_BASE_URL: "http://127.0.0.1:1" };
+    delete env["NODE_ENV"];
+    const result = spawnSync("bun", [SEED], { cwd, env, encoding: "utf8" });
+    expect(`${result.stdout ?? ""}${result.stderr ?? ""}`).not.toContain(
+      "EISDIR",
+    );
   });
 
   // The guard is about three variables and must not obstruct anything else a

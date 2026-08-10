@@ -170,7 +170,8 @@ if you would rather not do even that.
 
 `stack:seed` is the only one of the three that Bun runs in its own process, so it is
 the only one that could read a port from a file and disagree with the stack. It
-refuses to run when it finds one there, and says so.
+refuses to run when it finds one there, and says so. An `.envrc` is not one of those
+files: direnv exports what it declares, so every command sees it.
 
 CI runs the whole end-to-end job on `3100`, `8180` and `4100`, so a URL that goes
 back to being hard-coded fails there rather than on the machine that needed it.

@@ -41,10 +41,19 @@ const PORT_VARIABLES = ["SIGNET_PORT", "PATHLING_PORT", "APP_PORT"];
  * @throws {Error} if a `.env` file in the working directory declares one.
  */
 function refuseFileSourcedPorts() {
-  // `.env.example` is documentation, and is the one file Bun never loads.
-  const files = readdirSync(".").filter(
-    (name) => name.startsWith(".env") && name !== ".env.example",
-  );
+  // `.env` and `.env.<something>`, which is the shape of every file Bun loads, and
+  // deliberately not everything beginning with `.env`: `.envrc` is direnv's, and
+  // what direnv declares *is* exported into the shell - so it reaches compose and
+  // Playwright, and refusing it would refuse the workflow the README recommends.
+  // `.env.example` is documentation, and is the one `.env.` file Bun never loads.
+  const files = readdirSync(".", { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter(
+      (name) =>
+        (name === ".env" || name.startsWith(".env.")) &&
+        name !== ".env.example",
+    );
   for (const file of files) {
     const contents = readFileSync(file, "utf8");
     const declared = PORT_VARIABLES.filter((name) =>
