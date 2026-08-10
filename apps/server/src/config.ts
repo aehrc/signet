@@ -261,6 +261,107 @@ export function resolveMigrationIdentities(
   return { ownerUrl, servingRole };
 }
 
+/** What the `sweep` command acts with. */
+export interface SweepConfiguration {
+  /**
+   * The connection the sweep is made on.
+   *
+   * The owning identity, for the reason `migrate` needs it: the sweep acts across
+   * tenants, which is exactly what the serving role must not be able to do. Run as
+   * the serving role every statement matches nothing, so the command checks the
+   * role it was actually given rather than trusting the variable's name.
+   */
+  readonly ownerUrl: string;
+  /**
+   * How far behind the present the access token sweep's cut-off sits.
+   *
+   * Access token records are a revocation list rather than runtime state, and one
+   * deleted the moment it expires turns a slightly late introspection - a resource
+   * server whose clock is behind Signet's - into an unknown token rather than an
+   * inactive one carrying its metadata.
+   */
+  readonly accessTokenGraceMs: number;
+}
+
+/** Milliseconds in each unit a duration may be written with. */
+const DURATION_UNITS: Readonly<Record<string, number>> = {
+  s: 1000,
+  m: 60_000,
+  h: 3_600_000,
+  d: 86_400_000,
+};
+
+/** The default access token grace period: a day. */
+const DEFAULT_ACCESS_TOKEN_GRACE = "24h";
+
+/**
+ * Reads a duration written as a whole number and a unit, in milliseconds.
+ *
+ * The unit is mandatory. A bare `24` is ambiguous, and the reading that would
+ * hurt - seconds, where an operator meant hours - is a sweep that deletes the
+ * record of a token a resource server is about to introspect. A configuration
+ * that cannot be read one way only is refused rather than guessed at.
+ *
+ * @throws {ConfigError} When the value is not a whole number followed by `s`,
+ *   `m`, `h` or `d`.
+ */
+function readDuration(
+  env: Environment,
+  name: string,
+  fallback: string,
+): number {
+  const value = read(env, name) ?? fallback;
+  const match = /^(\d+)([smhd])$/.exec(value);
+  const unit = match === null ? undefined : DURATION_UNITS[match[2] ?? ""];
+  if (match === null || unit === undefined) {
+    throw new ConfigError(
+      `${name} must be a whole number followed by s, m, h or d - for example "24h" - got "${value}"`,
+    );
+  }
+  return Number(match[1]) * unit;
+}
+
+/**
+ * Resolves what the `sweep` command acts with.
+ *
+ * Deliberately reads two variables and no others. The sweep needs a connection
+ * that can act across tenants and a cut-off; it serves nothing, signs nothing and
+ * has no issuer, so demanding a public URL or a master key would be an operator
+ * being told off by name for omitting something the command never reads.
+ *
+ * It does not read `SIGNET_DATABASE_URL` either, and that is the difference from
+ * {@link resolveMigrationIdentities}: `migrate` needs the serving role's *name* in
+ * order to grant it, and the sweep grants nothing.
+ *
+ * @param env - The environment to read.
+ * @returns The owner connection and the access token grace period.
+ * @throws {ConfigError} When the owning identity is absent, or the grace period
+ *   cannot be read. Neither message contains any part of a connection string.
+ * @example
+ * ```ts
+ * await runSweepCommand(resolveSweepConfiguration(process.env));
+ * ```
+ */
+export function resolveSweepConfiguration(
+  env: Environment,
+): SweepConfiguration {
+  const ownerUrl = read(env, "SIGNET_DATABASE_OWNER_URL");
+  if (ownerUrl === undefined) {
+    throw new ConfigError(
+      "SIGNET_DATABASE_OWNER_URL is required to sweep; the sweep acts across tenants, which the serving role cannot do - run as it, every statement matches nothing",
+    );
+  }
+
+  return {
+    ownerUrl,
+    accessTokenGraceMs: readDuration(
+      env,
+      "SIGNET_SWEEP_ACCESS_TOKEN_GRACE",
+      DEFAULT_ACCESS_TOKEN_GRACE,
+    ),
+  };
+}
+
 /**
  * Resolves configuration from an environment, throwing {@link ConfigError} with
  * an actionable message rather than starting up in a half-configured state.

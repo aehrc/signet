@@ -75,6 +75,8 @@ const OWNER_IDENTITY_FILES: Readonly<Record<string, string>> = {
     "Migrates as a fallback for a file run outside the global setup, closing the owning connection before returning, and derives every stack's serving connection from the same URL.",
   "apps/server/src/enforcement.integration.test.ts":
     "The startup check's own suite. It must connect as four identities - owning, exempt, under-privileged and correct - because which of them is refused is the behaviour under test.",
+  "apps/server/src/sweep.integration.test.ts":
+    "Runs the `sweep` command, which acts across tenants and therefore requires the owning identity, and asserts the converse - that the same command given the serving role refuses rather than reporting a database it cannot see as clean.",
   "apps/server/src/migrate.integration.test.ts":
     "Runs the `migrate` command, which requires the owning identity by design, and then observes the privileges it left in force for a serving role it names rather than connects as.",
 };

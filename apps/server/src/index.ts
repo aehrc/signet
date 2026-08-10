@@ -12,10 +12,12 @@ import {
   loadConfig,
   resolveDatabaseUrl,
   resolveMigrationIdentities,
+  resolveSweepConfiguration,
 } from "./config.js";
 import { verifyEnforcement } from "./enforcement.js";
 import { createRateLimitStore } from "./http/rateLimit.js";
 import { runMigrateCommand } from "./migrate.js";
+import { runSweepCommand } from "./sweep.js";
 
 import type { AuditRecordFailure } from "@signet/db";
 
@@ -48,6 +50,24 @@ if (command === "migrate") {
       reportConfigError(error);
     }
     console.error("Signet migration failed:", error);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+// `sweep` deletes expired runtime rows across every tenant, which is what the
+// chart's CronJob runs nightly. Like `migrate` it needs the owning identity - the
+// serving role sees none of those rows - and unlike the server it needs neither a
+// public URL nor a master key, so it is dispatched before the configuration is
+// resolved for the same reason.
+if (command === "sweep") {
+  try {
+    await runSweepCommand(resolveSweepConfiguration(process.env));
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      reportConfigError(error);
+    }
+    console.error("Signet sweep failed:", error);
     process.exit(1);
   }
   process.exit(0);

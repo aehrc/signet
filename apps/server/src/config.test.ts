@@ -8,6 +8,7 @@ import {
   ConfigError,
   loadConfig,
   resolveMigrationIdentities,
+  resolveSweepConfiguration,
   type Environment,
 } from "./config.js";
 
@@ -390,6 +391,91 @@ describe("resolveMigrationIdentities", () => {
       expect(message).not.toContain("owner-p");
       expect(message).not.toContain("postgres://");
     }
+  });
+});
+
+describe("resolveSweepConfiguration", () => {
+  // The sweep acts across tenants, so it needs the identity the policies exempt
+  // and nothing else: no public URL, no master key, and not the serving
+  // connection either, which it would delete nothing at all with.
+  const OWNER_URL = "postgres://signet:owner-p@db:5432/signet";
+
+  it("resolves the owner connection and the default grace period", () => {
+    expect(
+      resolveSweepConfiguration({ SIGNET_DATABASE_OWNER_URL: OWNER_URL }),
+    ).toEqual({
+      ownerUrl: OWNER_URL,
+      // Twenty-four hours. An access token record is a revocation list entry, so
+      // deleting one the moment it expires would answer a slightly late
+      // introspection as an unknown token rather than an inactive one.
+      accessTokenGraceMs: 24 * 60 * 60 * 1000,
+    });
+  });
+
+  it("needs no other configuration", () => {
+    // Not even SIGNET_DATABASE_URL. An operator running a maintenance job should
+    // not be told off by name for omitting a variable the command never reads.
+    expect(() =>
+      resolveSweepConfiguration({ SIGNET_DATABASE_OWNER_URL: OWNER_URL }),
+    ).not.toThrow();
+  });
+
+  it("requires the owning identity", () => {
+    expect(() => resolveSweepConfiguration({})).toThrow(
+      /SIGNET_DATABASE_OWNER_URL/,
+    );
+    expect(() => resolveSweepConfiguration({})).toThrow(ConfigError);
+  });
+
+  it.each([
+    ["45s", 45_000],
+    ["30m", 1_800_000],
+    ["2h", 7_200_000],
+    ["7d", 604_800_000],
+    ["0h", 0],
+  ])("reads a grace period of %s", (value, expected) => {
+    expect(
+      resolveSweepConfiguration({
+        SIGNET_DATABASE_OWNER_URL: OWNER_URL,
+        SIGNET_SWEEP_ACCESS_TOKEN_GRACE: value,
+      }).accessTokenGraceMs,
+    ).toBe(expected);
+  });
+
+  it.each(["24", "1 h", "an hour", "-1h", "24H", "1.5h", ""])(
+    "rejects %p as a grace period",
+    (value) => {
+      // A unit is mandatory rather than assumed. A bare `24` read as seconds when
+      // an operator meant hours is a sweep that deletes a live token's record,
+      // and the failure mode of a misspelling should not be a silent one.
+      const failing = (): unknown =>
+        resolveSweepConfiguration({
+          SIGNET_DATABASE_OWNER_URL: OWNER_URL,
+          SIGNET_SWEEP_ACCESS_TOKEN_GRACE: value,
+        });
+
+      if (value === "") {
+        // A blank string is an unset variable everywhere else in this module, so
+        // it takes the default rather than failing.
+        expect(failing).not.toThrow();
+        return;
+      }
+      expect(failing).toThrow(/SIGNET_SWEEP_ACCESS_TOKEN_GRACE/);
+    },
+  );
+
+  it("puts no credential in a refusal", () => {
+    let message = "";
+    try {
+      resolveSweepConfiguration({
+        SIGNET_DATABASE_OWNER_URL: OWNER_URL,
+        SIGNET_SWEEP_ACCESS_TOKEN_GRACE: "forever",
+      });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).not.toContain("owner-p");
+    expect(message).not.toContain("postgres://");
   });
 });
 
