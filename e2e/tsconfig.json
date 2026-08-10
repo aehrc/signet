@@ -8,9 +8,14 @@
     "noEmit": true
   },
   "include": [
+    // The pure helpers, whose tests are typechecked by the root
+    // `tsconfig.tests.json` instead - they import `bun:test`, and this project
+    // names the types of the runtime Playwright gives it.
+    "src/**/*",
     "tests/**/*",
     "support/**/*",
     "globalSetup.ts",
     "playwright.config.ts"
-  ]
+  ],
+  "exclude": ["src/**/*.test.ts"]
 }

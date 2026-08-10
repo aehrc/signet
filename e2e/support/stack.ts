@@ -9,21 +9,21 @@
  * Author: John Grimes
  */
 
-const SIGNET_PORT = process.env["SIGNET_PORT"] ?? "3000";
+import { resolveStackUrls } from "../src/stackUrls.js";
+
+const urls = resolveStackUrls(process.env);
 
 /** Signet's origin. */
-export const SIGNET =
-  process.env["SIGNET_BASE_URL"] ?? `http://localhost:${SIGNET_PORT}`;
+export const SIGNET = urls.signet;
 
 /** The endpoint's issuer identifier, which is also its URL prefix. */
 export const ISSUER = `${SIGNET}/t/demo/e/pathling`;
 
 /** Pathling's FHIR base URL, which is the audience tokens are minted for. */
-export const FHIR =
-  process.env["PATHLING_BASE_URL"] ?? "http://localhost:8080/fhir";
+export const FHIR = urls.fhir;
 
 /** The stub SMART app. */
-export const APP = process.env["APP_BASE_URL"] ?? "http://localhost:4000";
+export const APP = urls.app;
 
 /**
  * Where the console's signed-in session is saved.

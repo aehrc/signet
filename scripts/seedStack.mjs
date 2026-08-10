@@ -17,19 +17,46 @@
  * Author: John Grimes
  */
 
-const BASE = process.env["SIGNET_BASE_URL"] ?? "http://localhost:3000";
-const TENANT = process.env["SIGNET_SEED_TENANT"] ?? "demo";
-const EMAIL = process.env["SIGNET_BOOTSTRAP_EMAIL"] ?? "ops@example.org";
+/**
+ * Reads a variable, treating an empty value as absent.
+ *
+ * An exported-but-cleared variable arrives as an empty string, and reading that
+ * as a port would produce `http://localhost:/fhir`.
+ *
+ * @param name - the variable to read.
+ * @returns the value, or `undefined` if it is unset or empty.
+ */
+function setting(name) {
+  const value = process.env[name];
+  return value === undefined || value === "" ? undefined : value;
+}
+
+// The ports the compose stack publishes on. Duplicated from `e2e/src/stackUrls.ts`
+// rather than imported: this script runs as bare `node` inside the runtime image,
+// which ships no `node_modules`, so it can import nothing. The three
+// `SIGNET_SEED_*` and `SIGNET_BASE_URL` variables below win where they are set,
+// and compose sets all of them - so the ports matter only when a developer runs
+// `bun run stack:seed` from the host.
+//
+// These have to be *exported* into the shell to have any effect: Bun does not pass
+// a variable it loaded from a `.env` file to the processes it spawns.
+const SIGNET_PORT = setting("SIGNET_PORT") ?? "3000";
+const PATHLING_PORT = setting("PATHLING_PORT") ?? "8080";
+const APP_PORT = setting("APP_PORT") ?? "4000";
+
+const BASE = setting("SIGNET_BASE_URL") ?? `http://localhost:${SIGNET_PORT}`;
+const TENANT = setting("SIGNET_SEED_TENANT") ?? "demo";
+const EMAIL = setting("SIGNET_BOOTSTRAP_EMAIL") ?? "ops@example.org";
 const PASSWORD =
-  process.env["SIGNET_BOOTSTRAP_PASSWORD"] ?? "correct horse battery staple";
+  setting("SIGNET_BOOTSTRAP_PASSWORD") ?? "correct horse battery staple";
 
 /** Where Pathling serves FHIR, as the browser reaches it. */
 const FHIR_BASE =
-  process.env["SIGNET_SEED_FHIR_BASE"] ?? "http://localhost:8080/fhir";
+  setting("SIGNET_SEED_FHIR_BASE") ?? `http://localhost:${PATHLING_PORT}/fhir`;
 
 /** Where the stub SMART app is served. */
 const APP_ORIGIN =
-  process.env["SIGNET_SEED_APP_ORIGIN"] ?? "http://localhost:4000";
+  setting("SIGNET_SEED_APP_ORIGIN") ?? `http://localhost:${APP_PORT}`;
 
 /** The end user the suite signs in as. */
 export const SEED_USER = {

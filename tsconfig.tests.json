@@ -28,5 +28,9 @@
     "declarationMap": false,
     "noEmit": true
   },
-  "include": ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts"]
+  "include": [
+    "packages/*/src/**/*.test.ts",
+    "apps/*/src/**/*.test.ts",
+    "e2e/src/**/*.test.ts"
+  ]
 }
