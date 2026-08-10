@@ -172,6 +172,9 @@ if you would rather not do even that.
 the only one that could read a port from a file and disagree with the stack. It
 refuses to run when it finds one there, and says so.
 
+CI runs the whole end-to-end job on `3100`, `8180` and `4100`, so a URL that goes
+back to being hard-coded fails there rather than on the machine that needed it.
+
 ## Container image
 
 ```sh

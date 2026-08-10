@@ -216,6 +216,18 @@ jobs:
     # start a Spark session. A run that takes longer than this has hung rather
     # than been slow.
     timeout-minutes: 20
+    # Non-default ports, deliberately. Moving the stack is a documented capability -
+    # a developer whose 3000 is taken exports these three - and the only thing that
+    # proves it is a run where every URL in the stack is derived rather than
+    # hard-coded. A port left behind in compose, the seed or the suite fails here.
+    #
+    # A job-level `env` is the export route the documentation describes: every step
+    # below runs with these in its environment, which is what `docker compose` and
+    # Playwright need and what a `.env` file cannot give them.
+    env:
+      SIGNET_PORT: "3100"
+      PATHLING_PORT: "8180"
+      APP_PORT: "4100"
     steps:
       - uses: actions/checkout@v5
 
