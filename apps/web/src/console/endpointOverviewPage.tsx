@@ -23,12 +23,13 @@
 import { useState } from "react";
 
 import { roleAllows, useEndpointContext } from "./useConsole.js";
-import { describeError, issuesByField } from "../api/errors.js";
+import { issuesByField } from "../api/errors.js";
 import { endpointPath } from "../api/paths.js";
 import { useUpdateEndpoint } from "../api/queries.js";
 import {
   CheckboxField,
   PatchForm,
+  SaveOutcome,
   SaveRow,
   SelectField,
   TextField,
@@ -37,7 +38,6 @@ import {
   CopyableValue,
   DetailList,
   DetailRow,
-  ErrorAlert,
   InfoAlert,
   Panel,
 } from "../components/layout.js";
@@ -269,10 +269,12 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
         </InfoAlert>
       )}
 
-      {update.isError && Object.keys(issues).length === 0 ? (
-        <ErrorAlert message={describeError(update.error)} />
-      ) : null}
-      {update.isSuccess ? <InfoAlert>Settings saved.</InfoAlert> : null}
+      <SaveOutcome
+        error={update.error}
+        issues={issues}
+        isSuccess={update.isSuccess}
+        saved="Settings saved."
+      />
 
       {disabled ? null : (
         <SaveRow
@@ -338,10 +340,12 @@ function CapabilitiesPanel({
         ))}
       </div>
 
-      {update.isError ? (
-        <ErrorAlert message={describeError(update.error)} />
-      ) : null}
-      {update.isSuccess ? <InfoAlert>Capabilities saved.</InfoAlert> : null}
+      <SaveOutcome
+        error={update.error}
+        issues={{}}
+        isSuccess={update.isSuccess}
+        saved="Capabilities saved."
+      />
 
       {disabled ? null : (
         <SaveRow

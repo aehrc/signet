@@ -28,6 +28,7 @@ import {
 import {
   ListField,
   PatchForm,
+  SaveOutcome,
   SaveRow,
   SelectField,
   TextField,
@@ -37,7 +38,6 @@ import {
   DetailList,
   DetailRow,
   ErrorAlert,
-  InfoAlert,
   Loading,
   PageHeader,
   Panel,
@@ -190,6 +190,7 @@ export function ClientDetailPage() {
           onChange={setRedirectUris}
           error={issues["redirectUris"] ?? issues["redirectUris.0"]}
           hint="One per line. Matched exactly."
+          disabled={!mayWrite}
         />
         <ListField
           label="Allowed scopes"
@@ -197,12 +198,15 @@ export function ClientDetailPage() {
           onChange={setScopes}
           error={issues["allowedScopes"]}
           rows={5}
+          disabled={!mayWrite}
         />
 
-        {update.isError && Object.keys(issues).length === 0 ? (
-          <ErrorAlert message={describeError(update.error)} />
-        ) : null}
-        {update.isSuccess ? <InfoAlert>Client saved.</InfoAlert> : null}
+        <SaveOutcome
+          error={update.error}
+          issues={issues}
+          isSuccess={update.isSuccess}
+          saved="Client saved."
+        />
 
         {mayWrite ? (
           <SaveRow

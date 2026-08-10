@@ -16,7 +16,7 @@
 
 import { useId } from "react";
 
-import { ErrorAlert, Panel } from "./layout.js";
+import { ErrorAlert, InfoAlert, Panel } from "./layout.js";
 import { describeError } from "../api/errors.js";
 
 import type { ReactNode } from "react";
@@ -406,6 +406,40 @@ export function PatchForm({
         {children}
       </form>
     </Panel>
+  );
+}
+
+/**
+ * What a patch form says after a save: what went wrong, or that it worked.
+ *
+ * The general error is shown only when there are no field-level issues, for the same
+ * reason {@link FormFooter} does it: when there are, they are already beside the
+ * inputs that caused them, and repeating "that request is not valid" above the button
+ * says nothing the reader cannot see.
+ *
+ * Silence is not an option either way - every operation reports its own outcome - so
+ * this is one component rather than the same pair of conditionals in every form.
+ */
+export function SaveOutcome({
+  error,
+  issues,
+  isSuccess,
+  saved,
+}: Readonly<{
+  readonly error: unknown;
+  /** The field-level issues already rendered against their inputs. */
+  readonly issues: Readonly<Record<string, string>>;
+  readonly isSuccess: boolean;
+  /** What to say on success, naming the thing that was saved. */
+  readonly saved: string;
+}>) {
+  return (
+    <>
+      {error !== null && Object.keys(issues).length === 0 ? (
+        <ErrorAlert message={describeError(error)} />
+      ) : null}
+      {isSuccess ? <InfoAlert>{saved}</InfoAlert> : null}
+    </>
   );
 }
 

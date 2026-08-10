@@ -145,7 +145,7 @@ describe.skipIf(testDatabaseUrl === undefined)("the bootstrap command", () => {
     });
 
     const signIn = await adminRequest(stack, "POST", "/api/v1/session", {
-      body: { email: email, password: password },
+      body: { email, password },
     });
     expect(signIn.status).toBe(200);
 
@@ -175,15 +175,12 @@ describe.skipIf(testDatabaseUrl === undefined)("the bootstrap command", () => {
     // The original password still works, and the new one does not: a re-run of
     // the installer must not silently rotate an operator's credential.
     const original = await adminRequest(stack, "POST", "/api/v1/session", {
-      body: { email: email, password: password },
+      body: { email, password },
     });
     expect(original.status).toBe(200);
 
     const replaced = await adminRequest(stack, "POST", "/api/v1/session", {
-      body: {
-        email: email,
-        password: "a-completely-different-password",
-      },
+      body: { email, password: "a-completely-different-password" },
     });
     expect(replaced.status).toBe(401);
   });

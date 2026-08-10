@@ -30,6 +30,7 @@ import {
 import {
   ListField,
   PatchForm,
+  SaveOutcome,
   SaveRow,
   SubmitButton,
   TextField,
@@ -242,10 +243,12 @@ export function UserDetailPage() {
           disabled={!mayWrite}
         />
 
-        {update.isError && Object.keys(issues).length === 0 ? (
-          <ErrorAlert message={describeError(update.error)} />
-        ) : null}
-        {update.isSuccess ? <InfoAlert>User saved.</InfoAlert> : null}
+        <SaveOutcome
+          error={update.error}
+          issues={issues}
+          isSuccess={update.isSuccess}
+          saved="User saved."
+        />
 
         {mayWrite ? (
           <SaveRow

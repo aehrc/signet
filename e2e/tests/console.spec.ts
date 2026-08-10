@@ -577,6 +577,33 @@ test.describe("a viewer-role operator", () => {
       0,
     );
   });
+
+  test("reads a client's detail page and is offered no write", async ({
+    page,
+  }) => {
+    // The seeded stub app, read-only for the same reason as the clinician above.
+    await page.goto(CLIENTS);
+    await page.getByRole("link", { name: "Stub SMART app" }).click();
+
+    const form = panelForm(page, "Edit");
+    await expect(form.getByLabel("Name")).toHaveValue("Stub SMART app");
+
+    // Every input, not merely the first: the status select and the two list fields
+    // were editable in a form this role cannot submit.
+    await expect(form.getByLabel("Name")).toBeDisabled();
+    await expect(form.getByLabel("Status")).toBeDisabled();
+    await expect(form.getByLabel("Redirect URIs")).toBeDisabled();
+    await expect(form.getByLabel("Allowed scopes")).toBeDisabled();
+
+    // And the controls that write are absent rather than present-and-failing.
+    await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Rotate secret" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Delete client" }),
+    ).toHaveCount(0);
+  });
 });
 
 test.describe("a caller with no session", () => {
