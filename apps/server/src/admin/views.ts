@@ -27,6 +27,7 @@ import {
 } from "@signet/db";
 
 import type {
+  AdminPasskey,
   AdminUser,
   ApiToken,
   AuditEventRecord,
@@ -202,6 +203,25 @@ export function apiTokenView(token: ApiToken): Record<string, unknown> {
     expiresAt: token.expiresAt,
     lastUsedAt: token.lastUsedAt,
     revokedAt: token.revokedAt,
+  };
+}
+
+/**
+ * A registered passkey.
+ *
+ * Four fields out of nine, and the five left out are the whole reason this file
+ * exists. The credential identifier and the public key are not secrets, but they are
+ * of no use to the console, and a field a response does not carry is a field a later
+ * change cannot start carrying by accident. What the reader needs is enough to
+ * recognise the device they are about to remove: its name, when it was added, and
+ * when it last let somebody in.
+ */
+export function passkeyView(passkey: AdminPasskey): Record<string, unknown> {
+  return {
+    id: passkey.id,
+    name: passkey.name,
+    createdAt: passkey.createdAt,
+    lastUsedAt: passkey.lastUsedAt,
   };
 }
 

@@ -14,8 +14,11 @@
  * Author: John Grimes
  */
 
+import { useState } from "react";
 import { Navigate, NavLink, Outlet, useParams } from "react-router";
 
+import { AccountMenu } from "./accountMenu.js";
+import { PasskeyDialog } from "./passkeyDialog.js";
 import { SIGN_IN_ROUTE, tenantRoute } from "./routes.js";
 import { useSession, useSignOut } from "../api/queries.js";
 import { AppShell, CentredShell } from "../components/appShell.js";
@@ -46,6 +49,7 @@ export function ConsoleLayout() {
   const session = useSession();
   const signOut = useSignOut();
   const { tenant } = useParams<{ tenant?: string }>();
+  const [passkeysOpen, setPasskeysOpen] = useState(false);
 
   if (session.isPending) {
     return (
@@ -115,23 +119,34 @@ export function ConsoleLayout() {
               ))}
             </select>
           ) : null}
-          <span className="text-base-content/60 hidden text-xs sm:inline">
-            {session.data.user?.email ?? session.data.token?.name}
-          </span>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            disabled={signOut.isPending}
-            onClick={() => {
+          <AccountMenu
+            label={
+              session.data.user?.email ?? session.data.token?.name ?? "Account"
+            }
+            signingOut={signOut.isPending}
+            // Absent for a personal access token: it is not a person, holds no
+            // password, and has no passkeys to manage.
+            {...(session.data.user === undefined
+              ? {}
+              : {
+                  onManagePasskeys: () => {
+                    setPasskeysOpen(true);
+                  },
+                })}
+            onSignOut={() => {
               signOut.mutate(undefined, {
                 onSuccess: () => {
                   globalThis.location.assign(SIGN_IN_ROUTE);
                 },
               });
             }}
-          >
-            Sign out
-          </button>
+          />
+          <PasskeyDialog
+            open={passkeysOpen}
+            onClose={() => {
+              setPasskeysOpen(false);
+            }}
+          />
         </>
       }
       navigation={

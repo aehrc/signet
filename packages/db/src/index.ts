@@ -40,6 +40,10 @@ export {
   type ActivityProbe,
 } from "./test/activityProbe.js";
 
+// Counting outstanding ceremony challenges, so the server's passkey suite can
+// assert that a refused request minted none. See `./test/passkeyProbe.ts`.
+export { countAdminPasskeyChallenges } from "./test/passkeyProbe.js";
+
 // Privilege observation, exported for the same reason `schemaReady` is: a suite
 // in `apps/server` needs it and cannot write raw SQL, because only this package
 // depends on Drizzle. See `./test/privilegeProbe.ts`.

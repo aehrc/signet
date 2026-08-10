@@ -27,6 +27,28 @@ export const SESSION_PATH = `${API_BASE}/session`;
 /** The policy presets this deployment ships. */
 export const PRESETS_PATH = `${API_BASE}/presets`;
 
+/**
+ * The signed-in person's own passkeys.
+ *
+ * Under `/account` rather than under a tenant, because a passkey belongs to the
+ * person: the same one signs them in whichever tenant they go on to administer.
+ */
+export const PASSKEYS_PATH = `${API_BASE}/account/passkeys`;
+
+/** Where a registration ceremony is started, behind a password. */
+export const PASSKEY_OPTIONS_PATH = `${PASSKEYS_PATH}/options`;
+
+/** Where a sign-in ceremony is started. Answered without a credential. */
+export const PASSKEY_SIGN_IN_OPTIONS_PATH = `${SESSION_PATH}/passkey-options`;
+
+/** Where a sign-in ceremony is completed, establishing a session. */
+export const PASSKEY_SIGN_IN_PATH = `${SESSION_PATH}/passkey`;
+
+/** One registered passkey, for removal. */
+export function passkeyPath(passkeyId: string): string {
+  return `${PASSKEYS_PATH}/${segment(passkeyId)}`;
+}
+
 /** A tenant, and anything under it. */
 export function tenantPath(tenant: string, suffix = ""): string {
   return `${API_BASE}/tenants/${segment(tenant)}${suffix}`;

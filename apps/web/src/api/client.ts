@@ -39,7 +39,16 @@ export async function put<T>(path: string, body: unknown): Promise<T> {
   return await requestJson<T>(path, { method: "PUT", body });
 }
 
-/** Deletes a resource. */
-export async function remove(path: string): Promise<void> {
-  await requestJson<void>(path, { method: "DELETE" });
+/**
+ * Deletes a resource.
+ *
+ * A body is unusual on a `DELETE` and is here for one case: removing a passkey has
+ * to carry the password that authorises it, and the alternative - a password in the
+ * query string - would put a credential in the server's access log.
+ */
+export async function remove(path: string, body?: unknown): Promise<void> {
+  await requestJson<void>(path, {
+    method: "DELETE",
+    ...(body === undefined ? {} : { body }),
+  });
 }

@@ -36,6 +36,20 @@ export interface SessionView {
   }[];
 }
 
+/**
+ * One registered passkey, as the management dialog lists it.
+ *
+ * Four fields, because that is all the API returns: the credential identifier and
+ * the public key stay on the server. `lastUsedAt` is null for one that has been
+ * registered and never signed in with.
+ */
+export interface PasskeyView {
+  readonly id: string;
+  readonly name: string;
+  readonly createdAt: string;
+  readonly lastUsedAt: string | null;
+}
+
 /** An endpoint's capability flags, keyed by the name the API uses. */
 export type CapabilityFlags = Readonly<Record<string, boolean>>;
 

@@ -36,6 +36,14 @@ import { registerEndUserRoutes } from "./endUserRoutes.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
 import { registerFederationRoutes } from "./federationRoutes.js";
 import { registerLaunchRoutes } from "./launchRoutes.js";
+import {
+  adminPasskeyListHandler,
+  adminPasskeyRegisterHandler,
+  adminPasskeyRegistrationOptionsHandler,
+  adminPasskeyRemoveHandler,
+  adminPasskeySignInHandler,
+  adminPasskeySignInOptionsHandler,
+} from "./passkeys.js";
 import { ADMIN_BASE_PATH, ENDPOINT_PATH, TENANT_PATH } from "./paths.js";
 import { registerPolicyRoutes } from "./policyRoutes.js";
 import {
@@ -52,8 +60,16 @@ import type { MiddlewareHandler } from "hono";
 /**
  * Requests that are answered without a credential.
  *
- * Exactly one: signing in. Anything added here is a decision to publish part of the
- * admin API, which should be visible in a diff and hard to do by accident.
+ * Three, and all three are signing in: with a password, and the two halves of a
+ * passkey ceremony. Anything added here is a decision to publish part of the admin
+ * API, which should be visible in a diff and hard to do by accident.
+ *
+ * The passkey pair has to be here rather than behind the session gate for the
+ * obvious reason - a person signing in has no session yet - and the consequence is
+ * that both are reachable by anybody who can reach the console. Each is rate limited
+ * on its own bucket, neither says anything an unauthenticated caller did not already
+ * know (the options route returns a random challenge; the verify route answers every
+ * refusal with one sentence), and the challenge one route mints is single-use.
  *
  * Compared against the whole request path rather than the matched route pattern,
  * because a pattern is only known once a route has matched - and this gate runs
@@ -63,6 +79,8 @@ import type { MiddlewareHandler } from "hono";
  */
 const UNAUTHENTICATED_REQUESTS: ReadonlySet<string> = new Set([
   `POST ${ADMIN_BASE_PATH}/session`,
+  `POST ${ADMIN_BASE_PATH}/session/passkey-options`,
+  `POST ${ADMIN_BASE_PATH}/session/passkey`,
 ]);
 
 /**
@@ -109,6 +127,37 @@ export function createAdminRouter(
   );
   router.get("/session", adminSessionHandler(context));
   router.delete("/session", adminLogoutHandler(context));
+
+  // Signing in with a passkey. Both halves are limited for the same reason the
+  // password route is - the second establishes a session, and the first writes a
+  // challenge row for anyone who asks. The limiter keys on the route, so each gets
+  // an allowance of its own and exhausting one leaves password sign-in untouched.
+  router.post(
+    "/session/passkey-options",
+    rateLimit("signIn", context.clock, context.rateLimits),
+    adminPasskeySignInOptionsHandler(context),
+  );
+  router.post(
+    "/session/passkey",
+    rateLimit("signIn", context.clock, context.rateLimits),
+    adminPasskeySignInHandler(context),
+  );
+
+  // Managing your own passkeys. Not under `/tenants`, because a passkey belongs to
+  // the person rather than to any tenant they administer. The two routes that check
+  // a password are limited; listing is neither a guess nor a write.
+  router.get("/account/passkeys", adminPasskeyListHandler(context));
+  router.post(
+    "/account/passkeys/options",
+    rateLimit("signIn", context.clock, context.rateLimits),
+    adminPasskeyRegistrationOptionsHandler(context),
+  );
+  router.post("/account/passkeys", adminPasskeyRegisterHandler(context));
+  router.delete(
+    "/account/passkeys/:passkeyId",
+    rateLimit("signIn", context.clock, context.rateLimits),
+    adminPasskeyRemoveHandler(context),
+  );
 
   /**
    * The policy starting points an operator may adopt.
