@@ -5,8 +5,9 @@
  * that owns the schema is exempt from them. Keeping those apart is the whole
  * feature, and in a Kubernetes deployment it comes down to which pod spec carries
  * which credential: the migration Job needs the owning identity because migrations
- * are DDL, and the server must not have it, because a server holding it could
- * reach any tenant's rows regardless of what the code does.
+ * are DDL, the sweep CronJob needs it because it acts across tenants, and the
+ * server must not have it, because a server holding it could reach any tenant's
+ * rows regardless of what the code does.
  *
  * That is a property of rendered YAML, so it is checked by rendering. A template
  * that leaks the owner credential into the Deployment renders perfectly well and
@@ -134,10 +135,26 @@ for (const { name, flags } of CONFIGURATIONS) {
     `${name}: expected exactly one migration Job, found ${String(migrationJobs.length)}`,
   );
 
-  for (const document of migrationJobs) {
+  // The expiry sweep is the second path that needs the owning identity: it acts
+  // across tenants, which the serving role cannot do. The command refuses a
+  // connection the policies bind, so a CronJob given the wrong credential fails
+  // rather than reporting a clean database - but a CronJob given no credential at
+  // all is a chart bug, and this is what catches it.
+  const sweepJobs = documents.filter(
+    (document) =>
+      kindOf(document) === "CronJob" &&
+      (nameOf(document) ?? "").endsWith("-sweep"),
+  );
+
+  check(
+    sweepJobs.length === 1,
+    `${name}: expected exactly one sweep CronJob, found ${String(sweepJobs.length)}`,
+  );
+
+  for (const document of [...migrationJobs, ...sweepJobs]) {
     check(
       document.includes(OWNER_VARIABLE),
-      `${name}: the migration Job does not carry ${OWNER_VARIABLE}, so it cannot apply migrations or grant the serving role`,
+      `${name}: ${nameOf(document) ?? "a job"} does not carry ${OWNER_VARIABLE}, so it cannot act as the identity it needs`,
     );
   }
 
@@ -163,5 +180,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `✓ ${String(CONFIGURATIONS.length)} chart configurations keep the owning identity to the migration Job`,
+  `✓ ${String(CONFIGURATIONS.length)} chart configurations keep the owning identity to the migration Job and the sweep CronJob`,
 );

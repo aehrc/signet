@@ -206,7 +206,7 @@ jobs:
       # Rendering proves the templates are valid; this proves they keep the two
       # database identities apart. A chart that leaks the owning identity into the
       # server's pod spec renders perfectly and lints clean.
-      - name: Assert the owner credential reaches only the migration Job
+      - name: Assert the owner credential reaches only the jobs that need it
         run: node scripts/checkChartCredentials.mjs
 
   e2e:

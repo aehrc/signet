@@ -4,17 +4,23 @@ Deploys [Signet](../../../README.md), a multi-tenant SMART App Launch
 authorization server, on Kubernetes.
 
 The chart installs the server as a Deployment behind a ClusterIP Service,
-applies database migrations as a Helm hook Job before new pods roll out, and
-optionally brings up a PostgreSQL for evaluation.
+applies database migrations as a Helm hook Job before new pods roll out, sweeps
+expired rows nightly as a CronJob, and optionally brings up a PostgreSQL for
+evaluation.
 
 ## Features
 
 - **Two database identities, kept apart.** Signet connects as a role that owns
   none of its tables, because PostgreSQL exempts a table's owner from that
   table's row-level security policies. The owning identity reaches the migration
-  Job alone and never the server's pods, which
+  Job and the sweep CronJob alone - the two things that must act outside a single
+  tenant - and never the server's pods, which
   `scripts/checkChartCredentials.mjs` asserts against the chart's rendered
   output.
+- **The expiry sweep on a schedule.** Passkey ceremony challenges accumulate in
+  ordinary use, so a nightly CronJob deletes every runtime row that has passed
+  its expiry. Given the wrong credential the command refuses rather than
+  reporting a database it cannot see as clean.
 - **Migrations as a hook.** An upgrade whose migration fails does not replace
   the running pods.
 - **Separate liveness and readiness.** `/healthz` answers from the process
@@ -77,63 +83,71 @@ tenant isolation section of [docs/operations.md](../../../docs/operations.md).
 
 ## Configuration
 
-| Parameter                                           | Description                                                                          | Default                                 |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------- |
-| `signet.image`                                      | Container image to run.                                                              | `ghcr.io/csiro/signet:0.1.0`            |
-| `signet.imagePullPolicy`                            | Image pull policy for the server and migration Job.                                  | `Always`                                |
-| `signet.imagePullSecrets`                           | Secrets used to pull the image.                                                      | `[]`                                    |
-| `signet.replicas`                                   | Server replicas, ignored when autoscaling is on.                                     | `2`                                     |
-| `signet.config`                                     | Non-sensitive environment for the server and migration Job.                          | `SIGNET_PUBLIC_URL`, `SIGNET_LOG_LEVEL` |
-| `signet.secretConfig`                               | Sensitive environment, written to a Secret and mounted by reference.                 | `{}`                                    |
-| `signet.masterKey.existingSecret`                   | Secret holding the signing-key envelope key. Generated when unset.                   | `~`                                     |
-| `signet.masterKey.existingSecretKey`                | Key within that secret.                                                              | `masterKey`                             |
-| `signet.masterKey.value`                            | Envelope key supplied inline. For evaluation only.                                   | `~`                                     |
-| `signet.database.existingSecret`                    | Secret holding the serving role's connection URL.                                    | `~`                                     |
-| `signet.database.existingSecretKey`                 | Key within that secret.                                                              | `url`                                   |
-| `signet.database.url`                               | Serving role's connection URL, written to a chart-created Secret.                    | `~`                                     |
-| `signet.database.ownerExistingSecret`               | Secret holding the owning identity's connection URL, read only by the migration Job. | `~`                                     |
-| `signet.database.ownerExistingSecretKey`            | Key within that secret.                                                              | `ownerUrl`                              |
-| `signet.database.ownerUrl`                          | Owning identity's connection URL, written to a chart-created Secret.                 | `~`                                     |
-| `signet.migrations.enabled`                         | Run migrations as a Helm hook Job.                                                   | `true`                                  |
-| `signet.migrations.backoffLimit`                    | Retries before the migration Job fails.                                              | `3`                                     |
-| `signet.migrations.activeDeadlineSeconds`           | Wall-clock limit on the migration Job.                                               | `600`                                   |
-| `signet.service.type`                               | Service type.                                                                        | `ClusterIP`                             |
-| `signet.service.port`                               | Port the Service listens on.                                                         | `80`                                    |
-| `signet.service.targetPort`                         | Port the container listens on, passed to the process as `PORT`.                      | `3000`                                  |
-| `signet.service.annotations`                        | Annotations on the Service.                                                          | `{}`                                    |
-| `signet.resources`                                  | Resource requests and limits for the server and migration containers.                | `{}`                                    |
-| `signet.autoscaling.enabled`                        | Create a HorizontalPodAutoscaler.                                                    | `false`                                 |
-| `signet.autoscaling.minReplicas`                    | Lower bound on replicas.                                                             | `2`                                     |
-| `signet.autoscaling.maxReplicas`                    | Upper bound on replicas.                                                             | `10`                                    |
-| `signet.autoscaling.targetCPUUtilizationPercentage` | CPU utilisation the autoscaler targets.                                              | `70`                                    |
-| `signet.podDisruptionBudget.enabled`                | Create a PodDisruptionBudget.                                                        | `true`                                  |
-| `signet.podDisruptionBudget.minAvailable`           | Replicas that must stay available through a drain.                                   | `1`                                     |
-| `signet.podAnnotations`                             | Extra annotations on the server's pods.                                              | `{}`                                    |
-| `signet.podLabels`                                  | Extra labels on the server's pods.                                                   | `{}`                                    |
-| `signet.podSecurityContext`                         | Pod-level security context for the server and migration Job.                         | unprivileged uid 1000                   |
-| `signet.securityContext`                            | Container-level security context for the server and migration Job.                   | no escalation, read-only root           |
-| `signet.terminationGracePeriodSeconds`              | Grace period for a shutting-down pod.                                                | `30`                                    |
-| `signet.nodeSelector`                               | Node selector for the server and migration Job.                                      | `{}`                                    |
-| `signet.tolerations`                                | Tolerations for the server and migration Job.                                        | `[]`                                    |
-| `signet.affinity`                                   | Affinity rules for the server and migration Job.                                     | `{}`                                    |
-| `signet.topologySpreadConstraints`                  | Spread constraints for the server's pods; the chart adds the label selector.         | one per hostname, `ScheduleAnyway`      |
-| `signet.postgres.enabled`                           | Bring up the bundled PostgreSQL.                                                     | `true`                                  |
-| `signet.postgres.image`                             | PostgreSQL image.                                                                    | `postgres:18-alpine`                    |
-| `signet.postgres.imagePullPolicy`                   | Image pull policy for PostgreSQL.                                                    | `Always`                                |
-| `signet.postgres.database`                          | Database created on first initialisation.                                            | `signet`                                |
-| `signet.postgres.owner`                             | Superuser that owns the schema and applies migrations.                               | `signet`                                |
-| `signet.postgres.ownerPassword`                     | Its password. Generated when unset.                                                  | `~`                                     |
-| `signet.postgres.servingRole`                       | Non-owning role the server connects as.                                              | `signet_app`                            |
-| `signet.postgres.servingPassword`                   | Its password. Generated when unset.                                                  | `~`                                     |
-| `signet.postgres.resources`                         | Resource requests and limits for PostgreSQL.                                         | `{}`                                    |
-| `signet.postgres.persistence.enabled`               | Claim a volume. When false the database is lost with the pod.                        | `true`                                  |
-| `signet.postgres.persistence.size`                  | Size of the claim.                                                                   | `8Gi`                                   |
-| `signet.postgres.persistence.storageClassName`      | Storage class of the claim. Cluster default when unset.                              | `~`                                     |
-| `signet.postgres.podSecurityContext`                | Pod-level security context for PostgreSQL.                                           | unprivileged uid 70                     |
-| `signet.postgres.securityContext`                   | Container-level security context for PostgreSQL.                                     | no escalation                           |
-| `signet.postgres.nodeSelector`                      | Node selector for PostgreSQL.                                                        | `{}`                                    |
-| `signet.postgres.tolerations`                       | Tolerations for PostgreSQL.                                                          | `[]`                                    |
-| `signet.postgres.affinity`                          | Affinity rules for PostgreSQL.                                                       | `{}`                                    |
+| Parameter                                           | Description                                                                                           | Default                                 |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `signet.image`                                      | Container image to run.                                                                               | `ghcr.io/csiro/signet:0.1.0`            |
+| `signet.imagePullPolicy`                            | Image pull policy for the server and migration Job.                                                   | `Always`                                |
+| `signet.imagePullSecrets`                           | Secrets used to pull the image.                                                                       | `[]`                                    |
+| `signet.replicas`                                   | Server replicas, ignored when autoscaling is on.                                                      | `2`                                     |
+| `signet.config`                                     | Non-sensitive environment for the server and migration Job.                                           | `SIGNET_PUBLIC_URL`, `SIGNET_LOG_LEVEL` |
+| `signet.secretConfig`                               | Sensitive environment, written to a Secret and mounted by reference.                                  | `{}`                                    |
+| `signet.masterKey.existingSecret`                   | Secret holding the signing-key envelope key. Generated when unset.                                    | `~`                                     |
+| `signet.masterKey.existingSecretKey`                | Key within that secret.                                                                               | `masterKey`                             |
+| `signet.masterKey.value`                            | Envelope key supplied inline. For evaluation only.                                                    | `~`                                     |
+| `signet.database.existingSecret`                    | Secret holding the serving role's connection URL.                                                     | `~`                                     |
+| `signet.database.existingSecretKey`                 | Key within that secret.                                                                               | `url`                                   |
+| `signet.database.url`                               | Serving role's connection URL, written to a chart-created Secret.                                     | `~`                                     |
+| `signet.database.ownerExistingSecret`               | Secret holding the owning identity's connection URL, read by the migration Job and the sweep CronJob. | `~`                                     |
+| `signet.database.ownerExistingSecretKey`            | Key within that secret.                                                                               | `ownerUrl`                              |
+| `signet.database.ownerUrl`                          | Owning identity's connection URL, written to a chart-created Secret.                                  | `~`                                     |
+| `signet.migrations.enabled`                         | Run migrations as a Helm hook Job.                                                                    | `true`                                  |
+| `signet.migrations.backoffLimit`                    | Retries before the migration Job fails.                                                               | `3`                                     |
+| `signet.migrations.activeDeadlineSeconds`           | Wall-clock limit on the migration Job.                                                                | `600`                                   |
+| `signet.sweep.enabled`                              | Delete expired runtime rows nightly, as a CronJob.                                                    | `true`                                  |
+| `signet.sweep.schedule`                             | Cron schedule for the sweep.                                                                          | `17 3 * * *`                            |
+| `signet.sweep.accessTokenGrace`                     | How far the access token cut-off lags the present, as `24h`, `30m` or `7d`.                           | `24h`                                   |
+| `signet.sweep.backoffLimit`                         | Retries before a sweep Job fails.                                                                     | `3`                                     |
+| `signet.sweep.activeDeadlineSeconds`                | Wall-clock limit on a sweep Job.                                                                      | `900`                                   |
+| `signet.sweep.startingDeadlineSeconds`              | How late a missed sweep may still start.                                                              | `300`                                   |
+| `signet.sweep.successfulJobsHistoryLimit`           | Completed sweep Jobs kept.                                                                            | `3`                                     |
+| `signet.sweep.failedJobsHistoryLimit`               | Failed sweep Jobs kept.                                                                               | `3`                                     |
+| `signet.service.type`                               | Service type.                                                                                         | `ClusterIP`                             |
+| `signet.service.port`                               | Port the Service listens on.                                                                          | `80`                                    |
+| `signet.service.targetPort`                         | Port the container listens on, passed to the process as `PORT`.                                       | `3000`                                  |
+| `signet.service.annotations`                        | Annotations on the Service.                                                                           | `{}`                                    |
+| `signet.resources`                                  | Resource requests and limits for the server and migration containers.                                 | `{}`                                    |
+| `signet.autoscaling.enabled`                        | Create a HorizontalPodAutoscaler.                                                                     | `false`                                 |
+| `signet.autoscaling.minReplicas`                    | Lower bound on replicas.                                                                              | `2`                                     |
+| `signet.autoscaling.maxReplicas`                    | Upper bound on replicas.                                                                              | `10`                                    |
+| `signet.autoscaling.targetCPUUtilizationPercentage` | CPU utilisation the autoscaler targets.                                                               | `70`                                    |
+| `signet.podDisruptionBudget.enabled`                | Create a PodDisruptionBudget.                                                                         | `true`                                  |
+| `signet.podDisruptionBudget.minAvailable`           | Replicas that must stay available through a drain.                                                    | `1`                                     |
+| `signet.podAnnotations`                             | Extra annotations on the server's pods.                                                               | `{}`                                    |
+| `signet.podLabels`                                  | Extra labels on the server's pods.                                                                    | `{}`                                    |
+| `signet.podSecurityContext`                         | Pod-level security context for the server and migration Job.                                          | unprivileged uid 1000                   |
+| `signet.securityContext`                            | Container-level security context for the server and migration Job.                                    | no escalation, read-only root           |
+| `signet.terminationGracePeriodSeconds`              | Grace period for a shutting-down pod.                                                                 | `30`                                    |
+| `signet.nodeSelector`                               | Node selector for the server and migration Job.                                                       | `{}`                                    |
+| `signet.tolerations`                                | Tolerations for the server and migration Job.                                                         | `[]`                                    |
+| `signet.affinity`                                   | Affinity rules for the server and migration Job.                                                      | `{}`                                    |
+| `signet.topologySpreadConstraints`                  | Spread constraints for the server's pods; the chart adds the label selector.                          | one per hostname, `ScheduleAnyway`      |
+| `signet.postgres.enabled`                           | Bring up the bundled PostgreSQL.                                                                      | `true`                                  |
+| `signet.postgres.image`                             | PostgreSQL image.                                                                                     | `postgres:18-alpine`                    |
+| `signet.postgres.imagePullPolicy`                   | Image pull policy for PostgreSQL.                                                                     | `Always`                                |
+| `signet.postgres.database`                          | Database created on first initialisation.                                                             | `signet`                                |
+| `signet.postgres.owner`                             | Superuser that owns the schema and applies migrations.                                                | `signet`                                |
+| `signet.postgres.ownerPassword`                     | Its password. Generated when unset.                                                                   | `~`                                     |
+| `signet.postgres.servingRole`                       | Non-owning role the server connects as.                                                               | `signet_app`                            |
+| `signet.postgres.servingPassword`                   | Its password. Generated when unset.                                                                   | `~`                                     |
+| `signet.postgres.resources`                         | Resource requests and limits for PostgreSQL.                                                          | `{}`                                    |
+| `signet.postgres.persistence.enabled`               | Claim a volume. When false the database is lost with the pod.                                         | `true`                                  |
+| `signet.postgres.persistence.size`                  | Size of the claim.                                                                                    | `8Gi`                                   |
+| `signet.postgres.persistence.storageClassName`      | Storage class of the claim. Cluster default when unset.                                               | `~`                                     |
+| `signet.postgres.podSecurityContext`                | Pod-level security context for PostgreSQL.                                                            | unprivileged uid 70                     |
+| `signet.postgres.securityContext`                   | Container-level security context for PostgreSQL.                                                      | no escalation                           |
+| `signet.postgres.nodeSelector`                      | Node selector for PostgreSQL.                                                                         | `{}`                                    |
+| `signet.postgres.tolerations`                       | Tolerations for PostgreSQL.                                                                           | `[]`                                    |
+| `signet.postgres.affinity`                          | Affinity rules for PostgreSQL.                                                                        | `{}`                                    |
 
 ### Configuration and secrets
 
