@@ -14,7 +14,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -23,24 +23,25 @@ const SEED = path.join(import.meta.dir, "..", "..", "scripts", "seedStack.mjs");
 /** Part of the refusal, distinctive enough that nothing else prints it. */
 const REFUSAL = "where it does nothing";
 
+/** What a run of the seed reported. */
+interface Run {
+  status: number | null;
+  output: string;
+}
+
 /**
- * Runs the seed in a directory holding the given `.env` files.
+ * Runs the seed in a fresh directory the caller has laid out.
  *
  * `SIGNET_BASE_URL` points at a port nothing listens on, so a run that gets past
  * the guard fails on its first request rather than reaching a server that happens
  * to be up on this machine.
  *
- * @param files - the files to write, by name.
+ * @param prepare - populates the directory before the seed runs.
  * @returns the exit status and the output.
  */
-function seedIn(files: Record<string, string>): {
-  status: number | null;
-  output: string;
-} {
+function seedWith(prepare: (cwd: string) => void): Run {
   const cwd = mkdtempSync(path.join(tmpdir(), "signet-seed-"));
-  for (const [name, contents] of Object.entries(files)) {
-    writeFileSync(path.join(cwd, name), contents);
-  }
+  prepare(cwd);
   const env = { ...process.env, SIGNET_BASE_URL: "http://127.0.0.1:1" };
   // The child is a `bun run` of its own, not a test run; NODE_ENV=test would
   // change which files Bun loads.
@@ -50,6 +51,20 @@ function seedIn(files: Record<string, string>): {
     status: result.status,
     output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
   };
+}
+
+/**
+ * Runs the seed in a directory holding the given files.
+ *
+ * @param files - the files to write, by name.
+ * @returns the exit status and the output.
+ */
+function seedIn(files: Record<string, string>): Run {
+  return seedWith((cwd) => {
+    for (const [name, contents] of Object.entries(files)) {
+      writeFileSync(path.join(cwd, name), contents);
+    }
+  });
 }
 
 describe("the seed script's env-file port guard", () => {
@@ -113,14 +128,31 @@ describe("the seed script's env-file port guard", () => {
   // throw EISDIR, which would fail the seed for a reason that has nothing to do
   // with ports.
   test("ignores a directory named like an env file", () => {
-    const cwd = mkdtempSync(path.join(tmpdir(), "signet-seed-"));
-    mkdirSync(path.join(cwd, ".env.d"));
-    const env = { ...process.env, SIGNET_BASE_URL: "http://127.0.0.1:1" };
-    delete env["NODE_ENV"];
-    const result = spawnSync("bun", [SEED], { cwd, env, encoding: "utf8" });
-    expect(`${result.stdout ?? ""}${result.stderr ?? ""}`).not.toContain(
-      "EISDIR",
-    );
+    const { output } = seedWith((cwd) => {
+      mkdirSync(path.join(cwd, ".env.d"));
+    });
+    expect(output).not.toContain("EISDIR");
+  });
+
+  // Bun follows a symlinked `.env.local` and loads what it points at, so the guard
+  // has to look through one too. Skipping everything that is not a regular file
+  // would let exactly this arrangement past.
+  test("refuses a port behind a symlinked env file", () => {
+    const { status, output } = seedWith((cwd) => {
+      writeFileSync(path.join(cwd, "ports.env"), "SIGNET_PORT=3100\n");
+      symlinkSync(path.join(cwd, "ports.env"), path.join(cwd, ".env.local"));
+    });
+    expect(status).not.toBe(0);
+    expect(output).toContain(REFUSAL);
+  });
+
+  // A symlink pointing at nothing is not a reason to fail the seed.
+  test("ignores a broken symlink", () => {
+    const { output } = seedWith((cwd) => {
+      symlinkSync(path.join(cwd, "gone.env"), path.join(cwd, ".env.local"));
+    });
+    expect(output).not.toContain(REFUSAL);
+    expect(output).not.toContain("ENOENT");
   });
 
   // The guard is about three variables and must not obstruct anything else a

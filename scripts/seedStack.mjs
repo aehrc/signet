@@ -46,16 +46,20 @@ function refuseFileSourcedPorts() {
   // what direnv declares *is* exported into the shell - so it reaches compose and
   // Playwright, and refusing it would refuse the workflow the README recommends.
   // `.env.example` is documentation, and is the one `.env.` file Bun never loads.
-  const files = readdirSync(".", { withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => entry.name)
-    .filter(
-      (name) =>
-        (name === ".env" || name.startsWith(".env.")) &&
-        name !== ".env.example",
-    );
+  const files = readdirSync(".").filter(
+    (name) =>
+      (name === ".env" || name.startsWith(".env.")) && name !== ".env.example",
+  );
   for (const file of files) {
-    const contents = readFileSync(file, "utf8");
+    // Read through a symlink, which Bun does, but tolerate the two things that are
+    // not a port in a file: a directory whose name fits the pattern, and a symlink
+    // pointing at nothing.
+    let contents;
+    try {
+      contents = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
     const declared = PORT_VARIABLES.filter((name) =>
       new RegExp(String.raw`^[ \t]*(export[ \t]+)?${name}[ \t]*=`, "m").test(
         contents,
