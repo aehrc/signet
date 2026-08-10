@@ -920,6 +920,209 @@ describe.skipIf(testDatabaseUrl === undefined)("console passkeys", () => {
     });
   });
 
+  describe("removing a passkey", () => {
+    it("removes it, and it stops signing anybody in", async () => {
+      const removing = await createTestStack();
+      try {
+        const credential = { cookie: await removing.signIn() };
+        const { authenticator } = await registerPasskeyOn(
+          removing,
+          credential,
+          { name: "Lost device" },
+        );
+        const listed = await adminJson<PasskeyListBody>(
+          removing,
+          "GET",
+          LIST_PATH,
+          { credential },
+        );
+        const passkeyId = listed.passkeys[0]?.id ?? "";
+
+        const removal = await adminRequest(
+          removing,
+          "DELETE",
+          `${LIST_PATH}/${passkeyId}`,
+          { credential, body: { password: TEST_PASSWORD } },
+        );
+        expect(removal.status).toBe(204);
+
+        const after = await adminJson<PasskeyListBody>(
+          removing,
+          "GET",
+          LIST_PATH,
+          { credential },
+        );
+        expect(after.passkeys).toEqual([]);
+
+        // The point of removal: the very next attempt presenting it is refused.
+        expect((await signInWith(removing, authenticator)).status).toBe(401);
+      } finally {
+        await removing.close();
+      }
+    });
+
+    it("refuses a wrong password and leaves the passkey in place", async () => {
+      const guarded = await createTestStack();
+      try {
+        const credential = { cookie: await guarded.signIn() };
+        await registerPasskeyOn(guarded, credential, { name: "Still here" });
+        const listed = await adminJson<PasskeyListBody>(
+          guarded,
+          "GET",
+          LIST_PATH,
+          { credential },
+        );
+        const passkeyId = listed.passkeys[0]?.id ?? "";
+
+        const refused = await adminRequest(
+          guarded,
+          "DELETE",
+          `${LIST_PATH}/${passkeyId}`,
+          { credential, body: { password: "not the password" } },
+        );
+
+        expect(refused.status).toBe(401);
+        const body = (await refused.json()) as { passwordRejected?: boolean };
+        expect(body.passwordRejected).toBe(true);
+
+        const after = await adminJson<PasskeyListBody>(
+          guarded,
+          "GET",
+          LIST_PATH,
+          { credential },
+        );
+        expect(after.passkeys).toHaveLength(1);
+      } finally {
+        await guarded.close();
+      }
+    });
+
+    it("removes the last passkey without complaint", async () => {
+      // Nobody can be locked out by this: the password is mandatory on every
+      // account and is never removable, so there is always a way back in.
+      const emptied = await createTestStack();
+      try {
+        const credential = { cookie: await emptied.signIn() };
+        await registerPasskeyOn(emptied, credential);
+        const listed = await adminJson<PasskeyListBody>(
+          emptied,
+          "GET",
+          LIST_PATH,
+          { credential },
+        );
+
+        const removal = await adminRequest(
+          emptied,
+          "DELETE",
+          `${LIST_PATH}/${listed.passkeys[0]?.id ?? ""}`,
+          { credential, body: { password: TEST_PASSWORD } },
+        );
+
+        expect(removal.status).toBe(204);
+      } finally {
+        await emptied.close();
+      }
+    });
+
+    it("does not disclose another account's passkey by refusing differently", async () => {
+      const mine = await cookie();
+      await registerPasskey(mine, "Not yours");
+      const listed = await adminJson<PasskeyListBody>(stack, "GET", LIST_PATH, {
+        credential: mine,
+      });
+      const theirs = { cookie: await stack.signIn(stack.outsider) };
+
+      const foreign = await adminRequest(
+        stack,
+        "DELETE",
+        `${LIST_PATH}/${listed.passkeys[0]?.id ?? ""}`,
+        { credential: theirs, body: { password: TEST_PASSWORD } },
+      );
+      const absent = await adminRequest(
+        stack,
+        "DELETE",
+        `${LIST_PATH}/11111111-2222-3333-4444-555555555555`,
+        { credential: theirs, body: { password: TEST_PASSWORD } },
+      );
+
+      // Identical answers: an identifier belonging to somebody else and one
+      // belonging to nobody are the same 404.
+      expect(foreign.status).toBe(404);
+      expect(absent.status).toBe(404);
+      expect(await foreign.json()).toEqual(await absent.json());
+    });
+
+    it("records the removal", async () => {
+      const audited = await createTestStack();
+      try {
+        const credential = { cookie: await audited.signIn() };
+        await registerPasskeyOn(audited, credential, { name: "Audited" });
+        const listed = await adminJson<PasskeyListBody>(
+          audited,
+          "GET",
+          LIST_PATH,
+          { credential },
+        );
+        const passkeyId = listed.passkeys[0]?.id ?? "";
+
+        await adminRequest(audited, "DELETE", `${LIST_PATH}/${passkeyId}`, {
+          credential,
+          body: { password: TEST_PASSWORD },
+        });
+
+        const trail = await adminJson<{
+          readonly events: readonly {
+            readonly detail: Record<string, unknown>;
+          }[];
+        }>(
+          audited,
+          "GET",
+          tenantPath(audited, "/audit?action=admin.passkey-removed"),
+          { credential },
+        );
+
+        expect(trail.events[0]?.detail["passkeyId"]).toBe(passkeyId);
+      } finally {
+        await audited.close();
+      }
+    });
+
+    it("refuses a personal access token", async () => {
+      const bearer = await stack.mintApiToken("owner");
+      const response = await adminRequest(
+        stack,
+        "DELETE",
+        `${LIST_PATH}/11111111-2222-3333-4444-555555555555`,
+        { credential: { bearer }, body: { password: TEST_PASSWORD } },
+      );
+
+      expect(response.status).toBe(403);
+    });
+
+    it("is rate limited", async () => {
+      const limited = await createTestStack({ rateLimits: "enforced" });
+      try {
+        const credential = { cookie: await limited.signIn() };
+        let refused = 0;
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          const response = await adminRequest(
+            limited,
+            "DELETE",
+            `${LIST_PATH}/11111111-2222-3333-4444-555555555555`,
+            { credential, body: { password: "not the password" } },
+          );
+          if (response.status === 429) {
+            refused += 1;
+          }
+        }
+
+        expect(refused).toBeGreaterThan(0);
+      } finally {
+        await limited.close();
+      }
+    });
+  });
+
   /**
    * How many challenge rows exist.
    *
