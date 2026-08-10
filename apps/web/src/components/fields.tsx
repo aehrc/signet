@@ -16,7 +16,7 @@
 
 import { useId } from "react";
 
-import { ErrorAlert } from "./layout.js";
+import { ErrorAlert, Panel } from "./layout.js";
 import { describeError } from "../api/errors.js";
 
 import type { ReactNode } from "react";
@@ -349,6 +349,99 @@ export function FormFooter({
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * The sentence every patch form ends its description with.
+ *
+ * Appended by {@link PatchForm} rather than written at each call site, so the forms
+ * that behave this way cannot end up describing themselves differently.
+ */
+const PATCH_FORM_NOTE =
+  "Only the fields you change are sent, so saving with nothing changed writes nothing. A value the API refuses is reported under the field that caused it.";
+
+/**
+ * A panel holding a form that sends a patch.
+ *
+ * The guard lives here rather than in each page: `onSave` is not called when there is
+ * nothing to send, so no form built this way can post an empty patch. Pair it with
+ * {@link SaveRow}, which says the same thing to the operator before they press
+ * anything - the disabled button is a hint, this is the rule.
+ *
+ * The description is what this particular form decides, and {@link PATCH_FORM_NOTE}
+ * is appended to it; a form with nothing extra to say passes none.
+ */
+export function PatchForm({
+  title,
+  description,
+  hasChanges,
+  onSave,
+  children,
+}: Readonly<{
+  readonly title: string;
+  readonly description?: string | undefined;
+  readonly hasChanges: boolean;
+  readonly onSave: () => void;
+  readonly children: ReactNode;
+}>) {
+  return (
+    <Panel
+      title={title}
+      description={
+        description === undefined
+          ? PATCH_FORM_NOTE
+          : `${description} ${PATCH_FORM_NOTE}`
+      }
+    >
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (hasChanges) {
+            onSave();
+          }
+        }}
+      >
+        {children}
+      </form>
+    </Panel>
+  );
+}
+
+/**
+ * The save button of a patch form, with the reason it is disabled beside it.
+ *
+ * A save with nothing changed must send nothing: the admin API accepts an empty patch
+ * and records an audit event naming no fields, which is a write nobody asked for and
+ * nobody can undo. Disabling the button is how that becomes visible before it is
+ * pressed - silence would leave the operator pressing a button that does nothing.
+ *
+ * {@link PatchForm} guards the submit on the same condition, so a form built from the
+ * two cannot send an empty patch even if the button is reached another way.
+ */
+export function SaveRow({
+  label,
+  hasChanges,
+  pending,
+  className,
+}: Readonly<{
+  readonly label: string;
+  readonly hasChanges: boolean;
+  readonly pending: boolean;
+  readonly className?: string | undefined;
+}>) {
+  return (
+    <div className={`flex items-center gap-3 ${className ?? ""}`}>
+      <SubmitButton pending={pending} disabled={!hasChanges}>
+        {label}
+      </SubmitButton>
+      {hasChanges ? null : (
+        <span className="text-base-content/60 text-xs">
+          Nothing has changed.
+        </span>
+      )}
+    </div>
   );
 }
 
