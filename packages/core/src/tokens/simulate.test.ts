@@ -90,11 +90,10 @@ describe("simulateIssuance", () => {
     expect(result.accessTokenClaims["authorities"]).toEqual([
       "pathling:read:Observation",
       "pathling:search",
+      "pathling:read-resource",
       "pathling:export",
-      "pathling:view-run",
-      "pathling:view-export",
-      "pathling:sqlquery-run",
-      "pathling:sqlquery-export",
+      "pathling:sql-run",
+      "pathling:sql-export",
       "pathling:jobs",
     ]);
   });

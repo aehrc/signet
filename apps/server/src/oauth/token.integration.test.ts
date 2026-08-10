@@ -547,11 +547,10 @@ describeWithDatabase("the client_credentials grant", () => {
     expect(claims["authorities"]).toEqual([
       "pathling:read:Observation",
       "pathling:search",
+      "pathling:read-resource",
       "pathling:export",
-      "pathling:view-run",
-      "pathling:view-export",
-      "pathling:sqlquery-run",
-      "pathling:sqlquery-export",
+      "pathling:sql-run",
+      "pathling:sql-export",
       "pathling:jobs",
     ]);
     // The backend service is its own subject.

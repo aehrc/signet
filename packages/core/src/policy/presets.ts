@@ -185,25 +185,25 @@ const PATHLING_ADMIN_ROLE = "pathling-admin";
  *   - data authorities `pathling:read:{ResourceType}` and
  *     `pathling:write:{ResourceType}`, or the bare `pathling:read` /
  *     `pathling:write` covering every type;
- *   - operation authorities `pathling:search`, `pathling:create`,
- *     `pathling:update`, `pathling:delete`, `pathling:batch`,
- *     `pathling:import`, `pathling:import-pnp`, `pathling:bulk-submit`,
- *     `pathling:export`, `pathling:view-run`, `pathling:view-export`,
- *     `pathling:sqlquery-run`, `pathling:sqlquery-export` and `pathling:jobs`;
+ *   - operation authorities `pathling:search`, `pathling:read-resource`,
+ *     `pathling:create`, `pathling:update`, `pathling:delete`,
+ *     `pathling:batch`, `pathling:import`, `pathling:import-pnp`,
+ *     `pathling:bulk-submit`, `pathling:export`, `pathling:sql-run`,
+ *     `pathling:sql-export` and `pathling:jobs`;
  *   - the bare `pathling`, which subsumes all of the above and which this preset
  *     never emits.
  *
  * The operation list is taken from the `@OperationAccess` annotations in the
- * server source rather than from the documentation table, which as at
- * `a163e02` omits `create`, `sqlquery-run` and `sqlquery-export`.
+ * server source as at `378dba82a9`, which the branch's own documentation table
+ * now matches exactly.
  *
  * **3.0.0 is a prerequisite, not a preference.** Pathling's authority grammar only
  * admitted a hyphen in the action segment from November 2025, and an authority it
  * cannot parse raises rather than being ignored - so against an older server a
- * token carrying `pathling:view-run` fails *every* request with a 500, including
+ * token carrying `pathling:sql-run` fails *every* request with a 500, including
  * the ones it was entitled to make. An operator on a released Pathling should
- * disable the six hyphenated rules below - view run and export, SQL query run and
- * export, ping-and-pull import, and bulk submit - until they upgrade.
+ * disable the five hyphenated rules below - read by id, SQL run and export,
+ * ping-and-pull import, and bulk submit - until they upgrade.
  *
  * The rule that makes this non-obvious: an operation authority is required *in
  * addition to* a read or write authority. `pathling:search` alone does not
@@ -214,9 +214,9 @@ const PATHLING_ADMIN_ROLE = "pathling-admin";
  * **What follows from a read.** `r` and `s` both yield the data authority, since
  * a search returns the resources it matched and search without read is an
  * authority set that cannot serve a single request. `s` additionally yields
- * `pathling:search`. `r` yields the operations that read a population rather than
- * a single resource: export, the two ViewDefinition operations and the two SQL
- * query operations. Each is still bounded by the data authority beside it, so a
+ * `pathling:search`. `r` yields the read-by-id operation (`read-resource`) and
+ * the operations that read a population: export, and the SQL on FHIR run and
+ * export operations. Each is still bounded by the data authority beside it, so a
  * typed scope cannot project a type it did not name. Note that these are not
  * narrowed by launch context, because a Pathling authority carries no patient
  * compartment: `pathling:read:Observation` already reads every Observation in the
@@ -238,15 +238,6 @@ const PATHLING_ADMIN_ROLE = "pathling-admin";
  * `grant-system-write` covers an unattended data loader running as a backend
  * service, and ships disabled because a `client_credentials` grant has no user
  * and therefore no role to check.
- *
- * **A limitation worth knowing.** Pathling's read-by-id interaction demands the
- * operation authority `pathling:read`, which is the same string as the all-types
- * read data authority - so `pathling:read:Observation` does not satisfy it, and a
- * typed read scope can search a resource type but not fetch one by id. Emitting
- * the bare authority to fix that would grant read across every type, defeating
- * the narrowing, so this preset does not. The collision is reported upstream as
- * aehrc/pathling#2702, which proposes renaming the operation authority to
- * `pathling:read-resource`; if that lands, this preset should emit it from `r`.
  */
 export const PATHLING_PRESET: PolicyDocument = {
   version: 1,
@@ -289,6 +280,14 @@ export const PATHLING_PRESET: PolicyDocument = {
       values: ["pathling:search"],
     },
     {
+      id: "pathling-read-resource",
+      description:
+        "Operation authority for read by id, required on top of the data authority for the type being read. Named apart from the bare read data authority so a typed scope can fetch by id without being granted read across every type.",
+      forEachScope: "*/*.r",
+      appendTo: "authorities",
+      values: ["pathling:read-resource"],
+    },
+    {
       id: "pathling-export",
       description:
         "Bulk export is a whole-population read, bounded by the read authorities beside it.",
@@ -297,36 +296,20 @@ export const PATHLING_PRESET: PolicyDocument = {
       values: ["pathling:export"],
     },
     {
-      id: "pathling-view-run",
+      id: "pathling-sql-run",
       description:
-        "Runs a ViewDefinition. Needs read on every type the view projects, and on ViewDefinition itself when the view is resolved from storage rather than supplied inline.",
+        "Runs a ViewDefinition or SQL Library. Needs read on every projected type, and on ViewDefinition or Library when the subject is resolved from storage rather than supplied inline.",
       forEachScope: "*/*.r",
       appendTo: "authorities",
-      values: ["pathling:view-run"],
+      values: ["pathling:sql-run"],
     },
     {
-      id: "pathling-view-export",
+      id: "pathling-sql-export",
       description:
-        "Exports the result of a ViewDefinition. Same read requirements as running one.",
+        "Exports the result of a ViewDefinition or SQL Library. Same read requirements as running one.",
       forEachScope: "*/*.r",
       appendTo: "authorities",
-      values: ["pathling:view-export"],
-    },
-    {
-      id: "pathling-sqlquery-run",
-      description:
-        "Runs a SQL query. Needs read on every projected type, and on Library when the query is resolved from storage.",
-      forEachScope: "*/*.r",
-      appendTo: "authorities",
-      values: ["pathling:sqlquery-run"],
-    },
-    {
-      id: "pathling-sqlquery-export",
-      description:
-        "Exports the result of a SQL query. Same read requirements as running one.",
-      forEachScope: "*/*.r",
-      appendTo: "authorities",
-      values: ["pathling:sqlquery-export"],
+      values: ["pathling:sql-export"],
     },
     {
       id: "pathling-jobs",
@@ -576,9 +559,9 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
         url: "https://pathling.csiro.au/docs/server/authorization",
       },
       {
-        // The documentation table omits create, sqlquery-run and
-        // sqlquery-export, so the annotations are the citable source for the
-        // operation authorities this preset emits.
+        // The published documentation describes the released server rather
+        // than 3.0.0, so the branch's annotations are the citable source for
+        // the operation authorities this preset emits.
         label: "Pathling release/server/3.0.0 - OperationAccess annotations",
         url: "https://github.com/aehrc/pathling/tree/release/server/3.0.0/server/src/main/java/au/csiro/pathling",
       },

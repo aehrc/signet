@@ -117,11 +117,10 @@ const DATA_AUTHORITY = /^pathling:(?:read|write)(?::[A-Z][A-Za-z]*)?$/;
 /** Operation authorities that need a read authority to be usable. */
 const READ_OPERATIONS = new Set<string>([
   "pathling:search",
+  "pathling:read-resource",
   "pathling:export",
-  "pathling:view-run",
-  "pathling:view-export",
-  "pathling:sqlquery-run",
-  "pathling:sqlquery-export",
+  "pathling:sql-run",
+  "pathling:sql-export",
 ]);
 
 /** Operation authorities that need a write authority to be usable. */
@@ -147,15 +146,10 @@ const ANY_DATA_OPERATIONS = new Set<string>(["pathling:jobs"]);
 /**
  * Every operation authority in Pathling `release/server/3.0.0`.
  *
- * Taken from the `@OperationAccess` annotations in the server source rather than
- * from the documentation table, which omits `create`, `read`, `sqlquery-run` and
- * `sqlquery-export`. Anything outside this grammar would be silently ignored by
- * Pathling, which is indistinguishable from a policy that grants nothing at all.
- *
- * `pathling:read` is absent as an operation authority even though `ReadProvider`
- * demands one, because the string is indistinguishable from the all-types read
- * data authority - the subject of aehrc/pathling#2702, and the reason
- * {@link DATA_AUTHORITY} already covers it.
+ * Taken from the `@OperationAccess` annotations in the server source at
+ * `378dba82a9`, which the branch's documentation table now matches exactly.
+ * Anything outside this grammar would be silently ignored by Pathling, which is
+ * indistinguishable from a policy that grants nothing at all.
  */
 const OPERATION_AUTHORITIES = new Set<string>([
   ...READ_OPERATIONS,
@@ -221,11 +215,10 @@ function expectedAuthorities(
   }
   if (has("r")) {
     expected.push(
+      "pathling:read-resource",
       "pathling:export",
-      "pathling:view-run",
-      "pathling:view-export",
-      "pathling:sqlquery-run",
-      "pathling:sqlquery-export",
+      "pathling:sql-run",
+      "pathling:sql-export",
     );
   }
   expected.push("pathling:jobs");
@@ -257,15 +250,14 @@ function expectedAuthorities(
 /**
  * The operation authorities a read permission yields, in emission order.
  *
- * Spelled out once and reused, because writing all five into every row of the
+ * Spelled out once and reused, because writing all four into every row of the
  * table below would bury the part of each row that actually varies.
  */
 const READ_DERIVED: readonly string[] = [
+  "pathling:read-resource",
   "pathling:export",
-  "pathling:view-run",
-  "pathling:view-export",
-  "pathling:sqlquery-run",
-  "pathling:sqlquery-export",
+  "pathling:sql-run",
+  "pathling:sql-export",
 ];
 
 describe("PATHLING_PRESET - the two mandated cases", () => {
@@ -296,8 +288,8 @@ describe("PATHLING_PRESET - authority table", () => {
       "patient/Observation.r",
       ["pathling:read:Observation", ...READ_DERIVED, "pathling:jobs"],
     ],
-    // Search yields no export or view authority: those follow from `r`, and a
-    // search-only scope has not asked to read a whole population at once.
+    // Search yields no read-by-id, export or SQL authority: those follow from
+    // `r`, and a search-only scope has not asked for them.
     [
       "patient/Observation.s",
       ["pathling:read:Observation", "pathling:search", "pathling:jobs"],
@@ -597,15 +589,15 @@ describe("PATHLING_PRESET - invariants across every scope shape", () => {
     }
   });
 
-  it("cannot read a resource by id with a typed read authority alone", () => {
-    // Pathling's read interaction demands the bare `pathling:read`, which is the
-    // same string as the all-types read data authority, so a typed scope can
-    // search but not read by id. See aehrc/pathling#2702. Emitting the bare
-    // authority to fix that would grant read across every resource type, so the
-    // preset does not: this test records the limitation deliberately, and should
-    // be revisited if the upstream rename to `pathling:read-resource` lands.
+  it("reads a resource by id via read-resource, without widening the data authority", () => {
+    // Pathling's read interaction demands the `pathling:read-resource` operation
+    // authority (aehrc/pathling#2702) plus the data authority for the type. The
+    // preset emits the operation authority from `r`, and must never emit the
+    // bare `pathling:read` for a typed scope - that would grant read across
+    // every resource type, defeating the narrowing.
     const authorities = authoritiesFor("patient/Observation.rs");
     expect(authorities).toContain("pathling:read:Observation");
+    expect(authorities).toContain("pathling:read-resource");
     expect(authorities).not.toContain("pathling:read");
   });
 });

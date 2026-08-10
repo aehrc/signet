@@ -26,16 +26,16 @@ adding a rule rather than by remembering to remove one.
 and the `@OperationAccess` annotations in the
 [`release/server/3.0.0`](https://github.com/aehrc/pathling/tree/release/server/3.0.0)
 server source, which the preset is written against. The source is cited as well as
-the page because the page's authority table omits `create`, `sqlquery-run` and
-`sqlquery-export`.
+the page because the published page describes the released server rather than
+the 3.0.0 branch.
 
 That version is a prerequisite, not a preference. Pathling's authority grammar
 only admitted a hyphen in the action segment from November 2025, and a Pathling
 that cannot parse an authority raises rather than ignoring it - so a token
-carrying `pathling:view-run` fails every request against an older server with a
+carrying `pathling:sql-run` fails every request against an older server with a
 500, including the requests it was entitled to make. The end-to-end stack
 therefore runs `ghcr.io/aehrc/pathling:3.0.0-SNAPSHOT`, and an operator on a
-released Pathling should disable the six hyphenated operation rules until they
+released Pathling should disable the five hyphenated operation rules until they
 upgrade.
 
 Pathling does not read SMART scopes. It authorises off a Spring Security style
@@ -46,9 +46,9 @@ becomes a `pathling:read:Observation` data authority followed by the operation
 authorities its permissions imply.
 
 Reads and searches both yield the data authority, because a Pathling search
-returns the resources it matched. A read permission also yields the operations
-that read a population rather than a single resource - export, the two
-ViewDefinition operations and the two SQL query operations - each still bounded by
+returns the resources it matched. A read permission also yields the read-by-id
+operation (`pathling:read-resource`) and the operations that read a population -
+export, and the `$sql-run` and `$sql-export` operations - each still bounded by
 the data authority beside it, so a typed scope cannot project a type it did not
 name. These are not narrowed by launch context, because a Pathling authority
 carries no patient compartment: `pathling:read:Observation` already reads every
@@ -68,14 +68,11 @@ separate rule, shipped disabled, covers an unattended data loader running as a
 backend service, and is separate because a `client_credentials` grant has no user
 and so no role to check.
 
-One limitation is worth knowing before you debug it. Pathling's read-by-id
-interaction demands the operation authority `pathling:read`, which is the same
-string as the all-types read data authority, so `pathling:read:Observation` does
-not satisfy it: a typed read scope can search a resource type but cannot fetch one
-by id. Emitting the bare authority would grant read across every type and defeat
-the narrowing, so the preset does not. The collision is reported upstream as
-[aehrc/pathling#2702](https://github.com/aehrc/pathling/issues/2702), which
-proposes renaming the operation authority to `pathling:read-resource`.
+Read by id has its own operation authority, `pathling:read-resource`, named
+apart from the `pathling:read` data authority
+([aehrc/pathling#2702](https://github.com/aehrc/pathling/issues/2702)). The
+preset emits it from the `r` permission, so a typed read scope can fetch a
+resource by id without being granted read across every type.
 
 ## Aidbox
 

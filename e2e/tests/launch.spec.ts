@@ -60,11 +60,10 @@ test.describe("a standalone launch", () => {
     expect(claims["authorities"]).toEqual([
       "pathling:read",
       "pathling:search",
+      "pathling:read-resource",
       "pathling:export",
-      "pathling:view-run",
-      "pathling:view-export",
-      "pathling:sqlquery-run",
-      "pathling:sqlquery-export",
+      "pathling:sql-run",
+      "pathling:sql-export",
       "pathling:jobs",
     ]);
 
