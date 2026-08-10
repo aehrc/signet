@@ -26,6 +26,7 @@
  * Author: John Grimes
  */
 
+import { MAX_PASSKEYS_PER_ACCOUNT } from "@signet/core";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -39,6 +40,16 @@ import {
   recordAccessToken,
   revokeAccessToken,
 } from "./accessTokens.js";
+import {
+  consumeAdminPasskeyChallenge,
+  createAdminPasskeyChallenge,
+  deleteExpiredAdminPasskeyChallenges,
+  findAdminPasskeyByCredentialId,
+  insertAdminPasskey,
+  listAdminPasskeys,
+  recordAdminPasskeyUse,
+  removeAdminPasskey,
+} from "./adminPasskeys.js";
 import { createAdminUser } from "./adminUsers.js";
 import {
   consumeAuthorizationCode,
@@ -96,6 +107,7 @@ import { tenants } from "../schema/tenancy.js";
 import { isTestSchemaReady } from "../test/schemaReady.js";
 import { prepareServingRole, servingRoleUrl } from "../test/servingRole.js";
 
+import type { AdminPasskeyInput } from "./adminPasskeys.js";
 import type { Executor } from "./executor.js";
 import type {
   BoundTenantScope,
@@ -1399,6 +1411,10 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         jtiReplay: 0,
         adminSessions: 0,
         endUserSessions: 0,
+        // Zero because the fixture seeded none, not because the policies hid
+        // them: this table is exempt, like `admin_sessions` above it, and an
+        // expired challenge is reachable by any role that can see the table.
+        passkeyChallenges: 0,
       });
 
       // And the expired rows it could not see are still there for the owner to
@@ -1448,6 +1464,268 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
           findLaunchContext(bound, liveHandle),
         ),
       ).toBeDefined();
+    });
+  });
+
+  describe("passkeys", () => {
+    /** Registers a passkey with fields nothing else in the run will collide on. */
+    async function register(
+      adminUserId: string,
+      overrides: Partial<AdminPasskeyInput> = {},
+    ) {
+      return await insertAdminPasskey(db, {
+        adminUserId,
+        credentialId: `cred-${unique()}`,
+        publicKey: `key-${unique()}`,
+        counter: 0,
+        transports: ["internal"],
+        name: "Test key",
+        ...overrides,
+      });
+    }
+
+    it("lists an account's own passkeys and nobody else's", async () => {
+      const mine = await newAdmin(db, `pk-${unique()}@example.org`);
+      const theirs = await newAdmin(db, `pk-${unique()}@example.org`);
+      await register(mine, { name: "First" });
+      await register(mine, { name: "Second" });
+      await register(theirs, { name: "Not mine" });
+
+      const listed = await listAdminPasskeys(db, mine);
+
+      // Oldest first, because the list is read as a history of what was added.
+      expect(listed.map((passkey) => passkey.name)).toEqual([
+        "First",
+        "Second",
+      ]);
+    });
+
+    it("refuses a credential identifier already registered to another account", async () => {
+      // The identifier is what sign-in resolves an account *from*, so two accounts
+      // claiming one credential would make that resolution ambiguous.
+      const first = await newAdmin(db, `pk-${unique()}@example.org`);
+      const second = await newAdmin(db, `pk-${unique()}@example.org`);
+      const credentialId = `shared-${unique()}`;
+
+      expect((await register(first, { credentialId })).ok).toBe(true);
+      expect(await register(second, { credentialId })).toEqual({
+        ok: false,
+        reason: "already-registered",
+      });
+    });
+
+    it("refuses an eleventh passkey on one account", async () => {
+      const adminUserId = await newAdmin(db, `pk-${unique()}@example.org`);
+      for (let index = 0; index < MAX_PASSKEYS_PER_ACCOUNT; index += 1) {
+        expect((await register(adminUserId)).ok).toBe(true);
+      }
+
+      expect(await register(adminUserId)).toEqual({
+        ok: false,
+        reason: "cap-reached",
+      });
+      expect(await listAdminPasskeys(db, adminUserId)).toHaveLength(
+        MAX_PASSKEYS_PER_ACCOUNT,
+      );
+    });
+
+    it("counts the cap per account rather than across the table", async () => {
+      const full = await newAdmin(db, `pk-${unique()}@example.org`);
+      const other = await newAdmin(db, `pk-${unique()}@example.org`);
+      for (let index = 0; index < MAX_PASSKEYS_PER_ACCOUNT; index += 1) {
+        await register(full);
+      }
+
+      // A cap that counted rows rather than the account's rows would refuse this.
+      expect((await register(other)).ok).toBe(true);
+    });
+
+    it("resolves a credential identifier to its passkey and its owner", async () => {
+      const adminUserId = await newAdmin(db, `pk-${unique()}@example.org`);
+      const credentialId = `find-${unique()}`;
+      await register(adminUserId, { credentialId, name: "Findable" });
+
+      const found = await findAdminPasskeyByCredentialId(db, credentialId);
+
+      expect(found?.passkey.name).toBe("Findable");
+      // The account comes back with it: sign-in has to know whether it is
+      // disabled, and one query is one decision.
+      expect(found?.user.id).toBe(adminUserId);
+    });
+
+    it("answers nothing for a credential identifier nobody registered", async () => {
+      expect(
+        await findAdminPasskeyByCredentialId(db, `absent-${unique()}`),
+      ).toBeUndefined();
+    });
+
+    it("advances a counter that moved forward, and stamps the last use", async () => {
+      const adminUserId = await newAdmin(db, `pk-${unique()}@example.org`);
+      const created = expectOk(await register(adminUserId, { counter: 4 }));
+      const at = new Date();
+
+      expect(await recordAdminPasskeyUse(db, created.passkey.id, 5, at)).toBe(
+        true,
+      );
+
+      const [stored] = await listAdminPasskeys(db, adminUserId);
+      expect(stored?.counter).toBe(5);
+      expect(stored?.lastUsedAt).not.toBeNull();
+    });
+
+    it("stamps the last use of an authenticator that always reports zero", async () => {
+      // The iCloud Keychain case. Refusing the update because the counter did not
+      // advance would leave "last used" permanently blank for most authenticators.
+      const adminUserId = await newAdmin(db, `pk-${unique()}@example.org`);
+      const created = expectOk(await register(adminUserId, { counter: 0 }));
+
+      expect(
+        await recordAdminPasskeyUse(db, created.passkey.id, 0, new Date()),
+      ).toBe(true);
+
+      const [stored] = await listAdminPasskeys(db, adminUserId);
+      expect(stored?.counter).toBe(0);
+      expect(stored?.lastUsedAt).not.toBeNull();
+    });
+
+    it("refuses a counter that did not move forward", async () => {
+      const adminUserId = await newAdmin(db, `pk-${unique()}@example.org`);
+      const created = expectOk(await register(adminUserId, { counter: 9 }));
+
+      expect(
+        await recordAdminPasskeyUse(db, created.passkey.id, 9, new Date()),
+      ).toBe(false);
+      expect(
+        await recordAdminPasskeyUse(db, created.passkey.id, 8, new Date()),
+      ).toBe(false);
+
+      const [stored] = await listAdminPasskeys(db, adminUserId);
+      expect(stored?.counter).toBe(9);
+      // Nothing was recorded at all, so a refused sign-in leaves no trace of use.
+      expect(stored?.lastUsedAt).toBeNull();
+    });
+
+    it("removes a passkey only for the account that owns it", async () => {
+      const owner_ = await newAdmin(db, `pk-${unique()}@example.org`);
+      const stranger = await newAdmin(db, `pk-${unique()}@example.org`);
+      const created = expectOk(await register(owner_));
+
+      // Scoped to the owner, so another account's identifier is simply not found -
+      // which is also what stops the API disclosing that it exists.
+      expect(await removeAdminPasskey(db, stranger, created.passkey.id)).toBe(
+        false,
+      );
+      expect(await listAdminPasskeys(db, owner_)).toHaveLength(1);
+
+      expect(await removeAdminPasskey(db, owner_, created.passkey.id)).toBe(
+        true,
+      );
+      expect(await listAdminPasskeys(db, owner_)).toHaveLength(0);
+      // And a second removal is not a second success.
+      expect(await removeAdminPasskey(db, owner_, created.passkey.id)).toBe(
+        false,
+      );
+    });
+
+    it("spends a challenge exactly once", async () => {
+      const adminUserId = await newAdmin(db, `pk-${unique()}@example.org`);
+      const challenge = `chal-${unique()}`;
+      await createAdminPasskeyChallenge(db, {
+        challenge,
+        purpose: "registration",
+        adminUserId,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      const first = await consumeAdminPasskeyChallenge(
+        db,
+        challenge,
+        "registration",
+      );
+      expect(first?.adminUserId).toBe(adminUserId);
+
+      // Replay. The row is gone, so the second ceremony has nothing to verify
+      // against - which is what makes single use a property of the database
+      // rather than of a check somebody could forget.
+      expect(
+        await consumeAdminPasskeyChallenge(db, challenge, "registration"),
+      ).toBeUndefined();
+    });
+
+    it("refuses a challenge presented for the other purpose", async () => {
+      // A registration challenge is minted behind a password check; accepting it
+      // as an authentication challenge would let one be spent for a sign-in.
+      const adminUserId = await newAdmin(db, `pk-${unique()}@example.org`);
+      const challenge = `chal-${unique()}`;
+      await createAdminPasskeyChallenge(db, {
+        challenge,
+        purpose: "registration",
+        adminUserId,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      expect(
+        await consumeAdminPasskeyChallenge(db, challenge, "authentication"),
+      ).toBeUndefined();
+      // And it is still there for the ceremony it was minted for.
+      expect(
+        await consumeAdminPasskeyChallenge(db, challenge, "registration"),
+      ).toBeDefined();
+    });
+
+    it("refuses a challenge whose window has closed", async () => {
+      const challenge = `chal-${unique()}`;
+      await createAdminPasskeyChallenge(db, {
+        challenge,
+        purpose: "authentication",
+        adminUserId: null,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+
+      expect(
+        await consumeAdminPasskeyChallenge(db, challenge, "authentication"),
+      ).toBeUndefined();
+    });
+
+    it("sweeps expired challenges and leaves live ones", async () => {
+      const stale = `chal-stale-${unique()}`;
+      const live = `chal-live-${unique()}`;
+      await createAdminPasskeyChallenge(db, {
+        challenge: stale,
+        purpose: "authentication",
+        adminUserId: null,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      await createAdminPasskeyChallenge(db, {
+        challenge: live,
+        purpose: "authentication",
+        adminUserId: null,
+        expiresAt: new Date(Date.now() + 600_000),
+      });
+
+      expect(
+        await deleteExpiredAdminPasskeyChallenges(db),
+      ).toBeGreaterThanOrEqual(1);
+
+      expect(
+        await consumeAdminPasskeyChallenge(db, live, "authentication"),
+      ).toBeDefined();
+    });
+
+    it("is swept by the scheduled job", async () => {
+      // The sweep is where an unconsumed challenge is actually collected in a
+      // deployment; a delete function nothing calls would leave the table growing.
+      const stale = `chal-swept-${unique()}`;
+      await createAdminPasskeyChallenge(db, {
+        challenge: stale,
+        purpose: "authentication",
+        adminUserId: null,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+
+      expect(
+        (await sweepExpiredRuntimeRows(owner)).passkeyChallenges,
+      ).toBeGreaterThanOrEqual(1);
     });
   });
 });

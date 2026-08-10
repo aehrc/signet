@@ -33,6 +33,7 @@
  */
 
 import { deleteExpiredAccessTokens } from "./accessTokens.js";
+import { deleteExpiredAdminPasskeyChallenges } from "./adminPasskeys.js";
 import { deleteExpiredAdminSessions } from "./adminUsers.js";
 import { deleteExpiredAuthorizationCodes } from "./authorizationCodes.js";
 import { deleteExpiredAuthorizationSessions } from "./authorizationSessions.js";
@@ -61,6 +62,13 @@ export interface SweepCounts {
   readonly adminSessions: number;
   /** End users' management-page sessions, for the same reason. */
   readonly endUserSessions: number;
+  /**
+   * Passkey ceremony challenges that were issued and never completed.
+   *
+   * A browser prompt somebody dismissed leaves one behind, so these accumulate in
+   * ordinary use rather than only when something goes wrong.
+   */
+  readonly passkeyChallenges: number;
 }
 
 /** How far back the sweep reaches. */
@@ -118,6 +126,7 @@ export async function sweepExpiredRuntimeRows(
   const jtiReplay = await deleteExpiredJtis(db, now);
   const adminSessions = await deleteExpiredAdminSessions(db, now);
   const endUserSessions = await deleteExpiredEndUserSessions(db, now);
+  const passkeyChallenges = await deleteExpiredAdminPasskeyChallenges(db, now);
 
   return {
     launchContexts,
@@ -129,5 +138,6 @@ export async function sweepExpiredRuntimeRows(
     jtiReplay,
     adminSessions,
     endUserSessions,
+    passkeyChallenges,
   };
 }

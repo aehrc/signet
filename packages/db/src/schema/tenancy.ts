@@ -10,6 +10,7 @@
 
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   index,
   pgTable,
   primaryKey,
@@ -137,6 +138,101 @@ export const adminSessions = pgTable(
   ],
 );
 
+/**
+ * A WebAuthn passkey registered against a console identity.
+ *
+ * Belongs to the person, like the identity itself: one human may administer several
+ * tenants and carries one set of authenticators across all of them. An account holds
+ * up to ten, and none of the columns here is a secret - see
+ * {@link adminPasskeys.publicKey}.
+ */
+export const adminPasskeys = pgTable(
+  "admin_passkeys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    adminUserId: uuid("admin_user_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "cascade" }),
+    /**
+     * The credential's WebAuthn identifier, base64url as the browser reports it.
+     *
+     * Unique across the whole table rather than per account: a credential belongs
+     * to exactly one identity, and sign-in resolves the identity *from* it, so two
+     * accounts claiming one credential would make that resolution ambiguous.
+     */
+    credentialId: text("credential_id").notNull(),
+    /**
+     * The COSE public key, base64url.
+     *
+     * Stored in the clear, deliberately, and the first stored credential material
+     * in Signet that is neither hashed nor encrypted. The hash-or-encrypt rule is
+     * about secrets: holding a public key grants nothing, the private half never
+     * leaves the authenticator, hashing would make verification impossible, and
+     * encrypting would spend the master key on material that is not secret. Text
+     * rather than `bytea` for the reason `endpoint_keys.private_jwk_encrypted` is:
+     * a logical dump stays human-transportable.
+     */
+    publicKey: text("public_key").notNull(),
+    /**
+     * The last signature counter accepted from this authenticator.
+     *
+     * Stays zero for the authenticators that do not count, which is most platform
+     * ones. See `counterAccepted` in `@signet/core` for what a non-zero value then
+     * obliges.
+     */
+    counter: bigint("counter", { mode: "number" }).notNull().default(0),
+    /** Transport hints from registration, echoed back to the browser at sign-in. */
+    transports: text("transports").array().notNull().default([]),
+    /** User-supplied or defaulted label. The only thing that tells two apart. */
+    name: text("name").notNull(),
+    ...createdAt(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("admin_passkeys_credential_id_unique").on(table.credentialId),
+    index("admin_passkeys_admin_user_id_idx").on(table.adminUserId),
+  ],
+);
+
+/**
+ * An outstanding WebAuthn ceremony challenge.
+ *
+ * A row rather than a signed value or a process-local map, because the requirement
+ * is single use and only a row that is deleted on consumption gives that across
+ * restarts and replicas. Consumption is one `DELETE … RETURNING`, so two callers
+ * presenting the same challenge cannot both win it.
+ */
+export const adminPasskeyChallenges = pgTable(
+  "admin_passkey_challenges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** The random value the ceremony signs over, base64url. */
+    challenge: text("challenge").notNull(),
+    /** `registration` or `authentication`; a challenge is not valid for both. */
+    purpose: text("purpose").notNull(),
+    /**
+     * The identity a registration challenge was minted for.
+     *
+     * Null for an authentication challenge, which is issued before anybody has
+     * identified themselves - that is the point of a discoverable credential. A
+     * registration challenge is bound to the account whose password minted it, and
+     * the verify step compares the two.
+     */
+    adminUserId: uuid("admin_user_id").references(() => adminUsers.id, {
+      onDelete: "cascade",
+    }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ...createdAt(),
+  },
+  (table) => [
+    uniqueIndex("admin_passkey_challenges_challenge_unique").on(
+      table.challenge,
+    ),
+    index("admin_passkey_challenges_admin_user_id_idx").on(table.adminUserId),
+    index("admin_passkey_challenges_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
 /** A tenant row as selected. */
 export type Tenant = typeof tenants.$inferSelect;
 /** Values required to insert a tenant. */
@@ -161,3 +257,14 @@ export type NewApiToken = typeof apiTokens.$inferInsert;
 export type AdminSession = typeof adminSessions.$inferSelect;
 /** Values required to insert an admin session. */
 export type NewAdminSession = typeof adminSessions.$inferInsert;
+
+/** A registered passkey as selected. */
+export type AdminPasskey = typeof adminPasskeys.$inferSelect;
+/** Values required to insert a passkey. */
+export type NewAdminPasskey = typeof adminPasskeys.$inferInsert;
+
+/** An outstanding ceremony challenge as selected. */
+export type AdminPasskeyChallenge = typeof adminPasskeyChallenges.$inferSelect;
+/** Values required to insert a ceremony challenge. */
+export type NewAdminPasskeyChallenge =
+  typeof adminPasskeyChallenges.$inferInsert;

@@ -31,6 +31,7 @@
  */
 
 export * from "./accessTokens.js";
+export * from "./adminPasskeys.js";
 export * from "./adminUsers.js";
 export * from "./apiTokens.js";
 export * from "./authorizationCodes.js";
