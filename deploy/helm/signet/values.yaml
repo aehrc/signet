@@ -11,6 +11,11 @@ signet:
   # Non-sensitive environment for the server and the migration job. Any variable
   # Signet reads can go here; `.env.example` in the repository root lists them.
   #
+  # The sweep CronJob reads neither this nor `secretConfig`: it takes the owning
+  # identity and its own grace period and nothing else. So a database credential
+  # put here rather than under `database` below would give a migration Job that
+  # works and a sweep that fails nightly.
+  #
   # SIGNET_PUBLIC_URL is the public origin Signet is reached on, and endpoint
   # issuers are derived from it (`{origin}/t/{tenant}/e/{endpoint}`) - so
   # changing it invalidates every issuer already published to FHIR servers and
