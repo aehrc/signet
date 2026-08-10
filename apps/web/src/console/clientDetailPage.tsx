@@ -27,8 +27,10 @@ import {
 } from "../api/queries.js";
 import {
   ListField,
+  PatchForm,
+  SaveOutcome,
+  SaveRow,
   SelectField,
-  SubmitButton,
   TextField,
 } from "../components/fields.js";
 import {
@@ -36,7 +38,6 @@ import {
   DetailList,
   DetailRow,
   ErrorAlert,
-  InfoAlert,
   Loading,
   PageHeader,
   Panel,
@@ -45,7 +46,7 @@ import {
 import { Chips, StatusBadge } from "../components/table.js";
 import { toneForStatus } from "../formatting/status.js";
 import { clientTypeLabel, formatInstant } from "../formatting/values.js";
-import { changedFields, parseList, parseScopeList } from "../forms/lists.js";
+import { clientFormValues, clientPatch } from "../forms/clientEdit.js";
 
 /**
  * Whether a symmetric client has a secret, in words.
@@ -88,10 +89,19 @@ export function ClientDetailPage() {
 
   const current = client.data;
   const issues = issuesByField(update.error);
-  const editedName = name ?? current.name;
-  const editedStatus = status ?? current.status;
-  const editedRedirects = redirectUris ?? current.redirectUris.join("\n");
-  const editedScopes = scopes ?? current.allowedScopes.join("\n");
+  const loaded = clientFormValues(current);
+  const edited = {
+    name: name ?? loaded.name,
+    status: status ?? loaded.status,
+    redirectUris: redirectUris ?? loaded.redirectUris,
+    allowedScopes: scopes ?? loaded.allowedScopes,
+  };
+  // Computed for the render, not only for the submit: an empty patch must not be
+  // sent, and the reason it will not be has to be visible before the button is
+  // pressed. The API accepts an empty patch and records a `client.updated` audit
+  // event naming no fields, which is a write nobody asked for and nobody can undo.
+  const patch = clientPatch(edited, current);
+  const hasChanges = Object.keys(patch).length > 0;
 
   return (
     <>
@@ -143,79 +153,69 @@ export function ClientDetailPage() {
         </DetailList>
       </Panel>
 
-      <Panel title="Edit">
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            update.mutate(
-              changedFields(
-                {
-                  name: editedName,
-                  status: editedStatus,
-                  redirectUris: parseList(editedRedirects),
-                  allowedScopes: parseScopeList(editedScopes),
-                },
-                {
-                  name: current.name,
-                  status: current.status,
-                  redirectUris: [...current.redirectUris],
-                  allowedScopes: [...current.allowedScopes],
-                },
-              ),
-            );
-          }}
-        >
-          <TextField
-            label="Name"
-            value={editedName}
-            onChange={setName}
-            error={issues["name"]}
-            disabled={!mayWrite}
-          />
-          <SelectField
-            label="Status"
-            value={editedStatus}
-            onChange={setStatus}
-            error={issues["status"]}
-            options={[
-              { value: "active", label: "Active" },
-              {
-                value: "suspended",
-                label: "Suspended - revokes its live tokens",
-              },
-              { value: "pending", label: "Pending - cannot obtain a token" },
-              { value: "rejected", label: "Rejected" },
-            ]}
-            hint="Suspending revokes the access and refresh tokens this client already holds, as well as refusing new ones."
-          />
-          <ListField
-            label="Redirect URIs"
-            value={editedRedirects}
-            onChange={setRedirectUris}
-            error={issues["redirectUris"] ?? issues["redirectUris.0"]}
-            hint="One per line. Matched exactly."
-          />
-          <ListField
-            label="Allowed scopes"
-            value={editedScopes}
-            onChange={setScopes}
-            error={issues["allowedScopes"]}
-            rows={5}
-          />
+      <PatchForm
+        title="Edit"
+        hasChanges={hasChanges}
+        onSave={() => {
+          update.mutate(patch);
+        }}
+      >
+        <TextField
+          label="Name"
+          value={edited.name}
+          onChange={setName}
+          error={issues["name"]}
+          disabled={!mayWrite}
+        />
+        <SelectField
+          label="Status"
+          value={edited.status}
+          onChange={setStatus}
+          error={issues["status"]}
+          options={[
+            { value: "active", label: "Active" },
+            {
+              value: "suspended",
+              label: "Suspended - revokes its live tokens",
+            },
+            { value: "pending", label: "Pending - cannot obtain a token" },
+            { value: "rejected", label: "Rejected" },
+          ]}
+          hint="Suspending revokes the access and refresh tokens this client already holds, as well as refusing new ones."
+          disabled={!mayWrite}
+        />
+        <ListField
+          label="Redirect URIs"
+          value={edited.redirectUris}
+          onChange={setRedirectUris}
+          error={issues["redirectUris"] ?? issues["redirectUris.0"]}
+          hint="One per line. Matched exactly."
+          disabled={!mayWrite}
+        />
+        <ListField
+          label="Allowed scopes"
+          value={edited.allowedScopes}
+          onChange={setScopes}
+          error={issues["allowedScopes"]}
+          rows={5}
+          disabled={!mayWrite}
+        />
 
-          {update.isError && Object.keys(issues).length === 0 ? (
-            <ErrorAlert message={describeError(update.error)} />
-          ) : null}
-          {update.isSuccess ? <InfoAlert>Client saved.</InfoAlert> : null}
+        <SaveOutcome
+          error={update.error}
+          issues={issues}
+          isSuccess={update.isSuccess}
+          saved="Client saved."
+        />
 
-          <div>
-            <SubmitButton pending={update.isPending} disabled={!mayWrite}>
-              Save
-            </SubmitButton>
-          </div>
-        </form>
-      </Panel>
+        {mayWrite ? (
+          <SaveRow
+            label="Save"
+            hasChanges={hasChanges}
+            pending={update.isPending}
+          />
+        ) : null}
+      </PatchForm>
 
       {current.clientType === "confidential-symmetric" && mayWrite ? (
         <Panel

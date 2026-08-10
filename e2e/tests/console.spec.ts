@@ -12,10 +12,16 @@ import {
   VIEWER_STORAGE_STATE,
 } from "../support/stack.js";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 /** The endpoint's Users tab, where every user journey below starts. */
 const USERS = `${SIGNET}/console/t/demo/e/pathling/users`;
+
+/** The endpoint's Clients tab. */
+const CLIENTS = `${SIGNET}/console/t/demo/e/pathling/clients`;
+
+/** The endpoint's overview, which holds the settings and capability forms. */
+const OVERVIEW = `${SIGNET}/console/t/demo/e/pathling`;
 
 /** An account one of these tests owns for the duration of the test. */
 interface TestUser {
@@ -76,6 +82,110 @@ async function createUser(
   await expect(
     page.getByRole("link", { name: user.displayName }),
   ).toBeVisible();
+}
+
+/** A client one of these tests owns for the duration of the test. */
+interface TestClient {
+  readonly clientId: string;
+  readonly name: string;
+}
+
+/**
+ * Names a client no other test and no earlier run has used.
+ *
+ * Same reasoning as {@link uniqueUser}: the seeded clients are what the launch and
+ * grant suites authorize as, so a test that edited one would break those from a long
+ * way away.
+ *
+ * @param prefix - What this client is for, so a leftover row explains itself.
+ */
+function uniqueClient(prefix: string): TestClient {
+  const suffix = `${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
+  return { clientId: `${prefix}-${suffix}`, name: `${prefix} ${suffix}` };
+}
+
+/**
+ * Registers a client through the console's own registration form.
+ *
+ * @param page - The browser page to drive.
+ * @param client - The client to register, from {@link uniqueClient}.
+ */
+async function createClient(page: Page, client: TestClient): Promise<void> {
+  await page.goto(CLIENTS);
+  await page.getByRole("button", { name: "Register client" }).click();
+  await page.getByLabel("Name").fill(client.name);
+  await page.getByLabel("Client identifier").fill(client.clientId);
+  await page.getByLabel("Redirect URIs").fill("https://app.test/callback");
+  await page.getByRole("button", { name: "Register", exact: true }).click();
+  await expect(page.getByRole("link", { name: client.name })).toBeVisible();
+}
+
+/** The panel with the given heading, and the form inside it. */
+function panelForm(page: Page, heading: string): Locator {
+  return page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: heading, exact: true }) })
+    .locator("form");
+}
+
+/**
+ * Proves a patch form sends nothing when nothing has changed.
+ *
+ * Three things, because each of them failed differently before there was anything
+ * stopping them. Save is disabled and says why, so the operator is not left pressing
+ * a button that does nothing. Editing enables it and undoing the edit disables it
+ * again, so the state is about what the form holds rather than about the page having
+ * been touched. And submitting the form directly - the button reached another way -
+ * still sends no request, because the disabled button is a hint and the guard in
+ * `PatchForm` is the rule.
+ *
+ * The assertion is an absent request rather than an absent visible effect: the admin
+ * API accepts an empty patch and answers 200, writing an audit event that names no
+ * field, so there is nothing on the page to assert against.
+ *
+ * @param page - The browser page to drive.
+ * @param form - The form under test, from {@link panelForm}.
+ * @param saveLabel - What that form's save button says.
+ * @param edit - Makes a change to the form.
+ * @param undo - Puts the form back the way it was.
+ */
+async function expectsNothingToSave(
+  page: Page,
+  form: Locator,
+  saveLabel: string,
+  edit: () => Promise<void>,
+  undo: () => Promise<void>,
+): Promise<void> {
+  const patches: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "PATCH") {
+      patches.push(request.url());
+    }
+  });
+
+  const save = form.getByRole("button", { name: saveLabel });
+  await expect(save).toBeDisabled();
+  await expect(form.getByText("Nothing has changed.")).toBeVisible();
+
+  await edit();
+  await expect(save).toBeEnabled();
+  await undo();
+  await expect(save).toBeDisabled();
+
+  // `requestSubmit` fires the form's submit handler without going through the
+  // button, which is the only way to reach the guard that matters: a disabled button
+  // is a hint, and a page that trusted it would still post an empty patch to
+  // anything that submitted the form another way.
+  // Typed here rather than as `HTMLFormElement`: this package has no DOM library, so
+  // the name would resolve to nothing and the call would be unchecked.
+  await form.evaluate((element: { readonly requestSubmit: () => void }) => {
+    element.requestSubmit();
+  });
+  // Long enough for a request to have left, given the assertions above have already
+  // settled the form's state. There is no event to await: the point is the absence.
+  await page.waitForTimeout(1000);
+
+  expect(patches).toEqual([]);
 }
 
 /**
@@ -167,27 +277,139 @@ test.describe("an authenticated operator", () => {
     await page.getByRole("link", { name: user.displayName }).click();
     await expect(page.getByLabel("Display name")).toHaveValue(user.displayName);
 
-    const patches: string[] = [];
-    page.on("request", (request) => {
-      if (request.method() === "PATCH") {
-        patches.push(request.url());
-      }
-    });
+    // FR-009.
+    const name = page.getByLabel("Display name");
+    await expectsNothingToSave(
+      page,
+      panelForm(page, "Edit"),
+      "Save",
+      async () => {
+        await name.fill("Something Else");
+      },
+      async () => {
+        await name.fill(user.displayName);
+      },
+    );
+  });
 
-    // FR-009. Asserted as an absent request rather than as an absent visible
-    // effect: an empty patch is accepted by the API and writes an audit event
-    // saying nothing changed, which the page cannot show and nobody can undo.
-    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
-    await expect(page.getByText("Nothing has changed.")).toBeVisible();
+  test("sends nothing when a client's Save is pressed with nothing changed", async ({
+    page,
+  }) => {
+    // The client detail page had the same flaw the user detail page did: the patch
+    // was built on submit and sent whatever it came to, including nothing.
+    const client = uniqueClient("unchanged-client");
+    await createClient(page, client);
 
-    // Editing enables it and undoing the edit disables it again, so the state is
-    // about what the form holds rather than about the page having loaded.
-    await page.getByLabel("Display name").fill("Something Else");
-    await expect(page.getByRole("button", { name: "Save" })).toBeEnabled();
-    await page.getByLabel("Display name").fill(user.displayName);
-    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+    await page.getByRole("link", { name: client.name }).click();
+    const form = panelForm(page, "Edit");
+    await expect(form.getByLabel("Name")).toHaveValue(client.name);
 
-    expect(patches).toEqual([]);
+    const name = form.getByLabel("Name");
+    await expectsNothingToSave(
+      page,
+      form,
+      "Save",
+      async () => {
+        await name.fill("Something Else");
+      },
+      async () => {
+        await name.fill(client.name);
+      },
+    );
+
+    // The positive control, on a client this test owns: a real edit still saves, so
+    // the assertion above is about the empty patch and not about a form that cannot
+    // save at all.
+    await name.fill(`${client.name} renamed`);
+    await form.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText("Client saved.")).toBeVisible();
+  });
+
+  test("sends nothing when endpoint settings are saved unchanged", async ({
+    page,
+  }) => {
+    // Read-only by construction: this test never saves, so it cannot disturb the
+    // endpoint the launch and grant suites run against.
+    await page.goto(OVERVIEW);
+    const form = panelForm(page, "Settings");
+    const name = form.getByLabel("Name");
+    await expect(name).toHaveValue(/.+/);
+    const loaded = (await name.inputValue()) ?? "";
+
+    await expectsNothingToSave(
+      page,
+      form,
+      "Save settings",
+      async () => {
+        await name.fill(`${loaded} edited`);
+      },
+      async () => {
+        await name.fill(loaded);
+      },
+    );
+  });
+
+  test("refuses a lifetime it cannot send rather than dropping it", async ({
+    page,
+  }) => {
+    // Also read-only. A lifetime that is not a positive integer is left out of the
+    // patch, so without a message the form would report "Nothing has changed." to
+    // somebody who had just typed something - and would save an edit to another
+    // field while quietly discarding this one.
+    await page.goto(OVERVIEW);
+    const form = panelForm(page, "Settings");
+    const name = form.getByLabel("Name");
+    const lifetime = form.getByLabel("Access token lifetime (seconds)");
+    await expect(lifetime).toHaveValue(/\d+/);
+    const loadedName = await name.inputValue();
+
+    await lifetime.fill("not a number");
+    await expect(
+      form.getByText("Enter a whole number of seconds greater than zero."),
+    ).toBeVisible();
+    await expect(
+      form.getByText("Fix the fields marked above before saving."),
+    ).toBeVisible();
+    await expect(
+      form.getByRole("button", { name: "Save settings" }),
+    ).toBeDisabled();
+
+    // And it blocks the whole save, not only its own field: a form that saved
+    // around it would write the new name and drop the lifetime without saying so.
+    await name.fill(`${loadedName} edited`);
+    await expect(
+      form.getByRole("button", { name: "Save settings" }),
+    ).toBeDisabled();
+
+    // Putting a usable value back releases it.
+    await lifetime.fill("900");
+    await expect(
+      form.getByRole("button", { name: "Save settings" }),
+    ).toBeEnabled();
+  });
+
+  test("sends nothing when endpoint capabilities are saved unchanged", async ({
+    page,
+  }) => {
+    // Also read-only. A capability flag is a published conformance claim, so a test
+    // that saved one would change what this endpoint advertises to every other suite.
+    await page.goto(OVERVIEW);
+    const form = panelForm(page, "Capabilities");
+    const flag = form.getByLabel("POST to /authorize");
+    await expect(flag).toBeVisible();
+    const wasSet = await flag.isChecked();
+
+    await expectsNothingToSave(
+      page,
+      form,
+      "Save capabilities",
+      async () => {
+        await flag.setChecked(!wasSet);
+      },
+      async () => {
+        await flag.setChecked(wasSet);
+      },
+    );
   });
 
   test("clears a fhirUser reference rather than storing an empty one", async ({
@@ -354,6 +576,33 @@ test.describe("a viewer-role operator", () => {
     await expect(page.getByRole("button", { name: "Delete user" })).toHaveCount(
       0,
     );
+  });
+
+  test("reads a client's detail page and is offered no write", async ({
+    page,
+  }) => {
+    // The seeded stub app, read-only for the same reason as the clinician above.
+    await page.goto(CLIENTS);
+    await page.getByRole("link", { name: "Stub SMART app" }).click();
+
+    const form = panelForm(page, "Edit");
+    await expect(form.getByLabel("Name")).toHaveValue("Stub SMART app");
+
+    // Every input, not merely the first: the status select and the two list fields
+    // were editable in a form this role cannot submit.
+    await expect(form.getByLabel("Name")).toBeDisabled();
+    await expect(form.getByLabel("Status")).toBeDisabled();
+    await expect(form.getByLabel("Redirect URIs")).toBeDisabled();
+    await expect(form.getByLabel("Allowed scopes")).toBeDisabled();
+
+    // And the controls that write are absent rather than present-and-failing.
+    await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Rotate secret" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Delete client" }),
+    ).toHaveCount(0);
   });
 });
 

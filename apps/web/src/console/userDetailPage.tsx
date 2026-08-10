@@ -27,7 +27,14 @@ import {
   useSetEndUserPassword,
   useUpdateEndUser,
 } from "../api/queries.js";
-import { ListField, SubmitButton, TextField } from "../components/fields.js";
+import {
+  ListField,
+  PatchForm,
+  SaveOutcome,
+  SaveRow,
+  SubmitButton,
+  TextField,
+} from "../components/fields.js";
 import {
   DetailList,
   DetailRow,
@@ -163,106 +170,94 @@ export function UserDetailPage() {
         </DetailList>
       </Panel>
 
-      <Panel
+      <PatchForm
         title="Edit"
-        description="Only the fields you change are sent, so saving with nothing changed writes nothing. A value the API refuses is reported under the field that caused it."
+        hasChanges={hasChanges}
+        onSave={() => {
+          update.mutate({ userId: current.id, body: patch });
+        }}
       >
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            // Guarded here as well as by the disabled button, because that button
-            // is a hint and this is the rule.
-            if (hasChanges) {
-              update.mutate({ userId: current.id, body: patch });
-            }
-          }}
-        >
-          <TextField
-            label="Display name"
-            value={edited.displayName}
-            onChange={setDisplayName}
-            error={issues["displayName"]}
-            disabled={!mayWrite}
-          />
-          <TextField
-            label="fhirUser reference"
-            value={edited.fhirUser}
-            onChange={setFhirUser}
-            error={issues["fhirUserReference"]}
-            hint="A relative FHIR reference such as Practitioner/123. Released to apps granted the fhirUser scope. Clearing this removes it."
-            disabled={!mayWrite}
-          />
-          <ListField
-            label="Roles"
-            value={edited.roles}
-            onChange={setRoles}
-            error={issues["roles"] ?? issues["roles.0"]}
-            hint="One per line. A policy rule can require one of these before granting a scope."
-            rows={2}
-            disabled={!mayWrite}
-          />
+        <TextField
+          label="Display name"
+          value={edited.displayName}
+          onChange={setDisplayName}
+          error={issues["displayName"]}
+          disabled={!mayWrite}
+        />
+        <TextField
+          label="fhirUser reference"
+          value={edited.fhirUser}
+          onChange={setFhirUser}
+          error={issues["fhirUserReference"]}
+          hint="A relative FHIR reference such as Practitioner/123. Released to apps granted the fhirUser scope. Clearing this removes it."
+          disabled={!mayWrite}
+        />
+        <ListField
+          label="Roles"
+          value={edited.roles}
+          onChange={setRoles}
+          error={issues["roles"] ?? issues["roles.0"]}
+          hint="One per line. A policy rule can require one of these before granting a scope."
+          rows={2}
+          disabled={!mayWrite}
+        />
 
-          <TextField
-            label="Default patient"
-            value={edited.defaultPatient}
-            onChange={setDefaultPatient}
-            error={issues["defaultContext.patient"] ?? issues["defaultContext"]}
-            disabled={!mayWrite}
-          />
-          <TextField
-            label="Default encounter"
-            value={edited.defaultEncounter}
-            onChange={setDefaultEncounter}
-            error={issues["defaultContext.encounter"]}
-            disabled={!mayWrite}
-          />
-          <TextField
-            label="Intent"
-            value={edited.intent}
-            onChange={setIntent}
-            error={issues["defaultContext.intent"]}
-            hint="Seeds the launch context when a launch does not supply one. Emptying all three clears it."
-            disabled={!mayWrite}
-          />
+        <TextField
+          label="Default patient"
+          value={edited.defaultPatient}
+          onChange={setDefaultPatient}
+          error={issues["defaultContext.patient"] ?? issues["defaultContext"]}
+          disabled={!mayWrite}
+        />
+        <TextField
+          label="Default encounter"
+          value={edited.defaultEncounter}
+          onChange={setDefaultEncounter}
+          error={issues["defaultContext.encounter"]}
+          disabled={!mayWrite}
+        />
+        <TextField
+          label="Intent"
+          value={edited.intent}
+          onChange={setIntent}
+          error={issues["defaultContext.intent"]}
+          hint="Seeds the launch context when a launch does not supply one. Emptying all three clears it."
+          disabled={!mayWrite}
+        />
 
-          <ListField
-            label="Patients"
-            value={edited.patients}
-            onChange={setPatients}
-            error={issues["attributes"]}
-            hint="One per line. Offered by the patient picker at authorisation time."
-            rows={3}
-            disabled={!mayWrite}
-          />
-          <ListField
-            label="Encounters"
-            value={edited.encounters}
-            onChange={setEncounters}
-            hint="One per line. Offered by the encounter picker at authorisation time."
-            rows={3}
-            disabled={!mayWrite}
-          />
+        <ListField
+          label="Patients"
+          value={edited.patients}
+          onChange={setPatients}
+          error={issues["attributes"]}
+          hint="One per line. Offered by the patient picker at authorisation time."
+          rows={3}
+          disabled={!mayWrite}
+        />
+        <ListField
+          label="Encounters"
+          value={edited.encounters}
+          onChange={setEncounters}
+          hint="One per line. Offered by the encounter picker at authorisation time."
+          rows={3}
+          disabled={!mayWrite}
+        />
 
-          {update.isError && Object.keys(issues).length === 0 ? (
-            <ErrorAlert message={describeError(update.error)} />
-          ) : null}
-          {update.isSuccess ? <InfoAlert>User saved.</InfoAlert> : null}
+        <SaveOutcome
+          error={update.error}
+          issues={issues}
+          isSuccess={update.isSuccess}
+          saved="User saved."
+        />
 
-          {mayWrite ? (
-            <div className="flex items-center gap-3">
-              <SubmitButton pending={update.isPending} disabled={!hasChanges}>
-                Save
-              </SubmitButton>
-              {hasChanges ? null : (
-                <span className="text-base-content/60 text-xs">
-                  Nothing has changed.
-                </span>
-              )}
-            </div>
-          ) : null}
-        </form>
-      </Panel>
+        {mayWrite ? (
+          <SaveRow
+            label="Save"
+            hasChanges={hasChanges}
+            pending={update.isPending}
+          />
+        ) : null}
+      </PatchForm>
 
       {current.isPersona || !mayWrite ? null : (
         <SetPasswordPanel userId={current.id} />
