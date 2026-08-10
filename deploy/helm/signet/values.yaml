@@ -11,6 +11,11 @@ signet:
   # Non-sensitive environment for the server and the migration job. Any variable
   # Signet reads can go here; `.env.example` in the repository root lists them.
   #
+  # The sweep CronJob reads neither this nor `secretConfig`: it takes the owning
+  # identity and its own grace period and nothing else. So a database credential
+  # put here rather than under `database` below would give a migration Job that
+  # works and a sweep that fails nightly.
+  #
   # SIGNET_PUBLIC_URL is the public origin Signet is reached on, and endpoint
   # issuers are derived from it (`{origin}/t/{tenant}/e/{endpoint}`) - so
   # changing it invalidates every issuer already published to FHIR servers and
@@ -53,6 +58,33 @@ signet:
     enabled: true
     backoffLimit: 3
     activeDeadlineSeconds: 600
+
+  # Deletes expired runtime rows across every tenant, nightly.
+  #
+  # On by default, because the growth it removes happens in ordinary use rather
+  # than only when something goes wrong: a passkey ceremony writes a challenge row
+  # that is deleted only when the ceremony completes, so every browser prompt
+  # somebody dismisses leaves one behind. Nothing depends on the job running -
+  # every row it removes is already expired and unusable - so turning it off costs
+  # disk and nothing else.
+  #
+  # This is the second pod spec carrying the owning identity, and the only other
+  # one: the sweep acts across tenants, which the serving role cannot do.
+  sweep:
+    enabled: true
+    # Off the hour, and out of the busy part of the day for most deployments.
+    schedule: "17 3 * * *"
+    # How far the access token sweep's cut-off lags the present. Those records are
+    # a revocation list rather than runtime state, so one deleted the moment it
+    # expires turns a slightly late introspection - a resource server whose clock
+    # is behind Signet's - into an unknown token rather than an inactive one.
+    # A whole number followed by s, m, h or d.
+    accessTokenGrace: "24h"
+    backoffLimit: 3
+    activeDeadlineSeconds: 900
+    startingDeadlineSeconds: 300
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
 
   service:
     type: "ClusterIP"

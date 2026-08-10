@@ -1,0 +1,66 @@
+{{- if .Values.signet.sweep.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-sweep
+  labels:
+    {{- include "signet.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.signet.sweep.schedule | quote }}
+  # Nothing depends on a particular run happening: every row the sweep removes is
+  # already expired and refused on its own `expires_at`, so a skipped run costs
+  # disk and nothing else. `Forbid` rather than `Allow` so a sweep that outlives
+  # its interval on a large database is not joined by a second one deleting the
+  # same rows.
+  concurrencyPolicy: "Forbid"
+  startingDeadlineSeconds: {{ .Values.signet.sweep.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.signet.sweep.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.signet.sweep.failedJobsHistoryLimit }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "signet.labels" . | nindent 8 }}
+    spec:
+      backoffLimit: {{ .Values.signet.sweep.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.signet.sweep.activeDeadlineSeconds }}
+      template:
+        metadata:
+          # Deliberately not `signet.selectorLabels`, for the reason the migration
+          # Job's pods are not: a pod matching the Service's selector would be an
+          # endpoint of the server it is sweeping for.
+          labels:
+            app.kubernetes.io/name: {{ printf "%s-sweep" .Chart.Name }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          imagePullSecrets: {{ toJson .Values.signet.imagePullSecrets }}
+          securityContext: {{ toJson .Values.signet.podSecurityContext }}
+          containers:
+            - name: sweep
+              image: {{ .Values.signet.image | quote }}
+              imagePullPolicy: {{ .Values.signet.imagePullPolicy | quote }}
+              securityContext: {{ toJson .Values.signet.securityContext }}
+              command: ["node", "dist/index.js", "sweep"]
+              env:
+                # The owning identity and the cut-off, and nothing else: those are
+                # the only two variables `sweep` reads. It needs the owner for the
+                # reason `migrate` does - it acts across tenants, and the serving
+                # role sees none of those rows - and it observes the role it was
+                # actually given rather than trusting the variable's name, so a
+                # wrong credential here fails the Job rather than reporting a
+                # clean database. See `apps/server/src/sweep.ts`.
+                {{- include "signet.ownerEnv" . | trim | nindent 16 }}
+                - name: SIGNET_SWEEP_ACCESS_TOKEN_GRACE
+                  value: {{ .Values.signet.sweep.accessTokenGrace | quote }}
+              resources: {{ toJson .Values.signet.resources }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
+          nodeSelector: {{ toJson .Values.signet.nodeSelector }}
+          affinity: {{ toJson .Values.signet.affinity }}
+          tolerations: {{ toJson .Values.signet.tolerations }}
+{{- end }}

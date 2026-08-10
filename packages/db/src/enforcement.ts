@@ -24,8 +24,15 @@
  * yet, which is exactly the state of a freshly migrated deployment.
  *
  * Split into observing and deciding on purpose: the decision is a pure function
- * over five facts per table, so every combination is asserted in
+ * over the facts below, so every combination is asserted in
  * `./enforcement.test.ts` without a database, and only the asking needs one.
+ *
+ * Two decisions are made over the same observations, in opposite directions. The
+ * server must be constrained by the policies, which {@link classifyEnforcement}
+ * requires; the expiry sweep must be exempt from them, which
+ * {@link classifySweepIdentity} requires. They are separate functions rather than
+ * one with a flag, because a shared implementation is one edit away from checking
+ * the wrong direction for one of its callers.
  *
  * Author: John Grimes
  */
@@ -43,6 +50,14 @@ export interface TableObservation {
   readonly present: boolean;
   /** Whether row-level security is enabled on it. */
   readonly policiesEnabled: boolean;
+  /**
+   * Whether those policies are forced, which binds the table's owner as well.
+   *
+   * Irrelevant to the server, whose role owns nothing either way, and decisive
+   * for the sweep: a forced policy leaves `BYPASSRLS` as the only identity that
+   * can act across tenants. See `force` in `./rls.ts`.
+   */
+  readonly policiesForced: boolean;
   /** The role that owns it, or null when the table is absent. */
   readonly owner: string | null;
   /**
@@ -204,10 +219,116 @@ export function classifyEnforcement(
   };
 }
 
+/** What the sweep's identity check concluded. */
+export type SweepIdentityOutcome =
+  "healthy" | "schema-absent" | "role-constrained";
+
+/** Whether the connection given to the sweep can act across tenants. */
+export interface SweepIdentityVerdict {
+  readonly outcome: SweepIdentityOutcome;
+  /** The role the connection was made by. */
+  readonly role: string;
+  /** One line, naming what was found and what to do about it. */
+  readonly message: string;
+}
+
+/**
+ * Decides whether the connection the sweep was given can actually sweep.
+ *
+ * The mirror image of {@link classifyEnforcement}, and deliberately not a
+ * parameter on it: the server must be constrained by the policies and the sweep
+ * must be exempt from them, so the same observations mean opposite things and a
+ * shared function with a flag would be one edit away from checking the wrong
+ * direction.
+ *
+ * Exemption on *every* covered table is required, because partial exemption is the
+ * outcome nobody can read: real counts for the tables the role could see, zero for
+ * the rest, and a job that reports success on a database that is still growing.
+ *
+ * @param observations - What the sweep's own connection was asked.
+ * @returns The outcome, with a message naming the remedy.
+ * @throws {Error} When no covered table was observed, which would otherwise be a
+ *   role exempt on all zero tables.
+ * @example
+ * ```ts
+ * const verdict = classifySweepIdentity(await observeEnforcement(db));
+ * if (verdict.outcome !== "healthy") {
+ *   throw new ConfigError(verdict.message);
+ * }
+ * ```
+ */
+export function classifySweepIdentity(
+  observations: EnforcementObservations,
+): SweepIdentityVerdict {
+  const { role, tables } = observations;
+  if (tables.length === 0) {
+    throw new Error(
+      "The sweep's identity check observed no covered tables, so it can conclude nothing",
+    );
+  }
+
+  // An absent schema first, for the reason it is first above: every other
+  // observation is a consequence of it, and the remedy is to migrate rather than
+  // to change a credential.
+  const missing = tables
+    .filter((observed) => !observed.present || !observed.policiesEnabled)
+    .map((observed) =>
+      observed.present
+        ? `${observed.table} has row-level security disabled`
+        : `${observed.table} is absent`,
+    );
+  if (missing.length > 0) {
+    return {
+      outcome: "schema-absent",
+      role,
+      message: `Tenant isolation is not installed on this database: ${listOf(missing)}. Run the migrate command with the owning identity before sweeping.`,
+    };
+  }
+
+  if (observations.bypassesPolicies) {
+    return {
+      outcome: "healthy",
+      role,
+      message: `Database role ${role} holds BYPASSRLS, so the sweep reaches every tenant's expired rows`,
+    };
+  }
+
+  // Ownership is not exemption where the policies are forced, which is the state
+  // an ownership-only check would call healthy and then sweep nothing at all.
+  const forced = tables
+    .filter((observed) => observed.policiesForced)
+    .map((observed) => observed.table);
+  if (forced.length > 0) {
+    return {
+      outcome: "role-constrained",
+      role,
+      message: `The tenant isolation policies on ${listOf(forced)} are forced, which binds their owner as well, so a sweep run as ${role} would delete nothing there and report a clean database. A forced policy leaves BYPASSRLS as the only identity that can sweep: give SIGNET_DATABASE_OWNER_URL a role holding it.`,
+    };
+  }
+
+  const hidden = tables
+    .filter((observed) => !observed.roleHasOwnerRights)
+    .map((observed) => observed.table);
+  if (hidden.length > 0) {
+    return {
+      outcome: "role-constrained",
+      role,
+      message: `Database role ${role} is subject to the tenant isolation policies on ${listOf(hidden)}, so a sweep run as it would delete nothing there and report a clean database. The sweep acts across tenants and needs the identity that owns the schema: give it SIGNET_DATABASE_OWNER_URL, as the migration job is given it.`,
+    };
+  }
+
+  return {
+    outcome: "healthy",
+    role,
+    message: `Database role ${role} owns all ${String(tables.length)} covered tables, so the sweep reaches every tenant's expired rows`,
+  };
+}
+
 /** One row of the catalogue query, before it is shaped into an observation. */
 interface CatalogueRow {
   readonly table_name: string;
   readonly rls_enabled: boolean;
+  readonly rls_forced: boolean;
   readonly owner: string;
   readonly owner_rights: boolean;
   readonly readable: boolean;
@@ -241,6 +362,7 @@ export async function observeEnforcement(
            coalesce(r.rolbypassrls, false) as bypasses,
            c.relname::text as table_name,
            c.relrowsecurity as rls_enabled,
+           c.relforcerowsecurity as rls_forced,
            pg_get_userbyid(c.relowner)::text as owner,
            pg_has_role(current_user, c.relowner, 'usage') as owner_rights,
            has_table_privilege(current_user, c.oid, 'select') as readable,
@@ -275,6 +397,7 @@ export async function observeEnforcement(
             table,
             present: false,
             policiesEnabled: false,
+            policiesForced: false,
             owner: null,
             roleHasOwnerRights: false,
             readable: false,
@@ -284,6 +407,7 @@ export async function observeEnforcement(
             table,
             present: true,
             policiesEnabled: row.rls_enabled,
+            policiesForced: row.rls_forced,
             owner: row.owner,
             roleHasOwnerRights: row.owner_rights,
             readable: row.readable,

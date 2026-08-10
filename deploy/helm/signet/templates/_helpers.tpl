@@ -85,24 +85,41 @@ keeps the credential out of every rendered manifest.
 {{/*
 The migration Job's environment: the serving identity's, plus the owning one.
 
-`migrate` is the only command that needs the owner credential, and this is the
-only template that supplies it. Migrations are DDL, and the grants that follow
-them must be issued by the role that owns the objects being granted - so the
-credential exists at one point in a deployment's life rather than sitting in the
-running pod for its lifetime.
+`migrate` needs both, and is the only command that does: it applies DDL as the
+owner, and grants the serving role the access the server needs - which means
+knowing that role's *name*, which it takes from the serving connection. It never
+uses the serving password.
 
 With the bundled PostgreSQL the two identities already exist and no role has to
 be created: `postgres.owner` owns whatever the migrations create, and
 `postgres.servingRole` - which the server connects as - owns nothing and is
-therefore bound by the policies. The URL is composed from the password using
-Kubernetes' dependent-variable expansion, which substitutes a `$(VAR)` naming an
-earlier entry in the same container's `env`. That expects a URL-safe password:
-the chart generates an alphanumeric one, and an operator supplying their own
-with reserved characters in it should point at an external database and pass a
-complete URL through `database.ownerExistingSecret` instead.
+therefore bound by the policies.
+
+The owning half is `signet.ownerEnv` below, which the sweep CronJob takes on its
+own. Those two are the only pod specs in this chart that carry it, and
+`scripts/checkChartCredentials.mjs` asserts as much against the rendered output.
 */}}
 {{- define "signet.migrationEnv" -}}
-{{ include "signet.env" . }}
+{{ include "signet.env" . }}{{ include "signet.ownerEnv" . }}
+{{- end -}}
+
+{{/*
+The owning identity on its own, for a pod that needs it and nothing else.
+
+The expiry sweep is that pod. It acts across tenants - which is what the serving
+role must not be able to do - and it reads no other configuration at all: no
+public URL, no master key, and not the serving connection either, which it would
+delete nothing with. So it is given this rather than `signet.migrationEnv`, and
+holds no credential it has no use for.
+
+With the bundled PostgreSQL the URL is composed from the password using
+Kubernetes' dependent-variable expansion, which substitutes a `$(VAR)` naming an
+earlier entry in the same container's `env`. That expects a URL-safe password:
+the chart generates an alphanumeric one, and an operator supplying their own with
+reserved characters in it should point at an external database and pass a
+complete URL through `database.ownerExistingSecret` instead.
+*/}}
+{{- define "signet.ownerEnv" -}}
 {{- if .Values.signet.postgres.enabled }}
 - name: SIGNET_DATABASE_OWNER_PASSWORD
   valueFrom:

@@ -21,13 +21,13 @@
  * function can safely remain callable at all - there is no partial outcome, and its
  * existence grants the server nothing.
  *
- * ## No caller
+ * ## Who calls it
  *
- * Nothing in `apps/server` invokes this. There is no command, no route and no
- * scheduler; an operator who wants the sweep run must arrange it against the
- * owning credential themselves, and `docs/operations.md` says so. Wiring it to a
- * command and a scheduled job is separate work, deliberately left out of the
- * feature that made the two identities distinct.
+ * `apps/server/src/sweep.ts`, as the `sweep` command, which the Helm chart runs on
+ * a nightly CronJob. That command observes the role it was given before deleting
+ * anything and refuses one the policies bind, because the alternative - every
+ * count coming back zero - is indistinguishable from a database with nothing to
+ * reclaim. There is still no route: this is a maintenance job, not a request.
  *
  * Author: John Grimes
  */

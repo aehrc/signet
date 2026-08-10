@@ -6,16 +6,17 @@ something is wrong.
 
 ## Configuration
 
-| Variable                                | Required  | What it does                                                                                                                                                                                                                                                |
-| --------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                                  | no        | Listen port. Defaults to 3000.                                                                                                                                                                                                                              |
-| `SIGNET_PUBLIC_URL`                     | yes       | The origin Signet is reached on. **Every issuer identifier is derived from it**, so changing it invalidates every issuer already published to FHIR servers and registered with apps.                                                                        |
-| `SIGNET_DATABASE_URL`                   | yes       | Postgres connection string, naming the **serving role** - which must own none of Signet's tables. `SIGNET_DATABASE_HOST`/`_PORT`/`_NAME`/`_USER`/`_PASSWORD` are accepted instead, which is what the Helm chart uses when it wires up the bundled subchart. |
-| `SIGNET_DATABASE_OWNER_URL`             | `migrate` | The **owning identity**, read by `migrate` and by nothing else. See [the two database identities](#the-two-database-identities).                                                                                                                            |
-| `SIGNET_MASTER_KEY`                     | yes       | Encrypts endpoint signing keys and upstream client secrets at rest. At least 32 characters. See below.                                                                                                                                                      |
-| `SIGNET_LOG_LEVEL`                      | no        | `debug`, `info`, `warn` or `error`. Defaults to `info`.                                                                                                                                                                                                     |
-| `SIGNET_WEB_ROOT`                       | no        | Directory of the built console. Set in the image; unset in development, where Vite serves it.                                                                                                                                                               |
-| `SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES` | no        | Turns off the SSRF guard on outbound fetches. For a development or connectathon stack whose identity provider is on a private address. **Never set this in production** - see `apps/server/src/security/outboundFetch.ts` for exactly what it disables.     |
+| Variable                                | Required           | What it does                                                                                                                                                                                                                                                |
+| --------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                  | no                 | Listen port. Defaults to 3000.                                                                                                                                                                                                                              |
+| `SIGNET_PUBLIC_URL`                     | yes                | The origin Signet is reached on. **Every issuer identifier is derived from it**, so changing it invalidates every issuer already published to FHIR servers and registered with apps.                                                                        |
+| `SIGNET_DATABASE_URL`                   | yes                | Postgres connection string, naming the **serving role** - which must own none of Signet's tables. `SIGNET_DATABASE_HOST`/`_PORT`/`_NAME`/`_USER`/`_PASSWORD` are accepted instead, which is what the Helm chart uses when it wires up the bundled subchart. |
+| `SIGNET_DATABASE_OWNER_URL`             | `migrate`, `sweep` | The **owning identity**, read by those two commands and by nothing else. See [the two database identities](#the-two-database-identities).                                                                                                                   |
+| `SIGNET_SWEEP_ACCESS_TOKEN_GRACE`       | no                 | How far the `sweep` command's access token cut-off lags the present, as a whole number and a unit - `24h`, `30m`, `7d`. Defaults to `24h`. See [the expiry sweep](#the-expiry-sweep).                                                                       |
+| `SIGNET_MASTER_KEY`                     | yes                | Encrypts endpoint signing keys and upstream client secrets at rest. At least 32 characters. See below.                                                                                                                                                      |
+| `SIGNET_LOG_LEVEL`                      | no                 | `debug`, `info`, `warn` or `error`. Defaults to `info`.                                                                                                                                                                                                     |
+| `SIGNET_WEB_ROOT`                       | no                 | Directory of the built console. Set in the image; unset in development, where Vite serves it.                                                                                                                                                               |
+| `SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES` | no                 | Turns off the SSRF guard on outbound fetches. For a development or connectathon stack whose identity provider is on a private address. **Never set this in production** - see `apps/server/src/security/outboundFetch.ts` for exactly what it disables.     |
 
 Commands, all on the same image:
 
@@ -23,13 +24,14 @@ Commands, all on the same image:
 node dist/index.js            # serve
 node dist/index.js migrate    # apply migrations, then exit
 node dist/index.js bootstrap  # create the first tenant and administrator, then exit
+node dist/index.js sweep      # delete expired rows across every tenant, then exit
 ```
 
-`migrate` and `bootstrap` need only a database connection - not the public URL or
-the master key - so a migration job's manifest stays minimal. They do not need the
-same identity, though: `migrate` is the only command that needs the one owning the
-schema, and `bootstrap` runs as the serving role like the server does. See [the two
-database identities](#the-two-database-identities).
+None of the three sub-commands needs the public URL or the master key - a job's
+manifest stays minimal - but they do not all need the same identity. `migrate` and `sweep` need
+the one owning the schema, for different reasons: migrations are DDL, and the
+sweep acts across tenants. `bootstrap` runs as the serving role like the server
+does. See [the two database identities](#the-two-database-identities).
 
 ## Tenant isolation in the database
 
@@ -73,17 +75,18 @@ them. So a deployment runs two identities:
 
 | Identity            | Owns the schema | Policies apply | Used by                            |
 | ------------------- | --------------- | -------------- | ---------------------------------- |
-| **Owning identity** | yes             | no             | `migrate`, and the expiry sweep    |
+| **Owning identity** | yes             | no             | `migrate` and `sweep`              |
 | **Serving role**    | no              | yes            | the server, `bootstrap`, the suite |
 
 `SIGNET_DATABASE_URL` names the serving role - it keeps the meaning it always
 had, and what changed is that the role it names must be non-owning.
 `SIGNET_DATABASE_OWNER_URL` names the owning identity and is read by `migrate`
-alone, so the owner credential exists at one point in a deployment's life rather
-than sitting in the running pod. `migrate` reads both: it connects as the owner,
-and it takes the serving role's _name_ from `SIGNET_DATABASE_URL` in order to
-grant it - it never uses that role's password. Two URLs naming the same role are
-refused, because that deployment could not enforce isolation.
+and `sweep` alone, so the owner credential reaches a job rather than sitting in
+the running pod. `migrate` reads both: it connects as the owner, and it takes the
+serving role's _name_ from `SIGNET_DATABASE_URL` in order to grant it - it never
+uses that role's password. Two URLs naming the same role are refused, because that
+deployment could not enforce isolation. `sweep` reads only the owner URL, and
+checks that the role it names is in fact exempt before it deletes anything.
 
 Creating the serving role, if you are not using the bundled compose stack or the
 Helm chart. Nothing is granted here - `migrate` issues the grants, as the owning
@@ -214,21 +217,54 @@ select slug from endpoints;
 
 ### The expiry sweep
 
-`sweepExpiredRuntimeRows` in `packages/db/src/repositories/sweep.ts` deletes
-expired authorization codes, sessions, tokens, consents, `jti` records and passkey
-ceremony challenges. It
-operates on rows from every tenant, which is what a maintenance job is for, and is
-therefore the one path besides `migrate` that **needs the owning identity**.
-Attempted with the serving role it deletes nothing at all rather than partially
-succeeding - the policies hide every row from a connection that has declared no
-tenant - so its existence gives the server no cross-tenant capability. Both
-directions are asserted in
-`packages/db/src/repositories/repositories.integration.test.ts`.
+`node dist/index.js sweep` deletes expired authorization codes, sessions, tokens,
+consents, `jti` records and passkey ceremony challenges. It operates on rows from
+every tenant, which is what a maintenance job is for, and is therefore the one
+path besides `migrate` that **needs the owning identity**. Attempted with the
+serving role it deletes nothing at all rather than partially succeeding - the
+policies hide every row from a connection that has declared no tenant - so its
+existence gives the server no cross-tenant capability. Both directions are
+asserted in `packages/db/src/repositories/repositories.integration.test.ts`.
 
-It has no scheduler and no wired caller in this release. Every row it removes is
-already expired and unusable, so nothing depends on it running; it reclaims space.
-Deployments that want it run it out of band, as the owning identity, until it gets
-a command of its own.
+Every row it removes is already expired and refused on the strength of its own
+`expires_at`, so the sweep reclaims storage and can grant or revoke nothing, and
+nothing breaks on a deployment that skips a run. What makes it worth scheduling is
+`admin_passkey_challenges`: a row is written whenever a sign-in or registration
+ceremony starts and deleted only when one completes, so every browser prompt
+somebody dismisses leaves one behind, and the table grows in ordinary use.
+
+The Helm chart runs it as a CronJob at 03:17 daily in the cluster's timezone -
+UTC unless the control plane says otherwise, since the chart sets no `timeZone` -
+which `signet.sweep.enabled` turns off and `signet.sweep.schedule` moves.
+Elsewhere, run it on whatever scheduler the deployment has:
+
+```sh
+SIGNET_DATABASE_OWNER_URL=postgres://signet:...@db:5432/signet \
+  node dist/index.js sweep
+```
+
+It writes two lines and nothing else - the role it verified, and what each table
+gave up:
+
+```json
+{ "message": "signet.sweep.identity-verified", "role": "signet" }
+{ "message": "signet.sweep.completed", "deleted": 412, "launchContexts": 3, ... }
+```
+
+**Given the serving role it refuses rather than running.** Every count would come
+back zero, which is indistinguishable from a database with nothing to reclaim, so
+a job configured that way would report success nightly while the tables it was
+meant to be trimming grew. The command observes the role it was actually given -
+the same observation the server makes at startup, read the other way round - and
+exits non-zero naming the role and the remedy. Ownership is not enough on its own:
+where the policies were installed with `force`, which binds the owner too, the
+sweep needs a role holding `BYPASSRLS` and refuses anything less.
+
+Access token records lag behind the rest. They are a revocation list rather than
+runtime state: an introspection arriving a moment after a token expired should be
+answered with `active: false` and the token's metadata rather than as an unknown
+token, and a resource server's clock may be behind Signet's. So their cut-off is
+`SIGNET_SWEEP_ACCESS_TOKEN_GRACE` behind the present, defaulting to `24h`.
 
 ## Passkeys on console accounts
 
