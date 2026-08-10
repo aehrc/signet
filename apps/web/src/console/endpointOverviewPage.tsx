@@ -46,6 +46,7 @@ import { capabilityLabel, formatDuration } from "../formatting/values.js";
 import {
   capabilityPatch,
   endpointSettingsFormValues,
+  endpointSettingsIssues,
   endpointSettingsPatch,
 } from "../forms/endpointEdit.js";
 
@@ -119,42 +120,50 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
   const { tenant, endpointSlug, endpoint } = useEndpointContext();
   const update = useUpdateEndpoint(tenant, endpointSlug);
 
+  // One piece of state per field, undefined until edited, so the rendered value is
+  // `edited ?? loaded` - the same shape the two detail pages use. It matters here
+  // because this form no longer remounts on a save: a field nobody touched follows
+  // the endpoint as it refetches, rather than holding a stale value and reporting it
+  // as a change somebody made.
+  const [name, setName] = useState<string | undefined>();
+  const [description, setDescription] = useState<string | undefined>();
+  const [fhirBaseUrl, setFhirBaseUrl] = useState<string | undefined>();
+  const [accessTokenTtl, setAccessTokenTtl] = useState<string | undefined>();
+  const [refreshTokenTtl, setRefreshTokenTtl] = useState<string | undefined>();
+  const [authMode, setAuthMode] = useState<string | undefined>();
+  const [consentMode, setConsentMode] = useState<string | undefined>();
+  const [isProduction, setIsProduction] = useState<boolean | undefined>();
+  const [status, setStatus] = useState<string | undefined>();
+
   // Read through the same function the patch compares against, so the two cannot
   // disagree about what "unchanged" means.
   const loaded = endpointSettingsFormValues(endpoint);
-  const [name, setName] = useState(loaded.name);
-  const [description, setDescription] = useState(loaded.description);
-  const [fhirBaseUrl, setFhirBaseUrl] = useState(loaded.fhirBaseUrl);
-  const [accessTokenTtl, setAccessTokenTtl] = useState(loaded.accessTokenTtl);
-  const [refreshTokenTtl, setRefreshTokenTtl] = useState(
-    loaded.refreshTokenTtl,
-  );
-  const [authMode, setAuthMode] = useState(loaded.authMode);
-  const [consentMode, setConsentMode] = useState(loaded.consentMode);
-  const [isProduction, setIsProduction] = useState(loaded.isProduction);
-  const [status, setStatus] = useState(loaded.status);
+  const edited = {
+    name: name ?? loaded.name,
+    description: description ?? loaded.description,
+    fhirBaseUrl: fhirBaseUrl ?? loaded.fhirBaseUrl,
+    accessTokenTtl: accessTokenTtl ?? loaded.accessTokenTtl,
+    refreshTokenTtl: refreshTokenTtl ?? loaded.refreshTokenTtl,
+    authMode: authMode ?? loaded.authMode,
+    consentMode: consentMode ?? loaded.consentMode,
+    isProduction: isProduction ?? loaded.isProduction,
+    status: status ?? loaded.status,
+  };
 
-  const issues = issuesByField(update.error);
+  // The form's own refusals take precedence over the API's, which describe the
+  // request that was sent rather than what the field holds now.
+  const refused = endpointSettingsIssues(edited);
+  const issues = { ...issuesByField(update.error), ...refused };
 
   // Computed for the render, not only for the submit: an empty patch must not be
   // sent, and the reason it will not be has to be visible before the button is
   // pressed. The API accepts an empty patch and records an `endpoint.updated` audit
   // event naming no fields, which is a write nobody asked for and nobody can undo.
-  const patch = endpointSettingsPatch(
-    {
-      name,
-      description,
-      fhirBaseUrl,
-      accessTokenTtl,
-      refreshTokenTtl,
-      authMode,
-      consentMode,
-      isProduction,
-      status,
-    },
-    endpoint,
-  );
-  const hasChanges = Object.keys(patch).length > 0;
+  const patch = endpointSettingsPatch(edited, endpoint);
+  // A refused field blocks the whole save rather than only its own value. Saving
+  // around it would write the other fields and drop this one without saying so.
+  const blocked = Object.keys(refused).length > 0;
+  const hasChanges = Object.keys(patch).length > 0 && !blocked;
 
   return (
     <PatchForm
@@ -167,14 +176,14 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
     >
       <TextField
         label="Name"
-        value={name}
+        value={edited.name}
         onChange={setName}
         error={issues["name"]}
         disabled={disabled}
       />
       <TextField
         label="Description"
-        value={description}
+        value={edited.description}
         onChange={setDescription}
         error={issues["description"]}
         disabled={disabled}
@@ -182,7 +191,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
       <TextField
         label="FHIR base URL"
         type="url"
-        value={fhirBaseUrl}
+        value={edited.fhirBaseUrl}
         onChange={setFhirBaseUrl}
         error={issues["fhirBaseUrl"]}
         hint="Changing this changes the audience of every token issued from now on. Tokens already issued keep the old one."
@@ -192,7 +201,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
       <div className="grid gap-3 sm:grid-cols-2">
         <TextField
           label="Access token lifetime (seconds)"
-          value={accessTokenTtl}
+          value={edited.accessTokenTtl}
           onChange={setAccessTokenTtl}
           error={issues["accessTokenTtl"]}
           hint={`Currently ${formatDuration(endpoint.accessTokenTtl)}. A resource server cannot revoke an access token, so this is the window a leaked one still works in.`}
@@ -200,7 +209,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
         />
         <TextField
           label="Refresh token lifetime (seconds)"
-          value={refreshTokenTtl}
+          value={edited.refreshTokenTtl}
           onChange={setRefreshTokenTtl}
           error={issues["refreshTokenTtl"]}
           hint={`Currently ${formatDuration(endpoint.refreshTokenTtl)}.`}
@@ -211,7 +220,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
       <div className="grid gap-3 sm:grid-cols-2">
         <SelectField
           label="End-user authentication"
-          value={authMode}
+          value={edited.authMode}
           onChange={setAuthMode}
           error={issues["authMode"]}
           options={[
@@ -222,7 +231,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
         />
         <SelectField
           label="Consent"
-          value={consentMode}
+          value={edited.consentMode}
           onChange={setConsentMode}
           error={issues["consentMode"]}
           options={[
@@ -235,7 +244,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
 
       <SelectField
         label="Status"
-        value={status}
+        value={edited.status}
         onChange={setStatus}
         error={issues["status"]}
         options={[
@@ -246,15 +255,15 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
 
       <CheckboxField
         label="This is a production endpoint"
-        checked={isProduction}
+        checked={edited.isProduction}
         onChange={setIsProduction}
         disabled={disabled}
         hint="Personas - accounts with no password - are only selectable when this is off. Leave it on unless this endpoint exists for a connectathon or a demonstration."
       />
 
-      {isProduction === endpoint.isProduction ? null : (
+      {edited.isProduction === endpoint.isProduction ? null : (
         <InfoAlert>
-          {isProduction
+          {edited.isProduction
             ? "Turning this on stops personas being selectable. Anyone relying on one will have to sign in with a password."
             : "Turning this off makes every persona on this endpoint selectable without a password. Do not do this on an endpoint holding real data."}
         </InfoAlert>
@@ -270,6 +279,9 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
           label="Save settings"
           hasChanges={hasChanges}
           pending={update.isPending}
+          disabledReason={
+            blocked ? "Fix the fields marked above before saving." : undefined
+          }
         />
       )}
     </PatchForm>
@@ -282,13 +294,20 @@ function CapabilitiesPanel({
 }: Readonly<{ readonly disabled: boolean }>) {
   const { tenant, endpointSlug, endpoint } = useEndpointContext();
   const update = useUpdateEndpoint(tenant, endpointSlug);
-  const [flags, setFlags] = useState<Record<string, boolean>>({
-    ...endpoint.capabilities,
-  });
+  // Only the boxes somebody has actually clicked, for the same reason the settings
+  // form holds only the fields somebody has typed in: a flag nobody touched follows
+  // the endpoint as it refetches instead of standing as a change it is not.
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
 
   // Sorted by name so the order does not depend on how the server happened to
   // serialise the object.
   const names = Object.keys(endpoint.capabilities).toSorted();
+  const flags = Object.fromEntries(
+    names.map((name) => [
+      name,
+      toggled[name] ?? endpoint.capabilities[name] ?? false,
+    ]),
+  );
 
   // As in the settings form above: the patch is computed for the render so that an
   // untouched set of checkboxes cannot produce an `endpoint.updated` audit event
@@ -313,7 +332,7 @@ function CapabilitiesPanel({
             checked={flags[name] ?? false}
             disabled={disabled}
             onChange={(checked) => {
-              setFlags((current) => ({ ...current, [name]: checked }));
+              setToggled((current) => ({ ...current, [name]: checked }));
             }}
           />
         ))}

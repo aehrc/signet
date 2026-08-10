@@ -419,16 +419,22 @@ export function PatchForm({
  *
  * {@link PatchForm} guards the submit on the same condition, so a form built from the
  * two cannot send an empty patch even if the button is reached another way.
+ *
+ * `disabledReason` overrides what is said when there is a reason other than an
+ * unedited form - a field the form itself refuses, which would otherwise be reported
+ * as "Nothing has changed." to somebody who had just typed something.
  */
 export function SaveRow({
   label,
   hasChanges,
   pending,
+  disabledReason,
   className,
 }: Readonly<{
   readonly label: string;
   readonly hasChanges: boolean;
   readonly pending: boolean;
+  readonly disabledReason?: string | undefined;
   readonly className?: string | undefined;
 }>) {
   return (
@@ -438,7 +444,7 @@ export function SaveRow({
       </SubmitButton>
       {hasChanges ? null : (
         <span className="text-base-content/60 text-xs">
-          Nothing has changed.
+          {disabledReason ?? "Nothing has changed."}
         </span>
       )}
     </div>

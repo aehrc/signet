@@ -7,6 +7,7 @@ import { describe, expect, it } from "bun:test";
 import {
   capabilityPatch,
   endpointSettingsFormValues,
+  endpointSettingsIssues,
   endpointSettingsPatch,
 } from "./endpointEdit.js";
 
@@ -173,6 +174,54 @@ describe("endpointSettingsPatch", () => {
       isProduction: false,
       status: "disabled",
     });
+  });
+});
+
+describe("endpointSettingsIssues", () => {
+  it("finds nothing wrong with the values as loaded", () => {
+    const values = endpointSettingsFormValues(endpointView());
+
+    expect(endpointSettingsIssues(values)).toEqual({});
+  });
+
+  it("reports a lifetime that is not a whole number of seconds", () => {
+    // The patch drops such a value rather than sending `NaN`, so without a message
+    // the form would say "Nothing has changed." to somebody who had just typed
+    // something - and, worse, would save an edit to another field while quietly
+    // discarding this one.
+    const values = endpointSettingsFormValues(endpointView());
+
+    for (const text of ["", "  ", "0", "-1", "12x", "1.5"]) {
+      expect(
+        endpointSettingsIssues({ ...values, accessTokenTtl: text }),
+      ).toEqual({
+        accessTokenTtl: "Enter a whole number of seconds greater than zero.",
+      });
+    }
+  });
+
+  it("reports each lifetime under its own field", () => {
+    const values = endpointSettingsFormValues(endpointView());
+
+    expect(
+      endpointSettingsIssues({
+        ...values,
+        accessTokenTtl: "no",
+        refreshTokenTtl: "",
+      }),
+    ).toEqual({
+      accessTokenTtl: "Enter a whole number of seconds greater than zero.",
+      refreshTokenTtl: "Enter a whole number of seconds greater than zero.",
+    });
+  });
+
+  it("accepts a lifetime with surrounding whitespace", () => {
+    // The parser trims, so the form must not report an issue the patch does not have.
+    const values = endpointSettingsFormValues(endpointView());
+
+    expect(
+      endpointSettingsIssues({ ...values, accessTokenTtl: " 1800 " }),
+    ).toEqual({});
   });
 });
 

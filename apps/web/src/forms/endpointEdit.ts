@@ -70,6 +70,46 @@ export function endpointSettingsFormValues(
   };
 }
 
+/** What the form says about a lifetime it cannot send. */
+const LIFETIME_MESSAGE = "Enter a whole number of seconds greater than zero.";
+
+/**
+ * The problems with a set of settings edits, by field.
+ *
+ * Only the lifetimes, and only the part the API never gets to answer: a value that is
+ * not a positive integer is left out of the patch, so without this the form would drop
+ * the edit and say nothing - and would go on to save an edit to another field while
+ * discarding this one. Every other rule belongs to the API, which reports it against
+ * the field that caused it.
+ *
+ * @param edited - The form's current values.
+ * @returns A message per offending field; empty when there is nothing to say.
+ * @example
+ * endpointSettingsIssues({ ...values, accessTokenTtl: "1.5" });
+ * // { accessTokenTtl: "Enter a whole number of seconds greater than zero." }
+ */
+export function endpointSettingsIssues(
+  edited: EndpointSettingsFormValues,
+): Record<string, string> {
+  const issues: Record<string, string> = {};
+  for (const [name, text] of lifetimeFields(edited)) {
+    if (parsePositiveInteger(text) === undefined) {
+      issues[name] = LIFETIME_MESSAGE;
+    }
+  }
+  return issues;
+}
+
+/** The two lifetime fields, as the name the API knows and the text as typed. */
+function lifetimeFields(
+  edited: EndpointSettingsFormValues,
+): readonly (readonly [string, string])[] {
+  return [
+    ["accessTokenTtl", edited.accessTokenTtl],
+    ["refreshTokenTtl", edited.refreshTokenTtl],
+  ];
+}
+
 /**
  * Builds the PATCH body for a set of settings edits.
  *
@@ -108,13 +148,13 @@ export function endpointSettingsPatch(
     },
   );
 
-  const lifetimes: readonly (readonly [string, string, number])[] = [
-    ["accessTokenTtl", edited.accessTokenTtl, current.accessTokenTtl],
-    ["refreshTokenTtl", edited.refreshTokenTtl, current.refreshTokenTtl],
-  ];
-  for (const [name, text, loaded] of lifetimes) {
+  const loaded: Readonly<Record<string, number>> = {
+    accessTokenTtl: current.accessTokenTtl,
+    refreshTokenTtl: current.refreshTokenTtl,
+  };
+  for (const [name, text] of lifetimeFields(edited)) {
     const value = parsePositiveInteger(text);
-    if (value !== undefined && value !== loaded) {
+    if (value !== undefined && value !== loaded[name]) {
       patch[name] = value;
     }
   }

@@ -349,6 +349,45 @@ test.describe("an authenticated operator", () => {
     );
   });
 
+  test("refuses a lifetime it cannot send rather than dropping it", async ({
+    page,
+  }) => {
+    // Also read-only. A lifetime that is not a positive integer is left out of the
+    // patch, so without a message the form would report "Nothing has changed." to
+    // somebody who had just typed something - and would save an edit to another
+    // field while quietly discarding this one.
+    await page.goto(OVERVIEW);
+    const form = panelForm(page, "Settings");
+    const name = form.getByLabel("Name");
+    const lifetime = form.getByLabel("Access token lifetime (seconds)");
+    await expect(lifetime).toHaveValue(/\d+/);
+    const loadedName = await name.inputValue();
+
+    await lifetime.fill("not a number");
+    await expect(
+      form.getByText("Enter a whole number of seconds greater than zero."),
+    ).toBeVisible();
+    await expect(
+      form.getByText("Fix the fields marked above before saving."),
+    ).toBeVisible();
+    await expect(
+      form.getByRole("button", { name: "Save settings" }),
+    ).toBeDisabled();
+
+    // And it blocks the whole save, not only its own field: a form that saved
+    // around it would write the new name and drop the lifetime without saying so.
+    await name.fill(`${loadedName} edited`);
+    await expect(
+      form.getByRole("button", { name: "Save settings" }),
+    ).toBeDisabled();
+
+    // Putting a usable value back releases it.
+    await lifetime.fill("900");
+    await expect(
+      form.getByRole("button", { name: "Save settings" }),
+    ).toBeEnabled();
+  });
+
   test("sends nothing when endpoint capabilities are saved unchanged", async ({
     page,
   }) => {
