@@ -1391,7 +1391,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       return { fixture, liveHandle };
     }
 
-    it("affects no rows when the serving role attempts it", async () => {
+    it("affects no tenant-owned rows when the serving role attempts it", async () => {
       // The converse of the test below, and the reason it is safe for the serving
       // role to be able to call the sweep at all. The policies hide every row from
       // a connection that has declared no tenant, so a cross-tenant delete issued
@@ -1401,7 +1401,23 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
 
       const counts = await sweepExpiredRuntimeRows(db);
 
-      expect(counts).toEqual({
+      // Every tenant-owned table, named one at a time rather than compared as a
+      // whole object. The sweep also reaches two tables the policies exempt -
+      // `admin_sessions` and `admin_passkey_challenges`, both of which hang off a
+      // person rather than a tenant - and the serving role can delete from those,
+      // correctly. Asserting zero for them would be asserting something this test
+      // does not claim, and would fail the moment another suite in the run left an
+      // expired challenge behind.
+      expect({
+        launchContexts: counts.launchContexts,
+        authorizationCodes: counts.authorizationCodes,
+        authorizationSessions: counts.authorizationSessions,
+        accessTokens: counts.accessTokens,
+        refreshTokens: counts.refreshTokens,
+        consents: counts.consents,
+        jtiReplay: counts.jtiReplay,
+        endUserSessions: counts.endUserSessions,
+      }).toEqual({
         launchContexts: 0,
         authorizationCodes: 0,
         authorizationSessions: 0,
@@ -1409,12 +1425,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         refreshTokens: 0,
         consents: 0,
         jtiReplay: 0,
-        adminSessions: 0,
         endUserSessions: 0,
-        // Zero because the fixture seeded none, not because the policies hid
-        // them: this table is exempt, like `admin_sessions` above it, and an
-        // expired challenge is reachable by any role that can see the table.
-        passkeyChallenges: 0,
       });
 
       // And the expired rows it could not see are still there for the owner to

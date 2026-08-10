@@ -373,7 +373,7 @@ test.describe("a caller with no session", () => {
     await page.goto(`${SIGNET}/console`);
     await page.getByLabel("Email").fill(SEED.adminEmail);
     await page.getByLabel("Password").fill("not the password");
-    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
     const alert = page.getByRole("alert");
     await expect(alert).toBeVisible();
@@ -381,7 +381,7 @@ test.describe("a caller with no session", () => {
 
     await page.getByLabel("Email").fill("nobody@example.org");
     await page.getByLabel("Password").fill("not the password");
-    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
     // The same words for an address that exists and one that does not. The
     // console must not be a way to find out who has an account.
     await expect(page.getByRole("alert")).toHaveText(wrongPassword);

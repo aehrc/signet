@@ -130,6 +130,30 @@ services:
       bootstrap:
         condition: service_completed_successfully
 
+  # A third console identity, for the passkey journey alone.
+  #
+  # It needs one of its own because that journey signs out, and signing out
+  # revokes the session the other suites hold in their saved storage state - a
+  # passkey test sharing the operator's identity would pull the rug from under
+  # every console test running beside it.
+  bootstrap-passkey:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["node", "dist/index.js", "bootstrap"]
+    environment:
+      SIGNET_DATABASE_URL: postgres://signet_app:signet_app@postgres:5432/signet
+      SIGNET_BOOTSTRAP_TENANT: demo
+      SIGNET_BOOTSTRAP_TENANT_NAME: Demo Hospital
+      SIGNET_BOOTSTRAP_EMAIL: passkeys@example.org
+      SIGNET_BOOTSTRAP_PASSWORD: passkey horse battery staple
+      SIGNET_BOOTSTRAP_NAME: Passkey Tester
+    depends_on:
+      # Serialised behind the viewer for the same reason it waits for the first
+      # bootstrap: only one of them can win the insert that creates the tenant.
+      bootstrap-viewer:
+        condition: service_completed_successfully
+
   signet:
     build:
       context: ../..
@@ -161,7 +185,7 @@ services:
       # network namespace. See the header.
       - "${PATHLING_PORT:-8080}:${PATHLING_PORT:-8080}"
     depends_on:
-      bootstrap-viewer:
+      bootstrap-passkey:
         condition: service_completed_successfully
 
   # Creates the endpoint, policy, clients and accounts the suite launches

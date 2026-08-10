@@ -25,7 +25,7 @@ setup("authenticate as an operator", async ({ page }) => {
   await page.goto(`${SIGNET}/console`);
   await page.getByLabel("Email").fill(SEED.adminEmail);
   await page.getByLabel("Password").fill(SEED.adminPassword);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
   await expect(page.getByRole("link", { name: "pathling" })).toBeVisible();
   await page.context().storageState({ path: CONSOLE_STORAGE_STATE });
@@ -42,7 +42,7 @@ setup("authenticate as a viewer", async ({ page }) => {
   await page.goto(`${SIGNET}/console`);
   await page.getByLabel("Email").fill(SEED.viewerEmail);
   await page.getByLabel("Password").fill(SEED.viewerPassword);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
   await expect(page.getByRole("link", { name: "pathling" })).toBeVisible();
   await page.context().storageState({ path: VIEWER_STORAGE_STATE });

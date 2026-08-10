@@ -215,7 +215,8 @@ select slug from endpoints;
 ### The expiry sweep
 
 `sweepExpiredRuntimeRows` in `packages/db/src/repositories/sweep.ts` deletes
-expired authorization codes, sessions, tokens, consents and `jti` records. It
+expired authorization codes, sessions, tokens, consents, `jti` records and passkey
+ceremony challenges. It
 operates on rows from every tenant, which is what a maintenance job is for, and is
 therefore the one path besides `migrate` that **needs the owning identity**.
 Attempted with the serving role it deletes nothing at all rather than partially
@@ -228,6 +229,72 @@ It has no scheduler and no wired caller in this release. Every row it removes is
 already expired and unusable, so nothing depends on it running; it reclaims space.
 Deployments that want it run it out of band, as the owning identity, until it gets
 a command of its own.
+
+## Passkeys on console accounts
+
+A console user may register up to ten WebAuthn passkeys and thereafter sign in with
+one gesture - no email, password or verification code typed. The password stays
+mandatory on every account: it is the fallback, and it is what gates every change to
+the passkey list, so no passkey can lock anybody out.
+
+### What is stored, and why none of it is encrypted
+
+`admin_passkeys` holds the credential identifier, the COSE public key, a signature
+counter, the transports the browser reported and a name, all in the clear. That is
+the first stored credential material in Signet that is neither hashed nor encrypted,
+and it is deliberate rather than an oversight of the hash-or-encrypt rule: a WebAuthn
+public key is not a secret. Possessing it grants nothing - the private half never
+leaves the authenticator - hashing it would make verification impossible, and
+encrypting it would spend the master key on material the browser hands to anybody who
+asks. `admin_passkey_challenges` holds short-lived random values that are deleted the
+moment they are used.
+
+Neither table carries a tenant isolation policy. Both hang off `admin_users`, which
+the schema already treats as a person rather than a tenant's property, and a sign-in
+challenge belongs to nobody at all until the assertion names an account. They are
+listed in `RLS_EXEMPT_TABLES` with those reasons, and a test fails if a new table is
+neither covered nor listed.
+
+### The relying party comes from `SIGNET_PUBLIC_URL`
+
+The RP ID is that URL's hostname and the expected origin is its origin. Nothing is
+read from a request header, deliberately: a `Host`-derived RP ID would let a misrouted
+request bind credentials to an identity the operator did not choose, and the origin
+check is the whole of the phishing resistance a passkey buys.
+
+Two consequences for a deployment:
+
+- **Changing `SIGNET_PUBLIC_URL`'s hostname invalidates every registered passkey.**
+  The credentials are scoped to the old hostname and the browser will not offer them
+  for the new one. Everybody signs in with their password and registers again. A
+  change of scheme or port does not, since neither is part of the RP ID - but the
+  origin check will refuse a ceremony from the wrong one.
+- **Passkeys need a secure context.** Browsers offer them over HTTPS, and on
+  `localhost` for development. Production already requires HTTPS for the session
+  cookie, so this adds no new requirement; a deployment served over plain HTTP simply
+  never shows the passkey button, and the password form is unaffected.
+
+### Removing a credential for somebody who is locked out
+
+The console has no cross-user passkey management, deliberately: a passkey is managed
+by the person who owns it, from inside their own session. An operator dealing with a
+departed colleague, or somebody who has lost the only device they registered, does it
+against the database as the serving role:
+
+```sql
+-- What the account holds, so the right row is removed.
+select p.id, p.name, p.created_at, p.last_used_at
+from admin_passkeys p
+join admin_users u on u.id = p.admin_user_id
+where lower(u.email) = lower('person@example.org');
+
+-- Remove one.
+delete from admin_passkeys where id = '<the id above>';
+```
+
+Removing a passkey never locks anybody out - the password still signs them in - so
+this is safe to do without warning the person first. Deleting or disabling the account
+itself removes its passkeys with it, by cascade.
 
 ## The master key
 

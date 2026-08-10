@@ -27,6 +27,12 @@ import { defineConfig, devices } from "@playwright/test";
  * surfaces as a sign-in page that will not proceed. Wait a minute between runs, or
  * run a single spec. The budget is written down in `tests/grants.spec.ts`; anything
  * added here that signs in interactively has to come out of it.
+ *
+ * The administrator sign-ins are a separate allowance on the same limit, keyed by
+ * route: two in `auth.setup.ts` and two in `tests/passkeys.spec.ts`, which signs in
+ * with a password because its journey has to sign out again. The two passkey
+ * sign-ins go to `POST /session/passkey`, which has an allowance of its own, so they
+ * cost nothing here.
  */
 const signetPort = process.env["SIGNET_PORT"] ?? "3000";
 const baseURL =
