@@ -17,6 +17,57 @@
  * Author: John Grimes
  */
 
+import { readFileSync, readdirSync } from "node:fs";
+
+/** The variables that move the stack, and that only the shell can carry. */
+const PORT_VARIABLES = ["SIGNET_PORT", "PATHLING_PORT", "APP_PORT"];
+
+/**
+ * Refuses to seed when a port variable was declared in a `.env` file.
+ *
+ * Bun loads a `.env` file into this process and does not pass what it loaded to the
+ * processes it spawns, so a port declared in one moves the URLs this script stores
+ * while leaving the ports `docker compose` publishes at their defaults. The result
+ * is an endpoint pointing at a Pathling nobody served, and a suite failing a long
+ * way from the cause.
+ *
+ * Refusing rather than warning, because there is no reading of a port in a `.env`
+ * file under which this script should carry on: it is either the value compose
+ * used, in which case the shell has it too and the file is redundant, or it is not,
+ * in which case seeding writes the wrong URLs.
+ *
+ * Nothing to do inside the container, which has no such files.
+ *
+ * @throws {Error} if a `.env` file in the working directory declares one.
+ */
+function refuseFileSourcedPorts() {
+  // `.env.example` is documentation, and is the one file Bun never loads.
+  const files = readdirSync(".").filter(
+    (name) => name.startsWith(".env") && name !== ".env.example",
+  );
+  for (const file of files) {
+    const contents = readFileSync(file, "utf8");
+    const declared = PORT_VARIABLES.filter((name) =>
+      new RegExp(String.raw`^[ \t]*(export[ \t]+)?${name}[ \t]*=`, "m").test(
+        contents,
+      ),
+    );
+    if (declared.length > 0) {
+      throw new Error(
+        `${file} declares ${declared.join(", ")}, where it does nothing. ` +
+          `Bun loads that file into this script but not into \`docker compose\`, ` +
+          `so the stack would keep its default ports while this seed wrote the ` +
+          `moved ones. Remove ${declared.length === 1 ? "it" : "them"} from ` +
+          `${file} and export ${declared.length === 1 ? "it" : "them"} instead: ` +
+          `\`export ${declared.map((name) => `${name}=...`).join(" ")}\`. ` +
+          `See the repository's .env.example.`,
+      );
+    }
+  }
+}
+
+refuseFileSourcedPorts();
+
 /**
  * Reads a variable, treating an empty value as absent.
  *

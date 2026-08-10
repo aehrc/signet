@@ -168,6 +168,10 @@ bun run test:e2e
 export once per shell rather than prefixing each command - `direnv` and an `.envrc`
 if you would rather not do even that.
 
+`stack:seed` is the only one of the three that Bun runs in its own process, so it is
+the only one that could read a port from a file and disagree with the stack. It
+refuses to run when it finds one there, and says so.
+
 ## Container image
 
 ```sh

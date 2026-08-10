@@ -1,0 +1,106 @@
+/**
+ * The seed script's refusal of a port variable that came from a `.env` file.
+ *
+ * An integration test rather than a unit test, and deliberately: the guard lives in
+ * `scripts/seedStack.mjs`, which runs as bare `node` inside the runtime image and so
+ * can import nothing, and which performs I/O at the top level and so cannot be
+ * imported by a test either. Running it is the only way to assert it.
+ *
+ * Each case gets its own directory, because the thing under test is what Bun loads
+ * from the working directory.
+ *
+ * Author: John Grimes
+ */
+
+import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+const SEED = path.join(import.meta.dir, "..", "..", "scripts", "seedStack.mjs");
+
+/** Part of the refusal, distinctive enough that nothing else prints it. */
+const REFUSAL = "export";
+
+/**
+ * Runs the seed in a directory holding the given `.env` files.
+ *
+ * `SIGNET_BASE_URL` points at a port nothing listens on, so a run that gets past
+ * the guard fails on its first request rather than reaching a server that happens
+ * to be up on this machine.
+ *
+ * @param files - the files to write, by name.
+ * @returns the exit status and the output.
+ */
+function seedIn(files: Record<string, string>): {
+  status: number | null;
+  output: string;
+} {
+  const cwd = mkdtempSync(path.join(tmpdir(), "signet-seed-"));
+  for (const [name, contents] of Object.entries(files)) {
+    writeFileSync(path.join(cwd, name), contents);
+  }
+  const env = { ...process.env, SIGNET_BASE_URL: "http://127.0.0.1:1" };
+  // The child is a `bun run` of its own, not a test run; NODE_ENV=test would
+  // change which files Bun loads.
+  delete env["NODE_ENV"];
+  const result = spawnSync("bun", [SEED], { cwd, env, encoding: "utf8" });
+  return {
+    status: result.status,
+    output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
+  };
+}
+
+describe("the seed script's env-file port guard", () => {
+  // The bug this exists for. Bun loads `.env.local` into the seed but not into
+  // `docker compose`, so a port declared there moves the URLs the seed *stores*
+  // and not the ones the stack *serves* - the endpoint ends up pointing at a
+  // Pathling nobody published.
+  test("refuses a port declared in .env.local", () => {
+    const { status, output } = seedIn({ ".env.local": "SIGNET_PORT=3100\n" });
+    expect(status).not.toBe(0);
+    expect(output).toContain("SIGNET_PORT");
+    expect(output).toContain(REFUSAL);
+  });
+
+  // Every `.env` file Bun might load, not just `.env.local`.
+  test("refuses a port declared in .env", () => {
+    const { status, output } = seedIn({ ".env": "PATHLING_PORT=8180\n" });
+    expect(status).not.toBe(0);
+    expect(output).toContain("PATHLING_PORT");
+  });
+
+  // `export FOO=bar` is valid in a `.env` file Bun reads, and is the shape a
+  // developer who half-followed the documentation would write.
+  test("refuses a port declared with an export keyword", () => {
+    const { status, output } = seedIn({
+      ".env.local": "export APP_PORT=4100\n",
+    });
+    expect(status).not.toBe(0);
+    expect(output).toContain("APP_PORT");
+  });
+
+  // The repository's own `.env.example` documents these variables, and is a file
+  // Bun never loads. Refusing on it would refuse in a fresh checkout.
+  test("ignores .env.example", () => {
+    const { output } = seedIn({ ".env.example": "SIGNET_PORT=3000\n" });
+    expect(output).not.toContain(REFUSAL);
+  });
+
+  // A commented line is documentation, which is exactly what the shipped example
+  // files carry.
+  test("ignores a commented port", () => {
+    const { output } = seedIn({ ".env.local": "# SIGNET_PORT=3100\n" });
+    expect(output).not.toContain(REFUSAL);
+  });
+
+  // The guard is about three variables and must not obstruct anything else a
+  // developer keeps in the file.
+  test("allows an unrelated variable", () => {
+    const { output } = seedIn({
+      ".env.local": "SIGNET_SEED_TENANT=demo\n",
+    });
+    expect(output).not.toContain(REFUSAL);
+  });
+});
