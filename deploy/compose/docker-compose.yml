@@ -22,12 +22,18 @@
 #
 # Bring it up with `bun run stack:up`; `bun run stack:down` tears it down.
 #
-# **Ports.** Signet is published on `SIGNET_PORT` (3000 by default) and Pathling on
-# `PATHLING_PORT` (8080). Both are variables because an issuer identifier contains
-# its port: a developer whose 3000 is taken sets `SIGNET_PORT=3100` and every URL -
-# the public URL, the issuer Pathling validates against, the audience, the seed and
-# the suite - follows from it. Hard-coding the port would mean editing five places
-# and getting one of them wrong.
+# **Ports.** Signet is published on `SIGNET_PORT` (3000 by default), Pathling on
+# `PATHLING_PORT` (8080) and the stub app on `APP_PORT` (4000). They are variables
+# because an issuer identifier contains its port: a developer whose 3000 is taken
+# sets `SIGNET_PORT=3100` and every URL - the public URL, the issuer Pathling
+# validates against, the audience, the seed and the suite - follows from it.
+# Hard-coding the port would mean editing five places and getting one of them wrong.
+#
+# **They must be exported into the shell**, not written to the repository's
+# `.env.local`. `bun run stack:up` launches `docker compose` as a child process, and
+# Bun does not pass a variable it loaded from a `.env` file to the processes it
+# launches - so a `SIGNET_PORT` in a file leaves this stack on 3000. Compose reads
+# them from its own environment. See the root `.env.example`.
 #
 # **Why Pathling shares Signet's network namespace.** Pathling is configured with
 # the issuer it must validate tokens against, and OAuth issuers are compared as

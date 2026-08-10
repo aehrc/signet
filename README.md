@@ -105,11 +105,14 @@ cp apps/server/.env.example apps/server/.env.local
 cp packages/db/.env.example packages/db/.env.local
 ```
 
-Two rules of Bun's decide the layout, and both are easy to be caught by. Bun loads
+Three rules of Bun's decide the layout, and each is easy to be caught by. Bun loads
 `.env` files from the working directory and does not search upwards, not even for its
-own `bun run --filter`, which runs each script in its package's directory. And
-`bun test` sets `NODE_ENV=test`, in which mode Bun loads `.env` and `.env.test` but
-**not** `.env.local`.
+own `bun run --filter`, which runs each script in its package's directory. `bun test`
+sets `NODE_ENV=test`, in which mode Bun loads `.env` and `.env.test` but **not**
+`.env.local`. And Bun loads these files into its own process without passing what it
+loaded to the processes it spawns, so a variable read by something Bun merely launches
+(`docker compose`, Playwright) has to be exported into the shell rather than written
+to a file. The stack's ports are the whole of that case; see below.
 
 So `SIGNET_TEST_DATABASE_URL` goes in `.env.test`, and leaving it out is quiet rather
 than loud: the integration suites skip themselves and the run still reports success.
@@ -142,8 +145,28 @@ bun run stack:down
 
 Then open `http://localhost:4000/?iss=http://localhost:3000/t/demo/e/pathling` to
 run a launch by hand, or `http://localhost:3000/console` to look at the endpoint
-that served it. If port 3000 is taken, set `SIGNET_PORT` - it moves the stack and
-every issuer identifier with it.
+that served it.
+
+### Moving the stack's ports
+
+Three variables move it - `SIGNET_PORT` (3000), `PATHLING_PORT` (8080) and
+`APP_PORT` (4000) - and each moves every URL derived from it, issuer identifiers
+included.
+
+**Export them.** They must be in the environment of the shell that runs the
+commands, not in `.env.local`: `docker compose` and Playwright are processes Bun
+launches, and Bun does not pass a variable it loaded from a file to a process it
+launches. A `SIGNET_PORT` in `.env.local` publishes the stack on 3000 anyway.
+
+```sh
+export SIGNET_PORT=3100 PATHLING_PORT=8180 APP_PORT=4100
+bun run stack:up
+bun run test:e2e
+```
+
+`stack:up`, `stack:seed` and `test:e2e` all read them and all have to agree, so
+export once per shell rather than prefixing each command - `direnv` and an `.envrc`
+if you would rather not do even that.
 
 ## Container image
 
