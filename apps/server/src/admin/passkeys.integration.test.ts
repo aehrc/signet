@@ -15,7 +15,7 @@
  * Author: John Grimes
  */
 
-import { countAdminPasskeyChallenges } from "@signet/db";
+import { countAdminPasskeyChallenges, setAdminUserDisabled } from "@signet/db";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { adminJson, adminRequest, tenantPath } from "../test/adminApi.js";
@@ -29,7 +29,10 @@ import { createVirtualAuthenticator } from "../test/virtualAuthenticator.js";
 
 import type { TestStack } from "../test/harness.js";
 import type { VirtualAuthenticator } from "../test/virtualAuthenticator.js";
-import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/server";
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from "@simplewebauthn/server";
 
 /** The list of an account's registered passkeys, as the console reads it. */
 interface PasskeyListBody {
@@ -43,6 +46,72 @@ interface PasskeyListBody {
 
 const LIST_PATH = "/api/v1/account/passkeys";
 const OPTIONS_PATH = "/api/v1/account/passkeys/options";
+const SIGN_IN_OPTIONS_PATH = "/api/v1/session/passkey-options";
+const SIGN_IN_PATH = "/api/v1/session/passkey";
+
+/** A session cookie, in the shape the request helper wants. */
+type Credential = { readonly cookie: string };
+
+/** Asks for creation options with the correct password. */
+async function creationOptionsFor(
+  stack: TestStack,
+  credential: Credential,
+): Promise<PublicKeyCredentialCreationOptionsJSON> {
+  return await adminJson<PublicKeyCredentialCreationOptionsJSON>(
+    stack,
+    "POST",
+    OPTIONS_PATH,
+    { credential, body: { password: TEST_PASSWORD } },
+  );
+}
+
+/**
+ * Registers one passkey from a fresh authenticator, start to finish.
+ *
+ * Takes the stack rather than closing over one, because several tests need a stack
+ * of their own - a disabled account or an enforced rate limit would disturb every
+ * other test sharing the fixture.
+ */
+async function registerPasskeyOn(
+  stack: TestStack,
+  credential: Credential,
+  options: {
+    readonly name?: string;
+    /** Where the authenticator's counter starts. Non-zero models a security key. */
+    readonly counter?: number;
+  } = {},
+): Promise<{
+  readonly authenticator: VirtualAuthenticator;
+  readonly response: Response;
+}> {
+  const creation = await creationOptionsFor(stack, credential);
+  const authenticator = await createVirtualAuthenticator({
+    origin: TEST_PUBLIC_URL,
+    ...(options.counter === undefined ? {} : { counter: options.counter }),
+  });
+  const attestation = await authenticator.register(creation);
+  const response = await adminRequest(stack, "POST", LIST_PATH, {
+    credential,
+    body: { name: options.name ?? null, response: attestation },
+  });
+  return { authenticator, response };
+}
+
+/** Runs a whole sign-in ceremony with an authenticator that already registered. */
+async function signInWith(
+  stack: TestStack,
+  authenticator: VirtualAuthenticator,
+  ceremony: Parameters<VirtualAuthenticator["authenticate"]>[1] = {},
+): Promise<Response> {
+  const options = await adminJson<PublicKeyCredentialRequestOptionsJSON>(
+    stack,
+    "POST",
+    SIGN_IN_OPTIONS_PATH,
+  );
+  return await adminRequest(stack, "POST", SIGN_IN_PATH, {
+    body: await authenticator.authenticate(options, ceremony),
+  });
+}
 
 describe.skipIf(testDatabaseUrl === undefined)("console passkeys", () => {
   let stack: TestStack;
@@ -58,37 +127,15 @@ describe.skipIf(testDatabaseUrl === undefined)("console passkeys", () => {
   /** Signs in and returns the credential a browser would present. */
   const cookie = async () => ({ cookie: await stack.signIn() });
 
-  /** Asks for creation options with the correct password. */
-  async function creationOptions(credential: {
-    readonly cookie: string;
-  }): Promise<PublicKeyCredentialCreationOptionsJSON> {
-    return await adminJson<PublicKeyCredentialCreationOptionsJSON>(
-      stack,
-      "POST",
-      OPTIONS_PATH,
-      { credential, body: { password: TEST_PASSWORD } },
-    );
-  }
+  /** Asks the shared fixture for creation options. */
+  const creationOptions = async (credential: Credential) =>
+    await creationOptionsFor(stack, credential);
 
-  /** Registers one passkey from a fresh authenticator, start to finish. */
-  async function registerPasskey(
-    credential: { readonly cookie: string },
-    name?: string,
-  ): Promise<{
-    readonly authenticator: VirtualAuthenticator;
-    readonly response: Response;
-  }> {
-    const options = await creationOptions(credential);
-    const authenticator = await createVirtualAuthenticator({
-      origin: TEST_PUBLIC_URL,
+  /** Registers a passkey on the shared fixture. */
+  const registerPasskey = async (credential: Credential, name?: string) =>
+    await registerPasskeyOn(stack, credential, {
+      ...(name === undefined ? {} : { name }),
     });
-    const attestation = await authenticator.register(options);
-    const response = await adminRequest(stack, "POST", LIST_PATH, {
-      credential,
-      body: { name: name ?? null, response: attestation },
-    });
-    return { authenticator, response };
-  }
 
   describe("listing", () => {
     it("answers an account with no passkeys with an empty list", async () => {
@@ -472,6 +519,404 @@ describe.skipIf(testDatabaseUrl === undefined)("console passkeys", () => {
       expect(event?.detail["name"]).toBe("Audited key");
       // The trail names the passkey; it never carries the key material.
       expect(JSON.stringify(event?.detail)).not.toContain("publicKey");
+    });
+  });
+
+  describe("asking for sign-in options", () => {
+    it("is answered without any credential", async () => {
+      // A person signing in has no session, so this route is one of the three the
+      // admin API deliberately publishes.
+      const response = await adminRequest(stack, "POST", SIGN_IN_OPTIONS_PATH);
+      expect(response.status).toBe(200);
+    });
+
+    it("asks for no identifier and offers no credential list", async () => {
+      const options = await adminJson<PublicKeyCredentialRequestOptionsJSON>(
+        stack,
+        "POST",
+        SIGN_IN_OPTIONS_PATH,
+      );
+
+      // Empty rather than absent, and it matters: a list built from an email
+      // would answer "does this address have a passkey?" for anybody who asked.
+      expect(options.allowCredentials).toEqual([]);
+      expect(options.userVerification).toBe("required");
+      expect(options.rpId).toBe("signet.test");
+    });
+
+    it("persists the challenge it issued", async () => {
+      const before = await countChallenges();
+      await adminJson<PublicKeyCredentialRequestOptionsJSON>(
+        stack,
+        "POST",
+        SIGN_IN_OPTIONS_PATH,
+      );
+
+      expect(await countChallenges()).toBe(before + 1);
+    });
+  });
+
+  describe("signing in with a passkey", () => {
+    it("establishes a session with nothing typed", async () => {
+      const signingIn = await createTestStack();
+      try {
+        const credential = { cookie: await signingIn.signIn() };
+        const { authenticator } = await registerPasskeyOn(
+          signingIn,
+          credential,
+          { name: "Sign-in key" },
+        );
+
+        const response = await signInWith(signingIn, authenticator);
+
+        expect(response.status).toBe(200);
+        const setCookie = response.headers.get("set-cookie") ?? "";
+        expect(setCookie).toContain("signet_session=");
+        expect(setCookie).toContain("HttpOnly");
+        expect(setCookie).toContain("Secure");
+        // A response that establishes a credential must never be cached.
+        expect(response.headers.get("cache-control")).toBe("no-store");
+
+        const body = (await response.json()) as {
+          readonly user: { readonly email: string };
+          readonly tenants: readonly { readonly slug: string }[];
+        };
+        expect(body.user.email).toBe(signingIn.admin.email);
+        expect(body.tenants[0]?.slug).toBe(signingIn.tenant.slug);
+      } finally {
+        await signingIn.close();
+      }
+    });
+
+    it("produces a session the rest of the API accepts", async () => {
+      // "Equivalent in every respect" is the promise, so the cookie is used
+      // rather than merely inspected.
+      const signingIn = await createTestStack();
+      try {
+        const credential = { cookie: await signingIn.signIn() };
+        const { authenticator } = await registerPasskeyOn(
+          signingIn,
+          credential,
+        );
+        const response = await signInWith(signingIn, authenticator);
+        const cookie = (response.headers.get("set-cookie") ?? "").split(
+          ";",
+          1,
+        )[0];
+
+        const tenant = await adminRequest(
+          signingIn,
+          "GET",
+          tenantPath(signingIn),
+          { credential: { cookie: cookie ?? "" } },
+        );
+
+        expect(tenant.status).toBe(200);
+      } finally {
+        await signingIn.close();
+      }
+    });
+
+    it("asks a TOTP-enrolled account for no code", async () => {
+      const enrolled = await createTestStack();
+      try {
+        const credential = { cookie: await enrolled.signIn() };
+        const { authenticator } = await registerPasskeyOn(enrolled, credential);
+
+        const { setAdminTotpSecret, encryptSecret } =
+          await import("@signet/db");
+        await setAdminTotpSecret(
+          enrolled.context.db,
+          enrolled.admin.id,
+          await encryptSecret(
+            "JBSWY3DPEHPK3PXP",
+            enrolled.context.config.masterKey,
+          ),
+        );
+
+        const response = await signInWith(enrolled, authenticator);
+
+        // The authenticator verified its user, which is the second factor. A
+        // `totpRequired` here would mean the passkey bought nothing.
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as {
+          readonly totpRequired?: boolean;
+          readonly user: { readonly totpEnrolled: boolean };
+        };
+        expect(body.totpRequired).toBeUndefined();
+        expect(body.user.totpEnrolled).toBe(true);
+      } finally {
+        await enrolled.close();
+      }
+    });
+
+    it("records the last use and the counter the authenticator reported", async () => {
+      const used = await createTestStack();
+      try {
+        const credential = { cookie: await used.signIn() };
+        const { authenticator } = await registerPasskeyOn(used, credential, {
+          counter: 4,
+        });
+
+        expect((await signInWith(used, authenticator)).status).toBe(200);
+
+        const list = await adminJson<PasskeyListBody>(used, "GET", LIST_PATH, {
+          credential,
+        });
+        expect(list.passkeys[0]?.lastUsedAt).not.toBeNull();
+      } finally {
+        await used.close();
+      }
+    });
+
+    it("refuses a credential nobody registered", async () => {
+      const stranger = await createVirtualAuthenticator({
+        origin: TEST_PUBLIC_URL,
+      });
+      const response = await signInWith(stack, stranger);
+
+      expect(response.status).toBe(401);
+      expect((await response.json()) as unknown).toEqual({
+        error: "unauthenticated",
+        message: "Those credentials were not accepted",
+      });
+    });
+
+    it("answers every refusal with the same body the password path gives", async () => {
+      // The whole point of the generic refusal: an attacker holding a stolen
+      // authenticator must not learn whether the account exists or is disabled.
+      const stranger = await createVirtualAuthenticator({
+        origin: TEST_PUBLIC_URL,
+      });
+      const passkeyRefusal = await signInWith(stack, stranger);
+      const passwordRefusal = await adminRequest(
+        stack,
+        "POST",
+        "/api/v1/session",
+        {
+          body: { email: stack.admin.email, password: "not the password" },
+        },
+      );
+
+      expect(passkeyRefusal.status).toBe(passwordRefusal.status);
+      expect(await passkeyRefusal.json()).toEqual(await passwordRefusal.json());
+    });
+
+    it("refuses a replayed assertion", async () => {
+      const replayed = await createTestStack();
+      try {
+        const credential = { cookie: await replayed.signIn() };
+        const { authenticator } = await registerPasskeyOn(replayed, credential);
+        const options = await adminJson<PublicKeyCredentialRequestOptionsJSON>(
+          replayed,
+          "POST",
+          SIGN_IN_OPTIONS_PATH,
+        );
+        const assertion = await authenticator.authenticate(options);
+
+        const first = await adminRequest(replayed, "POST", SIGN_IN_PATH, {
+          body: assertion,
+        });
+        expect(first.status).toBe(200);
+
+        const second = await adminRequest(replayed, "POST", SIGN_IN_PATH, {
+          body: assertion,
+        });
+        expect(second.status).toBe(401);
+        expect(second.headers.get("set-cookie")).toBeNull();
+      } finally {
+        await replayed.close();
+      }
+    });
+
+    it("refuses a challenge whose window has closed", async () => {
+      const expired = await createTestStack();
+      try {
+        const credential = { cookie: await expired.signIn() };
+        const { authenticator } = await registerPasskeyOn(expired, credential);
+        const options = await adminJson<PublicKeyCredentialRequestOptionsJSON>(
+          expired,
+          "POST",
+          SIGN_IN_OPTIONS_PATH,
+        );
+
+        // Six minutes on: the window is five.
+        expired.setNow(new Date(Date.now() + 6 * 60_000));
+
+        const response = await adminRequest(expired, "POST", SIGN_IN_PATH, {
+          body: await authenticator.authenticate(options),
+        });
+
+        expect(response.status).toBe(401);
+      } finally {
+        await expired.close();
+      }
+    });
+
+    it("refuses a ceremony completed without user verification", async () => {
+      const unverified = await createTestStack();
+      try {
+        const credential = { cookie: await unverified.signIn() };
+        const { authenticator } = await registerPasskeyOn(
+          unverified,
+          credential,
+        );
+
+        const response = await signInWith(unverified, authenticator, {
+          userVerified: false,
+        });
+
+        // Without user verification the passkey is one factor, and TOTP was
+        // skipped on the strength of it being two.
+        expect(response.status).toBe(401);
+        expect(response.headers.get("set-cookie")).toBeNull();
+      } finally {
+        await unverified.close();
+      }
+    });
+
+    it("refuses a counter that did not advance", async () => {
+      const cloned = await createTestStack();
+      try {
+        const credential = { cookie: await cloned.signIn() };
+        const { authenticator } = await registerPasskeyOn(cloned, credential, {
+          counter: 5,
+        });
+
+        // The authenticator counts, and reports a value it has used before -
+        // which is what a cloned credential looks like.
+        const response = await signInWith(cloned, authenticator, {
+          counter: 5,
+        });
+
+        expect(response.status).toBe(401);
+      } finally {
+        await cloned.close();
+      }
+    });
+
+    it("accepts an authenticator that always reports zero", async () => {
+      // The other direction of the same rule. Most platform authenticators never
+      // count, and refusing them would make the feature unusable on a Mac.
+      const platform = await createTestStack();
+      try {
+        const credential = { cookie: await platform.signIn() };
+        const { authenticator } = await registerPasskeyOn(
+          platform,
+          credential,
+          { counter: 0 },
+        );
+
+        expect(
+          (await signInWith(platform, authenticator, { counter: 0 })).status,
+        ).toBe(200);
+      } finally {
+        await platform.close();
+      }
+    });
+
+    it("refuses a disabled account", async () => {
+      const disabled = await createTestStack();
+      try {
+        const credential = { cookie: await disabled.signIn() };
+        const { authenticator } = await registerPasskeyOn(disabled, credential);
+        await setAdminUserDisabled(
+          disabled.context.db,
+          disabled.admin.id,
+          true,
+        );
+
+        const response = await signInWith(disabled, authenticator);
+
+        expect(response.status).toBe(401);
+        expect(response.headers.get("set-cookie")).toBeNull();
+      } finally {
+        await disabled.close();
+      }
+    });
+
+    it("records the sign-in as a passkey sign-in", async () => {
+      const audited = await createTestStack();
+      try {
+        const credential = { cookie: await audited.signIn() };
+        const { authenticator } = await registerPasskeyOn(audited, credential);
+        expect((await signInWith(audited, authenticator)).status).toBe(200);
+
+        const trail = await adminJson<{
+          readonly events: readonly {
+            readonly detail: Record<string, unknown>;
+          }[];
+        }>(audited, "GET", tenantPath(audited, "/audit?action=admin.login"), {
+          credential,
+        });
+
+        // The operator reading the trail has to be able to tell which credential
+        // was used; the caller is told nothing either way.
+        expect(trail.events[0]?.detail["method"]).toBe("passkey");
+      } finally {
+        await audited.close();
+      }
+    });
+
+    it("records a refusal, with the reason only the trail sees", async () => {
+      const audited = await createTestStack();
+      try {
+        const credential = { cookie: await audited.signIn() };
+        const { authenticator } = await registerPasskeyOn(audited, credential);
+
+        expect(
+          (await signInWith(audited, authenticator, { userVerified: false }))
+            .status,
+        ).toBe(401);
+
+        const trail = await adminJson<{
+          readonly events: readonly {
+            readonly detail: Record<string, unknown>;
+          }[];
+        }>(
+          audited,
+          "GET",
+          tenantPath(audited, "/audit?action=admin.login-failed"),
+          { credential },
+        );
+
+        expect(trail.events[0]?.detail["method"]).toBe("passkey");
+        expect(trail.events[0]?.detail["reason"]).toBe(
+          "user-verification-missing",
+        );
+      } finally {
+        await audited.close();
+      }
+    });
+
+    it("is rate limited on its own allowance", async () => {
+      const limited = await createTestStack({ rateLimits: "enforced" });
+      try {
+        let refused = 0;
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          const response = await adminRequest(limited, "POST", SIGN_IN_PATH, {
+            body: { id: "no-such-credential" },
+          });
+          if (response.status === 429) {
+            refused += 1;
+          }
+        }
+        expect(refused).toBeGreaterThan(0);
+
+        // Exhausting the passkey surface must not lock anybody out of the
+        // password one: the limiter keys on the route as well as the address.
+        const password = await adminRequest(
+          limited,
+          "POST",
+          "/api/v1/session",
+          {
+            body: { email: limited.admin.email, password: TEST_PASSWORD },
+          },
+        );
+        expect(password.status).toBe(200);
+      } finally {
+        await limited.close();
+      }
     });
   });
 
