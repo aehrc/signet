@@ -464,6 +464,30 @@ describe("resolveSweepConfiguration", () => {
     },
   );
 
+  it("refuses a grace period longer than a century", () => {
+    // Not pedantry: a cut-off of `now - 999999999d` is not a Date at all, and
+    // without this the command logs the identity it verified, sweeps three tables
+    // and then dies on a RangeError with a stack trace. A configuration that
+    // cannot work should be refused by name before anything is deleted.
+    expect(() =>
+      resolveSweepConfiguration({
+        SIGNET_DATABASE_OWNER_URL: OWNER_URL,
+        SIGNET_SWEEP_ACCESS_TOKEN_GRACE: "999999999d",
+      }),
+    ).toThrow(/SIGNET_SWEEP_ACCESS_TOKEN_GRACE/);
+  });
+
+  it("accepts the longest grace period anybody would write", () => {
+    // The ceiling is high enough to be irrelevant to a real deployment: whatever
+    // an operator's clock skew is, it is not decades.
+    expect(
+      resolveSweepConfiguration({
+        SIGNET_DATABASE_OWNER_URL: OWNER_URL,
+        SIGNET_SWEEP_ACCESS_TOKEN_GRACE: "3650d",
+      }).accessTokenGraceMs,
+    ).toBe(3650 * 86_400_000);
+  });
+
   it("puts no credential in a refusal", () => {
     let message = "";
     try {

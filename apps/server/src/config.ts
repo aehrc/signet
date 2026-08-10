@@ -295,6 +295,16 @@ const DURATION_UNITS: Readonly<Record<string, number>> = {
 const DEFAULT_ACCESS_TOKEN_GRACE = "24h";
 
 /**
+ * The longest duration a variable may name: a century.
+ *
+ * Absurdly generous for a clock-skew allowance, and the point is the other end -
+ * a value big enough to put the cut-off outside the range of a `Date` would
+ * otherwise be discovered as a `RangeError` part-way through the sweep, after the
+ * command had reported the identity it verified and deleted from three tables.
+ */
+const MAX_DURATION_MS = 100 * 365 * 86_400_000;
+
+/**
  * Reads a duration written as a whole number and a unit, in milliseconds.
  *
  * The unit is mandatory. A bare `24` is ambiguous, and the reading that would
@@ -318,7 +328,14 @@ function readDuration(
       `${name} must be a whole number followed by s, m, h or d - for example "24h" - got "${value}"`,
     );
   }
-  return Number(match[1]) * unit;
+
+  const milliseconds = Number(match[1]) * unit;
+  if (milliseconds > MAX_DURATION_MS) {
+    throw new ConfigError(
+      `${name} must be no more than 100 years, got "${value}"`,
+    );
+  }
+  return milliseconds;
 }
 
 /**
