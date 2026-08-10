@@ -12,3 +12,4 @@ export * from "./discovery/index.js";
 export * from "./integrations/index.js";
 export * from "./federation/index.js";
 export * from "./limits/index.js";
+export * from "./manage/index.js";
