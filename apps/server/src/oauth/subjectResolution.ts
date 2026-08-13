@@ -164,6 +164,10 @@ export async function searchPatientByIdentifier(
   const base = search.fhirBaseUrl.replace(/\/+$/u, "");
   const parameters = new URLSearchParams({
     identifier: `${search.subject.system}|${search.subject.value}`,
+    // Enough to see a duplicate, and no more. A server whose default page size
+    // is one would otherwise answer a two-patient duplicate with a single entry,
+    // which counting entries alone reads as a clean match.
+    _count: "2",
   });
   const url = `${base}/Patient?${parameters.toString()}`;
 
@@ -201,10 +205,20 @@ export async function searchPatientByIdentifier(
       "The permission ticket's subject is unknown to this endpoint's FHIR server",
     );
   }
-  if (ids.length > 1) {
+  // `total` and the entry count are each authoritative about a duplicate the
+  // other can miss: a server that paginated the second match away reports it
+  // only in `total`, and one that omits `total` reports it only in the entries.
+  // Whichever says "more than one" is the answer, because the only safe reading
+  // of a duplicate is a refusal.
+  const reported = (body as Record<string, unknown>)["total"];
+  const matches =
+    typeof reported === "number" && Number.isInteger(reported)
+      ? Math.max(reported, ids.length)
+      : ids.length;
+  if (matches > 1) {
     return refuse(
       "subject-ambiguous",
-      `The permission ticket's subject is ambiguous: ${String(ids.length)} patients carry that identifier`,
+      `The permission ticket's subject is ambiguous: ${String(matches)} patients carry that identifier`,
     );
   }
   return { ok: true, patientId: only };

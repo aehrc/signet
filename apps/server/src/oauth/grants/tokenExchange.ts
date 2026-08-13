@@ -75,6 +75,31 @@ import type { ServerContext } from "../../context.js";
 import type { ValidatedTicket } from "@signet/core";
 
 /**
+ * Names a ticket in the audit trail by what its verified claims carry.
+ *
+ * Only for a ticket whose signature has verified. The claims of one that has
+ * not are an unauthenticated caller's assertion about itself, and writing them
+ * to an append-only trail would let anybody who can reach the token endpoint
+ * choose what it says.
+ *
+ * @param claims - The verified claims, as decoded - a JSON document, so not yet
+ *   known to be an object at all.
+ * @returns The identifier and type to audit by, each omitted when the claim is
+ *   absent or is not a string.
+ */
+function identifyTicket(claims: unknown): Omit<ExchangeAudit, "outcome"> {
+  if (typeof claims !== "object" || claims === null) {
+    return {};
+  }
+  const ticketId = (claims as Record<string, unknown>)["jti"];
+  const ticketType = (claims as Record<string, unknown>)["ticket_type"];
+  return {
+    ...(typeof ticketId === "string" ? { ticketId } : {}),
+    ...(typeof ticketType === "string" ? { ticketType } : {}),
+  };
+}
+
+/**
  * Exchanges a permission ticket for an access token.
  *
  * @param context - The server's dependencies.
@@ -159,7 +184,15 @@ export async function tokenExchangeGrant(
     now: context.clock(),
   });
   if (!validated.ok) {
-    return await refuse("invalid_grant", validated.description);
+    // Named by the identifier the signature has already vouched for. The claims
+    // are as trustworthy here as they are on the success path - only expiry,
+    // issuer or type have failed - and a refusal is the row an operator reads
+    // the trail for, so recording it anonymously is the wrong way round.
+    return await refuse(
+      "invalid_grant",
+      validated.description,
+      identifyTicket(verified.claims),
+    );
   }
   const ticket: ValidatedTicket = validated.ticket;
   const identity = {

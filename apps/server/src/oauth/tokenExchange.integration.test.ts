@@ -638,6 +638,21 @@ describeWithDatabase("permission ticket exchange", () => {
       expect(serialised).not.toContain("eyJ");
     });
 
+    it("records the ticket identifier when the ticket verifies but does not validate", async () => {
+      // FR-016 asks for every attempt to be audited *by ticket identifier*, and
+      // a refusal is the case an operator reviews the trail for. Once the
+      // signature has verified, the `jti` is as trustworthy as it is on the
+      // success path, so a refusal that reads the expiry has no excuse to
+      // record the attempt anonymously.
+      const expired = await mintTicket({ lifetimeSeconds: -60 });
+      const claims = decodePayload(expired);
+      await exchangeTicket({ subjectToken: expired });
+
+      const [event] = await auditEvents("token.ticket-exchanged");
+      expect(event?.detail["outcome"]).toBe("refused");
+      expect(event?.detail["ticketId"]).toBe(String(claims["jti"]));
+    });
+
     it("returns to refusing the grant type once the rule is removed", async () => {
       expect(await removeIssuer()).toBe(true);
       const refused = await exchangeTicket();

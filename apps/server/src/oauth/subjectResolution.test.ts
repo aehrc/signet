@@ -43,6 +43,7 @@ function patientEntry(id: string): Record<string, unknown> {
 interface ServedRequest {
   readonly pathname: string;
   readonly identifier: string | null;
+  readonly count: string | null;
   readonly authorization: string | null;
 }
 
@@ -59,6 +60,7 @@ async function startFhirStub(
     served.push({
       pathname: url.pathname,
       identifier: url.searchParams.get("identifier"),
+      count: url.searchParams.get("_count"),
       authorization: request.headers.get("authorization"),
     });
     return await Promise.resolve(answer(url.searchParams.get("identifier")));
@@ -182,6 +184,41 @@ describe("searchPatientByIdentifier", () => {
       const result = await search(listener);
       expect(result.ok).toBe(false);
       expect(result.ok ? undefined : result.reason).toBe("subject-ambiguous");
+    } finally {
+      await listener.close();
+    }
+  });
+
+  it("refuses a duplicate the server paginated out of the first page", async () => {
+    // A server whose page size is one answers a two-patient duplicate with one
+    // entry and a total of two. Counting entries alone reads that as a clean
+    // single match and mints a token against a patient that was picked rather
+    // than resolved - which is the one thing FR-014 forbids.
+    const { listener } = await startFhirStub(() =>
+      jsonResponse({
+        resourceType: "Bundle",
+        type: "searchset",
+        total: 2,
+        entry: [patientEntry("pat-1")],
+      }),
+    );
+    try {
+      const result = await search(listener);
+      expect(result.ok).toBe(false);
+      expect(result.ok ? undefined : result.reason).toBe("subject-ambiguous");
+    } finally {
+      await listener.close();
+    }
+  });
+
+  it("asks for enough matches to see a duplicate", async () => {
+    // The count that makes the check above possible on a server whose default
+    // page size is one. Two is all it takes: a second match is a refusal, so
+    // there is never a reason to transfer a third.
+    const { listener, served } = await startFhirStub(exactMatchOnly);
+    try {
+      await search(listener);
+      expect(served[0]?.count).toBe("2");
     } finally {
       await listener.close();
     }
