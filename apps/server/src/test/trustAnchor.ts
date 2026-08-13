@@ -29,8 +29,11 @@
  * cache is shown to be caching. There is no other way to observe it: the cache
  * is in-process and a hit is the absence of a request.
  *
- * The listener binds loopback, so a suite fetching from it must build its stack
- * with `allowPrivateOutboundFetches`. See `./localListener.ts`.
+ * The listener binds loopback by default, so a suite fetching from it must build
+ * its stack with `allowPrivateOutboundFetches`. The end-to-end suite runs Signet
+ * in a container, where the host's loopback is not reachable, so it binds every
+ * address and advertises `host.docker.internal` instead - see
+ * `e2e/support/trustAnchor.ts` and `./localListener.ts`.
  *
  * The claim defaults below are the shapes the registration profile and the
  * ticket profile use; every one of them is overridable per mint, so a suite that
@@ -43,6 +46,7 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
 
 import { jsonResponse, startLocalListener } from "./localListener.js";
 
+import type { LocalListenerOptions } from "./localListener.js";
 import type { JWK, KeyObject } from "jose";
 
 /** The algorithm every key here is generated and every token signed with. */
@@ -82,7 +86,7 @@ export interface MintOptions {
 export interface TrustAnchor {
   /** The anchor's issuer identifier, which its tokens claim as `iss`. */
   readonly issuer: string;
-  /** Where its public keys are published. Loopback, so guarded fetches refuse it. */
+  /** Where its public keys are published. Private, so guarded fetches refuse it. */
   readonly jwksUri: string;
   /** The `kid` new tokens are signed with. Changes with {@link addKey}. */
   readonly keyId: string;
@@ -116,6 +120,14 @@ export interface TrustAnchorOptions {
    * its keys under its issuer would use.
    */
   readonly issuer?: string;
+  /**
+   * Where the listener binds, and what it calls itself.
+   *
+   * Loopback by default, which is what an in-process suite wants. The end-to-end
+   * suite is the exception: Signet runs in a container there, so the anchor binds
+   * every address and advertises a name the container resolves.
+   */
+  readonly listener?: LocalListenerOptions;
 }
 
 /** One of the anchor's keys, published or not. */
@@ -184,7 +196,7 @@ export async function startTrustAnchor(
           })
         : jsonResponse({ error: "unavailable" }, failureStatus),
     );
-  });
+  }, options.listener ?? {});
 
   const issuer = options.issuer ?? listener.origin;
 

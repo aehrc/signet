@@ -92,4 +92,13 @@ export const SEED = {
   reuseSecret: "stub-reuse-secret-value-0000",
   /** Authenticates by signing an assertion rather than presenting a secret. */
   asymmetricClientId: "stub-asymmetric",
+  /**
+   * The patient `scripts/seedFhir.mjs` writes for the permission ticket's subject.
+   *
+   * The identifier it carries lives in `apps/server/src/test/trustAnchor.ts`, which
+   * is what mints the tickets naming it, and the seed fails if that identifier does
+   * not resolve to exactly one patient - so a drift between the two is a failure of
+   * the seed rather than a confusing refusal three tests later.
+   */
+  ticketSubjectPatientId: "ticket-subject",
 } as const;

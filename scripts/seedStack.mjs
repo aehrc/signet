@@ -203,7 +203,20 @@ async function signIn() {
   }
 }
 
-/** The Pathling preset, fetched from the server that ships it. */
+/**
+ * The Pathling preset, fetched from the server that ships it.
+ *
+ * With one rule turned on. The preset ships `grant-system-write` disabled, which is
+ * the right default - it is the only rule in the preset that names a write, and a
+ * deployment should have to say so. This stack has to say so, because the
+ * ticket-exchange scenario resolves a permission ticket's subject against a patient
+ * that has to be *in* Pathling, and `scripts/seedFhir.mjs` is what puts it there.
+ *
+ * Turning it on rather than editing the preset, and turning on nothing else: what
+ * the console offers an operator is unchanged, and the write reaches exactly one
+ * seeded client, whose registration is the second half of the permission. See
+ * `stub-writer` below.
+ */
 async function pathlingPolicy() {
   const response = await api("GET", "/presets");
   if (!response.ok) {
@@ -214,7 +227,15 @@ async function pathlingPolicy() {
   if (preset === undefined) {
     throw new Error("the deployment ships no Pathling preset");
   }
-  return preset.policy;
+  const document = structuredClone(preset.policy);
+  const systemWrite = document.scopeGrants.find(
+    (grant) => grant.id === "grant-system-write",
+  );
+  if (systemWrite === undefined) {
+    throw new Error("the Pathling preset has no grant-system-write rule");
+  }
+  systemWrite.enabled = true;
+  return document;
 }
 
 await signIn();
@@ -300,6 +321,27 @@ await ensure("a backend service client", "POST", `${endpointPath}/clients`, {
   secret: "stub-backend-secret-value-0000",
   grantTypes: ["client_credentials"],
   allowedScopes: ["system/*.rs"],
+});
+
+/**
+ * The one client on this stack that may write to Pathling.
+ *
+ * `scripts/seedFhir.mjs` uses it, and nothing else does. It is separate from
+ * `stub-backend` deliberately: that client's allowlist is `system/*.rs`, and
+ * `launch.spec.ts` asserts that asking it for `system/*.cud` is refused - so
+ * widening it would delete a test rather than pass one.
+ *
+ * The write it can do is bounded twice, by the endpoint's policy (the
+ * `grant-system-write` rule above, which no other client asks for) and by this
+ * allowlist.
+ */
+await ensure("a FHIR seeding client", "POST", `${endpointPath}/clients`, {
+  clientId: "stub-writer",
+  name: "Stub FHIR seeder",
+  clientType: "confidential-symmetric",
+  secret: "stub-writer-secret-value-00000",
+  grantTypes: ["client_credentials"],
+  allowedScopes: ["system/*.cud", "system/*.rs"],
 });
 
 /**

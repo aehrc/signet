@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 import {
   accessTokenClaims,
   choosePatient,
-  completedTokenResponse,
+  completeStandaloneLaunch,
   decideConsent,
   signIn,
   startLaunch,
@@ -31,14 +31,9 @@ import { FHIR, ISSUER, SEED } from "../support/stack.js";
 test.describe("a standalone launch", () => {
   test("gets a token the FHIR server accepts", async ({ page }) => {
     await startLaunch(page);
-    await signIn(page);
-    // The picker cannot be skipped: `patient/*.rs` requires a patient, and the
-    // app named none. Consent is asked every time on this endpoint.
-    await choosePatient(page, "pat-9");
-    await decideConsent(page, "Allow");
 
     // Back at the app, with a token.
-    const tokenResponse = await completedTokenResponse(page);
+    const tokenResponse = await completeStandaloneLaunch(page, "pat-9");
     expect(tokenResponse["token_type"]).toBe("Bearer");
     expect(tokenResponse["patient"]).toBe("pat-9");
     expect(String(tokenResponse["scope"])).toContain("patient/");

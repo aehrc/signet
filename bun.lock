@@ -63,6 +63,7 @@
       "name": "signet-e2e",
       "version": "0.1.0",
       "devDependencies": {
+        "@hono/node-server": "^2.0.12",
         "@playwright/test": "^1.62.1",
         "jose": "^6.2.8",
       },

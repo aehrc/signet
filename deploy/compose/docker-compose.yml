@@ -185,6 +185,13 @@ services:
       # for exactly what this turns off, and why it must never be set in
       # production.
       SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES: "true"
+    # The stand-in trust anchor runs in the Playwright process, on the host. Signet
+    # has to fetch its published keys, and the host's loopback is not an address a
+    # container can open - so the anchor binds every address and Signet reaches it
+    # by this name. Docker Desktop defines it already; on Linux, which is what CI
+    # runs, nothing does unless this line is here.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${SIGNET_PORT:-3000}:${SIGNET_PORT:-3000}"
       # Pathling's port, published here because it shares this container's

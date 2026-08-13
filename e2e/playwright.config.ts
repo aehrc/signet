@@ -27,11 +27,12 @@ import { resolveStackUrls } from "./src/stackUrls.js";
  *
  * **Running it twice inside a minute will fail, and that is the product working.**
  * End-user sign-ins are limited to ten a minute per address; one run of this suite
- * spends eight of them and the whole suite comes from one address. A second run
+ * spends nine of them and the whole suite comes from one address. A second run
  * started before the window rolls over is refused with "Too many requests", which
  * surfaces as a sign-in page that will not proceed. Wait a minute between runs, or
  * run a single spec. The budget is written down in `tests/grants.spec.ts`; anything
- * added here that signs in interactively has to come out of it.
+ * added here that signs in interactively has to come out of it, and there is one
+ * left.
  *
  * The administrator sign-ins are a separate allowance on the same limit, keyed by
  * route: two in `auth.setup.ts` and two in `tests/passkeys.spec.ts`, which signs in

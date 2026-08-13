@@ -81,6 +81,38 @@ export async function completedTokenResponse(
 }
 
 /**
+ * Signs in, picks the patient, consents, and returns what the app came back with.
+ *
+ * The four steps between opening the app and having a token, which every
+ * standalone launch in this suite performs identically. Separated from
+ * {@link startLaunch} because what differs between those launches is the address
+ * the app is opened at - which client, which scopes - and nothing after it.
+ *
+ * The picker cannot be skipped on this endpoint: `patient/*.rs` requires a patient
+ * and a standalone launch names none, so the request cannot be consented to until
+ * one is chosen. Consent is asked every time, because the seeded endpoint's consent
+ * mode says so.
+ *
+ * @param page - The page the launch was started in.
+ * @param patient - The patient to choose at the picker.
+ * @returns The parsed token response.
+ * @example
+ * ```ts
+ * await startLaunch(page);
+ * const tokenResponse = await completeStandaloneLaunch(page, "pat-9");
+ * ```
+ */
+export async function completeStandaloneLaunch(
+  page: Page,
+  patient: string,
+): Promise<Record<string, unknown>> {
+  await signIn(page);
+  await choosePatient(page, patient);
+  await decideConsent(page, "Allow");
+  return await completedTokenResponse(page);
+}
+
+/**
  * The decoded access token claims the stub app is displaying.
  *
  * @param page - The page the launch ran in.
