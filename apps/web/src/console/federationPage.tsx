@@ -25,6 +25,7 @@ import { describeError, issuesByField } from "../api/errors.js";
 import { useIdpAction, useIdpCheck, useIdpConfig } from "../api/queries.js";
 import { SubmitButton, TextField } from "../components/fields.js";
 import {
+  CheckOutcome,
   CopyableValue,
   EmptyState,
   ErrorAlert,
@@ -316,15 +317,22 @@ function CheckResult({
   readonly result: ReturnType<typeof useIdpCheck>["data"];
   readonly error: unknown;
 }>) {
-  if (error !== null && error !== undefined) {
-    return <ErrorAlert message={describeError(error)} />;
-  }
-  if (result === undefined) {
-    return null;
-  }
-  if (!result.ok) {
-    return <ErrorAlert message={`${result.problem}: ${result.description}`} />;
-  }
+  return (
+    <CheckOutcome result={result} error={error}>
+      {result?.ok === true ? <Metadata result={result} /> : null}
+    </CheckOutcome>
+  );
+}
+
+/** What the provider's discovery document says, once it has been read. */
+function Metadata({
+  result,
+}: Readonly<{
+  readonly result: Extract<
+    ReturnType<typeof useIdpCheck>["data"],
+    { ok: true }
+  >;
+}>) {
   return (
     <div className="flex flex-col gap-2">
       <InfoAlert>

@@ -66,6 +66,7 @@ export const ENDPOINT_TABS: readonly {
   { path: "/users", label: "Users" },
   { path: "/keys", label: "Keys" },
   { path: "/identity", label: "Identity" },
+  { path: "/trust", label: "Trust & tickets" },
   { path: "/requests", label: "Requests" },
   { path: "/launch", label: "Launch" },
 ];

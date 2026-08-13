@@ -42,6 +42,8 @@ import { getField, patchField, postField } from "./unwrap.js";
 import type {
   IdpCheckView,
   IdpConfigView,
+  TrustAnchorCheckView,
+  TrustAnchorView,
   ApiTokenView,
   AuditPage,
   ClientRequestView,
@@ -85,6 +87,11 @@ export const keys = {
   ],
   idp: (tenant: string, endpoint: string): QueryKey => [
     "idp",
+    tenant,
+    endpoint,
+  ],
+  trustAnchor: (tenant: string, endpoint: string): QueryKey => [
+    "trust-anchor",
     tenant,
     endpoint,
   ],
@@ -465,6 +472,68 @@ export function useIdpCheck(tenant: string, endpoint: string) {
   return useMutation({
     mutationFn: async () =>
       await post<IdpCheckView>(endpointPath(tenant, endpoint, "/idp/check")),
+  });
+}
+
+/**
+ * The endpoint's trust anchor, or null when it accepts no registrations.
+ *
+ * Null rather than an error, as the identity provider's is: refusing every
+ * registration is the default and the normal case, not a failure to unpick.
+ */
+export function useTrustAnchor(tenant: string, endpoint: string) {
+  return useQuery({
+    queryKey: keys.trustAnchor(tenant, endpoint),
+    queryFn: async ({ signal }) =>
+      await getField<"anchor", TrustAnchorView | null>(
+        endpointPath(tenant, endpoint, "/trust/anchor"),
+        "anchor",
+        signal,
+      ),
+  });
+}
+
+/** Saves or removes the endpoint's trust anchor. */
+export function useTrustAnchorAction(tenant: string, endpoint: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      action:
+        | { readonly kind: "save"; readonly anchor: Record<string, unknown> }
+        | { readonly kind: "remove" },
+    ) => {
+      if (action.kind === "remove") {
+        await remove(endpointPath(tenant, endpoint, "/trust/anchor"));
+        return;
+      }
+      await put(endpointPath(tenant, endpoint, "/trust/anchor"), action.anchor);
+    },
+    onSuccess: async () => {
+      await client.invalidateQueries({
+        queryKey: keys.trustAnchor(tenant, endpoint),
+      });
+      // The discovery document changes with the rule, and the endpoint page
+      // renders what it advertises.
+      await client.invalidateQueries({
+        queryKey: keys.endpoint(tenant, endpoint),
+      });
+    },
+  });
+}
+
+/**
+ * Asks the server to fetch the anchor's published keys and report on them.
+ *
+ * A mutation rather than a query, for the reason the identity provider's check is
+ * one: it makes an outbound request, and that should happen when an operator asks
+ * rather than whenever a component mounts.
+ */
+export function useTrustAnchorCheck(tenant: string, endpoint: string) {
+  return useMutation({
+    mutationFn: async () =>
+      await post<TrustAnchorCheckView>(
+        endpointPath(tenant, endpoint, "/trust/anchor/check"),
+      ),
   });
 }
 

@@ -13,6 +13,7 @@
  * Author: John Grimes
  */
 
+import { describeVouching } from "@signet/core";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 
@@ -45,8 +46,14 @@ import {
 } from "../components/layout.js";
 import { Chips, StatusBadge } from "../components/table.js";
 import { toneForStatus } from "../formatting/status.js";
-import { clientTypeLabel, formatInstant } from "../formatting/values.js";
+import {
+  clientTypeLabel,
+  countOf,
+  formatInstant,
+} from "../formatting/values.js";
 import { clientFormValues, clientPatch } from "../forms/clientEdit.js";
+
+import type { ClientView } from "../api/types.js";
 
 /**
  * Whether a symmetric client has a secret, in words.
@@ -59,6 +66,65 @@ import { clientFormValues, clientPatch } from "../forms/clientEdit.js";
  */
 function secretDescription(hasSecret: boolean): string {
   return hasSecret ? " - secret set" : " - no secret set";
+}
+
+/**
+ * What a trust anchor vouched for, and how long is left of it.
+ *
+ * Rendered only for a client an anchor created, which is what the null carries:
+ * the vouching trio is written together at registration and never edited, so
+ * there is no half-vouched client to describe.
+ *
+ * The expiry is stated as a fact rather than as a field, because it is not
+ * editable and could not be: it comes from the statement, and moving it here
+ * would be extending a registration the anchor vouched for a shorter time. When
+ * it passes, every grant type is refused - which is why the badge says so rather
+ * than leaving an operator to work out why an app stopped working.
+ */
+function VouchingPanel({
+  vouching,
+  registeredAt,
+}: Readonly<{
+  readonly vouching: ClientView["vouching"];
+  readonly registeredAt: string;
+}>) {
+  if (vouching === null) {
+    return null;
+  }
+
+  // The same function the issuance chokepoint refuses with, so the badge and the
+  // token endpoint cannot disagree about whether this client still works.
+  const state = describeVouching(new Date(vouching.expiresAt), new Date());
+
+  return (
+    <Panel
+      title="Vouching"
+      description="This client registered itself with a software statement signed by the endpoint's trust anchor, rather than being created here."
+    >
+      <div className="mb-3">
+        <StatusBadge tone={state.expired ? "error" : "success"}>
+          {state.expired ? "expired" : "active"}
+        </StatusBadge>
+      </div>
+      <DetailList>
+        <DetailRow label="Vouched by">
+          <code className="font-mono text-xs break-all">{vouching.issuer}</code>
+        </DetailRow>
+        <DetailRow label="Statement identifier">
+          <code className="font-mono text-xs break-all">
+            {vouching.statementId}
+          </code>
+        </DetailRow>
+        <DetailRow label="Registered">{formatInstant(registeredAt)}</DetailRow>
+        <DetailRow label="Vouching expires">
+          {formatInstant(vouching.expiresAt)}
+          {state.expired
+            ? " - every grant type is now refused for this client"
+            : ` - ${countOf(state.daysRemaining, "day")} remaining`}
+        </DetailRow>
+      </DetailList>
+    </Panel>
+  );
 }
 
 /** One client's detail page. */
@@ -122,6 +188,11 @@ export function ClientDetailPage() {
           <ShownOnce title="New client secret" value={rotate.data.secret} />
         </div>
       )}
+
+      <VouchingPanel
+        vouching={current.vouching}
+        registeredAt={current.createdAt}
+      />
 
       <Panel title="Registration">
         <DetailList>
