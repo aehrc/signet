@@ -129,7 +129,19 @@ export interface TrustAnchorView {
   readonly registrationEndpoint: string;
 }
 
-/** What a fetch of the anchor's published keys found. */
+/** The issuer whose permission tickets an endpoint exchanges for tokens. */
+export interface TicketIssuerView {
+  readonly issuer: string;
+  readonly jwksUri: string;
+  /** The ticket types this endpoint honours, and what discovery advertises. */
+  readonly acceptedTicketTypes: readonly string[];
+  readonly maxTokenLifetimeSecs: number;
+  readonly updatedAt: string;
+  /** What an operator gives the issuer so its tickets can be presented here. */
+  readonly tokenEndpoint: string;
+}
+
+/** What a fetch of a trusted issuer's published keys found. */
 export type TrustAnchorCheckView =
   | {
       readonly ok: true;

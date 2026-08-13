@@ -42,6 +42,7 @@ import { getField, patchField, postField } from "./unwrap.js";
 import type {
   IdpCheckView,
   IdpConfigView,
+  TicketIssuerView,
   TrustAnchorCheckView,
   TrustAnchorView,
   ApiTokenView,
@@ -92,6 +93,11 @@ export const keys = {
   ],
   trustAnchor: (tenant: string, endpoint: string): QueryKey => [
     "trust-anchor",
+    tenant,
+    endpoint,
+  ],
+  ticketIssuer: (tenant: string, endpoint: string): QueryKey => [
+    "ticket-issuer",
     tenant,
     endpoint,
   ],
@@ -533,6 +539,65 @@ export function useTrustAnchorCheck(tenant: string, endpoint: string) {
     mutationFn: async () =>
       await post<TrustAnchorCheckView>(
         endpointPath(tenant, endpoint, "/trust/anchor/check"),
+      ),
+  });
+}
+
+/**
+ * The endpoint's permission ticket issuer, or null when it exchanges none.
+ *
+ * Null rather than an error, as the trust anchor's is: refusing the exchange
+ * grant is the default and the normal case, not a failure to unpick.
+ */
+export function useTicketIssuer(tenant: string, endpoint: string) {
+  return useQuery({
+    queryKey: keys.ticketIssuer(tenant, endpoint),
+    queryFn: async ({ signal }) =>
+      await getField<"ticketIssuer", TicketIssuerView | null>(
+        endpointPath(tenant, endpoint, "/trust/ticket-issuer"),
+        "ticketIssuer",
+        signal,
+      ),
+  });
+}
+
+/** Saves or removes the endpoint's permission ticket issuer. */
+export function useTicketIssuerAction(tenant: string, endpoint: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      action:
+        | { readonly kind: "save"; readonly rule: Record<string, unknown> }
+        | { readonly kind: "remove" },
+    ) => {
+      const path = endpointPath(tenant, endpoint, "/trust/ticket-issuer");
+      await (action.kind === "remove" ? remove(path) : put(path, action.rule));
+    },
+    onSuccess: async () => {
+      await client.invalidateQueries({
+        queryKey: keys.ticketIssuer(tenant, endpoint),
+      });
+      // The advertised ticket types change with the rule, and the endpoint page
+      // renders what it advertises.
+      await client.invalidateQueries({
+        queryKey: keys.endpoint(tenant, endpoint),
+      });
+    },
+  });
+}
+
+/**
+ * Asks the server to fetch the ticket issuer's published keys and report on them.
+ *
+ * A mutation for the reason the anchor's check is one: it makes an outbound
+ * request, and that should happen when an operator asks rather than whenever a
+ * component mounts.
+ */
+export function useTicketIssuerCheck(tenant: string, endpoint: string) {
+  return useMutation({
+    mutationFn: async () =>
+      await post<TrustAnchorCheckView>(
+        endpointPath(tenant, endpoint, "/trust/ticket-issuer/check"),
       ),
   });
 }
