@@ -43,21 +43,37 @@ and asserts that Pathling accepts the token Signet minted.
 See [docs/operations.md](docs/operations.md) for configuration, key rotation and
 deployment.
 
-### Deliberately not built
+### No open registration; vouched registration by explicit rule
 
-**Dynamic client registration** (`POST {iss}/register`, RFC 7591). Signet serves
-no registration endpoint and advertises none, so a client cannot obtain
-credentials by asking for them.
+**Dynamic client registration** (`POST {iss}/register`, RFC 7591) is refused on
+every endpoint by default. Signet serves no registration endpoint and advertises
+none, so a client cannot obtain credentials on an endpoint by asking for them.
 
-The developer portal at `{iss}/apps` is the alternative, and it is a different
-trade rather than a smaller one: a developer submits a request, an administrator
-approves it in the console, and the developer then collects the credentials. That
-puts a person between "anybody who can reach this endpoint" and "holds a client
-credential on it", which is the property worth having on a server whose endpoints
-front clinical data.
+An endpoint that names a **trust anchor** is the exception, and it is a narrow
+one. The rule names an issuer and the address where that issuer publishes its
+keys, and it is the whole of the capability: with it, the endpoint registers a
+client for a software statement signed by that anchor, and refuses statements
+from anybody else; without it, `/register` answers 404 and both discovery
+documents advertise nothing. There is no flag to turn on beside the rule, and no
+setting that opens registration to the world.
 
-`apps/server/src/conformance.integration.test.ts` asserts both halves - nothing is
-advertised, and `/register` answers 404 - so this stays a decision rather than
+What the anchor's signature buys is the vetting, not the metadata's validity. The
+client is created from the statement's own metadata and nothing asserted beside
+it, that metadata still has to pass the checks any other client's does, one
+statement registers exactly one client, and the registration expires when the
+statement says the vouching does - after which every grant type refuses the
+client until it registers again.
+
+The developer portal at `{iss}/apps` remains the alternative for an endpoint with
+no anchor to trust: a developer submits a request, an administrator approves it
+in the console, and the developer then collects the credentials. Both routes put
+something between "anybody who can reach this endpoint" and "holds a client
+credential on it" - a person in one case, a signature from a named issuer in the
+other.
+
+`apps/server/src/conformance.integration.test.ts` asserts both directions -
+nothing advertised and `/register` answering 404 without a rule, the endpoint
+advertised and registering with one - so this stays a decision rather than
 drifting into an accident.
 
 ## Layout
