@@ -60,6 +60,7 @@ import { createAuthorizationSession } from "./authorizationSessions.js";
 import { approveClientRequest, createClientRequest } from "./clientRequests.js";
 import {
   createClient,
+  createVouchedClient,
   getClientByClientId,
   resolveClientScope,
 } from "./clients.js";
@@ -102,12 +103,21 @@ import {
 } from "./scope.js";
 import { sweepExpiredRuntimeRows } from "./sweep.js";
 import { createTenant } from "./tenants.js";
+import {
+  deleteEndpointTicketIssuer,
+  deleteEndpointTrustAnchor,
+  getEndpointTicketIssuer,
+  getEndpointTrustAnchor,
+  upsertEndpointTicketIssuer,
+  upsertEndpointTrustAnchor,
+} from "./trust.js";
 import { clients } from "../schema/clients.js";
 import { tenants } from "../schema/tenancy.js";
 import { isTestSchemaReady } from "../test/schemaReady.js";
 import { prepareServingRole, servingRoleUrl } from "../test/servingRole.js";
 
 import type { AdminPasskeyInput } from "./adminPasskeys.js";
+import type { updateClient } from "./clients.js";
 import type { Executor } from "./executor.js";
 import type {
   BoundTenantScope,
@@ -137,6 +147,25 @@ const POLICY: PolicyDocument = {
   contextRules: [],
   defaults: { accessTokenTtl: 300, refreshTokenTtl: 2_592_000 },
 };
+
+/**
+ * The vouching trio is written once and never edited.
+ *
+ * A compile-time assertion rather than a runtime one, because that is where the
+ * guarantee lives: `updateClient`'s patch type does not name these columns, so an
+ * edit to a client's anchor, statement or expiry does not compile. `tsc --build`
+ * checks this whether or not a test database is configured, which a skipped
+ * integration test would not.
+ */
+type ClientPatch = Parameters<typeof updateClient>[1];
+export const VOUCHING_IS_NOT_PATCHABLE: [
+  Extract<
+    keyof ClientPatch,
+    "vouchedByIssuer" | "vouchedStatementId" | "vouchingExpiresAt"
+  >,
+] extends [never]
+  ? true
+  : false = true;
 
 /** Everything a test needs to exercise one endpoint's runtime tables. */
 interface Fixture {
@@ -1084,6 +1113,298 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         (bound) => getActiveEndpointKey(bound),
       );
       expect(afterSecond?.kid).toBe("kid-2");
+    });
+  });
+
+  describe("trust rules", () => {
+    // Both rules are what turn a refused capability on, so the properties that
+    // matter are: the endpoint that has one sees it, an endpoint that has none
+    // sees nothing at all, and no endpoint can see another's.
+
+    it("has no trust anchor until one is configured", async () => {
+      const fixture = await newFixture();
+
+      // The deny-by-default state. Registration reads this and answers 404.
+      expect(
+        await inScope(fixture.endpointScope, getEndpointTrustAnchor),
+      ).toBeUndefined();
+    });
+
+    it("has no ticket issuer until one is configured", async () => {
+      const fixture = await newFixture();
+
+      expect(
+        await inScope(fixture.endpointScope, getEndpointTicketIssuer),
+      ).toBeUndefined();
+    });
+
+    it("stores and reads back a trust anchor rule", async () => {
+      const fixture = await newFixture();
+
+      const written = await inScope(fixture.endpointScope, (bound) =>
+        upsertEndpointTrustAnchor(bound, {
+          issuer: "https://anchor.example.org",
+          jwksUri: "https://anchor.example.org/jwks",
+          maxVouchingDays: 14,
+        }),
+      );
+
+      expect(written.endpointId).toBe(fixture.endpointScope.endpointId);
+      expect(
+        await inScope(fixture.endpointScope, getEndpointTrustAnchor),
+      ).toEqual(written);
+    });
+
+    it("stores and reads back a ticket issuer rule", async () => {
+      const fixture = await newFixture();
+
+      const written = await inScope(fixture.endpointScope, (bound) =>
+        upsertEndpointTicketIssuer(bound, {
+          issuer: "https://tickets.example.org",
+          jwksUri: "https://tickets.example.org/jwks",
+          acceptedTicketTypes: ["patient-self-access"],
+          maxTokenLifetimeSecs: 120,
+        }),
+      );
+
+      expect(written.acceptedTicketTypes).toEqual(["patient-self-access"]);
+      expect(
+        await inScope(fixture.endpointScope, getEndpointTicketIssuer),
+      ).toEqual(written);
+    });
+
+    it("accepts no ticket type unless the rule names one", async () => {
+      const fixture = await newFixture();
+
+      const written = await inScope(fixture.endpointScope, (bound) =>
+        upsertEndpointTicketIssuer(bound, {
+          issuer: "https://tickets.example.org",
+          jwksUri: "https://tickets.example.org/jwks",
+        }),
+      );
+
+      // A rule that exists but names no type grants nothing, which is the only
+      // safe reading of a half-configured rule.
+      expect(written.acceptedTicketTypes).toEqual([]);
+    });
+
+    it("replaces a trust anchor rather than adding a second", async () => {
+      const fixture = await newFixture();
+      await inScope(fixture.endpointScope, (bound) =>
+        upsertEndpointTrustAnchor(bound, {
+          issuer: "https://first.example.org",
+          jwksUri: "https://first.example.org/jwks",
+        }),
+      );
+
+      const replaced = await inScope(fixture.endpointScope, (bound) =>
+        upsertEndpointTrustAnchor(bound, {
+          issuer: "https://second.example.org",
+          jwksUri: "https://second.example.org/jwks",
+          maxVouchingDays: 7,
+        }),
+      );
+
+      // One rule per endpoint, decided by the primary key: an endpoint trusting
+      // two anchors at once is not something the code has to choose between.
+      expect(replaced.issuer).toBe("https://second.example.org");
+      expect(replaced.maxVouchingDays).toBe(7);
+      expect(
+        (await inScope(fixture.endpointScope, getEndpointTrustAnchor))?.issuer,
+      ).toBe("https://second.example.org");
+    });
+
+    it("removes a trust anchor, returning the endpoint to refusal", async () => {
+      const fixture = await newFixture();
+      await inScope(fixture.endpointScope, (bound) =>
+        upsertEndpointTrustAnchor(bound, {
+          issuer: "https://anchor.example.org",
+          jwksUri: "https://anchor.example.org/jwks",
+        }),
+      );
+
+      expect(
+        await inScope(fixture.endpointScope, deleteEndpointTrustAnchor),
+      ).toBe(true);
+      expect(
+        await inScope(fixture.endpointScope, getEndpointTrustAnchor),
+      ).toBeUndefined();
+      // Removing a rule that is not there is not an error: the caller wanted the
+      // endpoint to have no anchor, and it has none.
+      expect(
+        await inScope(fixture.endpointScope, deleteEndpointTrustAnchor),
+      ).toBe(false);
+    });
+
+    it("removes a ticket issuer, returning the endpoint to refusal", async () => {
+      const fixture = await newFixture();
+      await inScope(fixture.endpointScope, (bound) =>
+        upsertEndpointTicketIssuer(bound, {
+          issuer: "https://tickets.example.org",
+          jwksUri: "https://tickets.example.org/jwks",
+          acceptedTicketTypes: ["patient-self-access"],
+        }),
+      );
+
+      expect(
+        await inScope(fixture.endpointScope, deleteEndpointTicketIssuer),
+      ).toBe(true);
+      expect(
+        await inScope(fixture.endpointScope, getEndpointTicketIssuer),
+      ).toBeUndefined();
+      expect(
+        await inScope(fixture.endpointScope, deleteEndpointTicketIssuer),
+      ).toBe(false);
+    });
+
+    it("never shows one endpoint's rules to another", async () => {
+      const mine = await newFixture();
+      const theirs = await newFixture();
+      await inScope(mine.endpointScope, (bound) =>
+        upsertEndpointTrustAnchor(bound, {
+          issuer: "https://mine.example.org",
+          jwksUri: "https://mine.example.org/jwks",
+        }),
+      );
+
+      // Two tenants, so both layers are in play: the endpoint predicate and the
+      // policy. The other endpoint's read must come back empty rather than with
+      // a rule it did not configure.
+      expect(
+        await inScope(theirs.endpointScope, getEndpointTrustAnchor),
+      ).toBeUndefined();
+      expect(
+        await inScope(theirs.endpointScope, deleteEndpointTrustAnchor),
+      ).toBe(false);
+      expect(
+        (await inScope(mine.endpointScope, getEndpointTrustAnchor))?.issuer,
+      ).toBe("https://mine.example.org");
+    });
+  });
+
+  describe("vouched clients", () => {
+    /** The vouching a registration would write, with a fresh statement id. */
+    function vouching(statementId: string) {
+      return {
+        vouchedByIssuer: "https://anchor.example.org",
+        vouchedStatementId: statementId,
+        vouchingExpiresAt: new Date(Date.now() + 86_400_000),
+      };
+    }
+
+    it("records the anchor, the statement and the expiry together", async () => {
+      const fixture = await newFixture();
+      const statementId = `stmt-${unique()}`;
+
+      const client = await inScope(fixture.endpointScope, (bound) =>
+        createVouchedClient(
+          bound,
+          {
+            clientId: `vouched-${unique()}`,
+            name: "Vouched app",
+            clientType: "public",
+            grantTypes: ["authorization_code"],
+          },
+          vouching(statementId),
+        ),
+      );
+
+      expect(client.vouchedByIssuer).toBe("https://anchor.example.org");
+      expect(client.vouchedStatementId).toBe(statementId);
+      expect(client.vouchingExpiresAt).not.toBeNull();
+    });
+
+    it("lets one statement vouch for exactly one registration", async () => {
+      const fixture = await newFixture();
+      const statementId = `stmt-${unique()}`;
+      const register = () =>
+        inScope(fixture.endpointScope, (bound) =>
+          createVouchedClient(
+            bound,
+            {
+              clientId: `vouched-${unique()}`,
+              name: "Vouched app",
+              clientType: "public",
+              grantTypes: ["authorization_code"],
+            },
+            vouching(statementId),
+          ),
+        );
+
+      await register();
+
+      // The unique constraint is what arbitrates two registrations racing with
+      // the same statement: the second insert cannot succeed, so exactly one
+      // client exists no matter how the two interleave.
+      await expect(register()).rejects.toThrow();
+    });
+
+    it("lets the same statement id exist on a different endpoint", async () => {
+      const mine = await newFixture();
+      const theirs = await newFixture();
+      const statementId = `stmt-${unique()}`;
+      const register = (fixture: Fixture) =>
+        inScope(fixture.endpointScope, (bound) =>
+          createVouchedClient(
+            bound,
+            {
+              clientId: `vouched-${unique()}`,
+              name: "Vouched app",
+              clientType: "public",
+              grantTypes: ["authorization_code"],
+            },
+            vouching(statementId),
+          ),
+        );
+
+      // The ledger is per endpoint, because `jti` values are only unique per
+      // issuer: a global constraint would refuse a second endpoint's legitimate
+      // registration as a replay.
+      await register(mine);
+      await expect(register(theirs)).resolves.toBeDefined();
+    });
+
+    it("leaves an ordinary client unvouched", async () => {
+      const fixture = await newFixture();
+
+      const client = await inScope(fixture.endpointScope, (bound) =>
+        createClient(bound, {
+          clientId: `portal-${unique()}`,
+          name: "Portal app",
+          clientType: "public",
+          grantTypes: ["authorization_code"],
+        }),
+      );
+
+      // Three nulls, and the trio is what "vouched" means - so a portal-created
+      // client can never be mistaken for one an anchor vouched for.
+      expect(client.vouchedByIssuer).toBeNull();
+      expect(client.vouchedStatementId).toBeNull();
+      expect(client.vouchingExpiresAt).toBeNull();
+    });
+
+    it("never shows one endpoint's vouched client to another", async () => {
+      const mine = await newFixture();
+      const theirs = await newFixture();
+      const clientId = `vouched-${unique()}`;
+      await inScope(mine.endpointScope, (bound) =>
+        createVouchedClient(
+          bound,
+          {
+            clientId,
+            name: "Vouched app",
+            clientType: "public",
+            grantTypes: ["authorization_code"],
+          },
+          vouching(`stmt-${unique()}`),
+        ),
+      );
+
+      expect(
+        await inScope(theirs.endpointScope, (bound) =>
+          getClientByClientId(bound, clientId),
+        ),
+      ).toBeUndefined();
     });
   });
 

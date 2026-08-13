@@ -64,6 +64,13 @@
       "when": 1786333938363,
       "tag": "0008_passkeys",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786613453947,
+      "tag": "0009_trust_rules",
+      "breakpoints": true
     }
   ]
 }

@@ -52,6 +52,8 @@ const EXPECTED_TABLES = [
   "end_user_sessions",
   "end_users",
   "endpoint_keys",
+  "endpoint_ticket_issuers",
+  "endpoint_trust_anchors",
   "endpoints",
   "federation_states",
   "idp_configs",
@@ -555,6 +557,109 @@ describe("replay prevention", () => {
     expect(columnNames).toContain("family_id");
     expect(columnNames).toContain("replaced_by_id");
     expect(isIndexed(table("refresh_tokens"), "family_id")).toBe(true);
+  });
+});
+
+describe("trust rules", () => {
+  // Both rules are opt-in per endpoint: their absence is what makes registration
+  // answer 404 and token exchange an unsupported grant. The schema has to make
+  // "at most one per endpoint" structural, or the refusal default becomes a
+  // question of which of several rows a query happened to read.
+
+  it.each(["endpoint_trust_anchors", "endpoint_ticket_issuers"])(
+    "permits at most one %s row per endpoint",
+    (name) => {
+      const config = table(name);
+      const endpointColumn = config.columns.find(
+        (column) => column.name === "endpoint_id",
+      );
+
+      // The primary key, rather than a unique index over a surrogate: a second
+      // rule on one endpoint must be unrepresentable, not merely unusual.
+      expect(endpointColumn?.primary).toBe(true);
+      expect(endpointColumn?.notNull).toBe(true);
+    },
+  );
+
+  it.each(["endpoint_trust_anchors", "endpoint_ticket_issuers"])(
+    "takes %s away with the endpoint it configures",
+    (name) => {
+      expect(onDeleteFor(name, "endpoint_id")).toBe("cascade");
+    },
+  );
+
+  it("names the anchor, its keys and the vouching cap", () => {
+    const columns = table("endpoint_trust_anchors").columns;
+    const shapes = Object.fromEntries(
+      columns.map((column) => [
+        column.name,
+        { columnType: column.columnType, notNull: column.notNull },
+      ]),
+    );
+
+    expect(shapes["issuer"]).toEqual({ columnType: "PgText", notNull: true });
+    expect(shapes["jwks_uri"]).toEqual({ columnType: "PgText", notNull: true });
+    expect(shapes["max_vouching_days"]).toEqual({
+      columnType: "PgInteger",
+      notNull: true,
+    });
+  });
+
+  it("names the ticket issuer, its keys, the accepted types and the cap", () => {
+    const columns = table("endpoint_ticket_issuers").columns;
+    const byName = Object.fromEntries(
+      columns.map((column) => [column.name, column]),
+    );
+
+    expect(byName["issuer"]?.notNull).toBe(true);
+    expect(byName["jwks_uri"]?.notNull).toBe(true);
+    expect(byName["max_token_lifetime_secs"]?.columnType).toBe("PgInteger");
+    // An array rather than a delimited string, so "does this endpoint accept
+    // this type?" is a containment query rather than a substring match.
+    expect(byName["accepted_ticket_types"]?.columnType).toBe("PgArray");
+    expect(byName["accepted_ticket_types"]?.notNull).toBe(true);
+  });
+
+  it("accepts no ticket type until one is named", () => {
+    // Deny by default, in the column default: an endpoint whose rule exists but
+    // names no type refuses every ticket rather than accepting every ticket.
+    const column = table("endpoint_ticket_issuers").columns.find(
+      (candidate) => candidate.name === "accepted_ticket_types",
+    );
+    expect(column?.default).toEqual([]);
+  });
+});
+
+describe("client vouching", () => {
+  it("carries the anchor, the statement and the expiry", () => {
+    const byName = Object.fromEntries(
+      table("clients").columns.map((column) => [column.name, column]),
+    );
+
+    // All three nullable: a portal-created client is vouched by nobody, and the
+    // trio is set together at registration or not at all.
+    for (const name of [
+      "vouched_by_issuer",
+      "vouched_statement_id",
+      "vouching_expires_at",
+    ]) {
+      expect(byName[name]).toBeDefined();
+      expect(byName[name]?.notNull).toBe(false);
+    }
+    expect(byName["vouching_expires_at"]?.columnType).toBe("PgTimestamp");
+  });
+
+  it("lets one statement vouch for one registration", () => {
+    // The unique constraint is the replay arbiter for two registrations racing
+    // with the same statement: exactly one insert wins.
+    expect(uniqueIndexColumnNames(table("clients"))).toContainEqual([
+      "endpoint_id",
+      "vouched_statement_id",
+    ]);
+  });
+
+  it("indexes the vouching expiry, so the sweep is not a full scan", () => {
+    expect(isIndexed(table("clients"), "vouching_expires_at")).toBe(true);
   });
 });
 

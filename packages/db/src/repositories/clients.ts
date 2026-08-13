@@ -22,10 +22,17 @@ import type { BoundClientScope, BoundEndpointScope } from "./scope.js";
 import type { Client, NewClient } from "../schema/clients.js";
 import type { SQL } from "drizzle-orm";
 
-/** The caller-supplied half of a client registration. */
+/**
+ * The caller-supplied half of a client registration.
+ *
+ * The vouching trio is excluded deliberately, not incidentally: it is written by
+ * {@link createVouchedClient} and by nothing else, so a client cannot acquire an
+ * anchor after the fact, and {@link updateClient} - whose patch is derived from
+ * this type - cannot move an expiry that has become inconvenient.
+ */
 export type ClientInput = Omit<
   NewClient,
-  "id" | "endpointId" | "createdAt" | "updatedAt"
+  "id" | "endpointId" | "createdAt" | "updatedAt" | keyof ClientVouching
 >;
 
 /**
@@ -48,6 +55,69 @@ export async function createClient(
   const rows = await executorFor(scope)
     .insert(clients)
     .values({ ...input, endpointId: scope.endpointId })
+    .returning();
+  return requireRow(rows, "insert into clients");
+}
+
+/**
+ * The trio a vouched registration writes, together.
+ *
+ * A separate type from {@link ClientInput}, and required rather than optional in
+ * all three members, because "vouched" is defined as carrying all of them: a
+ * client with an anchor and no expiry would be one nothing could ever refuse.
+ * `Date` rather than `Date | SQL`, since a vouching expiry comes from the
+ * statement rather than from the database clock.
+ */
+export interface ClientVouching {
+  /** The anchor's issuer identifier, from the statement's `iss`. */
+  readonly vouchedByIssuer: string;
+  /** The statement's `jti`, unique with the endpoint. */
+  readonly vouchedStatementId: string;
+  /** When the vouching lapses, after which no grant type issues a token. */
+  readonly vouchingExpiresAt: Date;
+}
+
+/**
+ * Registers a client an anchor vouched for.
+ *
+ * One insert, so the trio and the registration are the same statement: a client
+ * that existed for an instant without its expiry would be a client that could be
+ * issued a token during that instant.
+ *
+ * The insert is also the replay check. `(endpoint_id, vouched_statement_id)` is
+ * unique, so two registrations racing with the same statement resolve here -
+ * exactly one succeeds and the other raises, whatever order they interleave in.
+ * A read-then-insert would let both find nothing.
+ *
+ * @param scope - The endpoint the client is registered on, bound to the
+ *   transaction that declared its tenant.
+ * @param input - The metadata, which must come from the statement rather than
+ *   from anything the request asserted alongside it.
+ * @param vouching - The anchor, the statement's identifier and the expiry.
+ * @returns The registered client.
+ * @throws {Error} When the insert returns no row, and - as a unique violation -
+ *   when this endpoint has already registered a client from this statement. The
+ *   caller distinguishes the two with `sqlStateOf`, since a replayed statement is
+ *   a refusal to audit rather than a fault.
+ * @example
+ * ```ts
+ * const client = await withTenantScope(db, endpointScope, (bound) =>
+ *   createVouchedClient(bound, metadata, {
+ *     vouchedByIssuer: statement.iss,
+ *     vouchedStatementId: statement.jti,
+ *     vouchingExpiresAt: statement.expiresAt,
+ *   }),
+ * );
+ * ```
+ */
+export async function createVouchedClient(
+  scope: BoundEndpointScope,
+  input: ClientInput,
+  vouching: ClientVouching,
+): Promise<Client> {
+  const rows = await executorFor(scope)
+    .insert(clients)
+    .values({ ...input, ...vouching, endpointId: scope.endpointId })
     .returning();
   return requireRow(rows, "insert into clients");
 }

@@ -6,6 +6,11 @@
  * configuration, where no endpoint is in scope to disambiguate it; making it
  * globally unique means it can be referenced directly from the runtime tables.
  *
+ * A client may additionally be *vouched*: created by an endpoint's trust anchor
+ * from a software statement the anchor signed, rather than by an administrator.
+ * The three `vouched*` columns record which anchor, which statement, and when the
+ * vouching lapses. See `./trust.ts` for the rule that permits any of it.
+ *
  * Author: John Grimes
  */
 
@@ -98,12 +103,44 @@ export const clients = pgTable(
     createdBy: uuid("created_by").references(() => adminUsers.id, {
       onDelete: "set null",
     }),
+
+    /**
+     * The trust anchor whose software statement created this client.
+     *
+     * Null for every client an administrator or the developer portal created,
+     * which is what "vouched" is defined against: the three columns below are
+     * set together at registration and never edited, so a client is vouched
+     * exactly when it carries all three.
+     */
+    vouchedByIssuer: text("vouched_by_issuer"),
+    /**
+     * The statement's `jti`, unique with `endpoint_id`.
+     *
+     * The uniqueness is the replay arbiter, not a data-quality nicety: one
+     * statement vouches for one registration, and two registrations racing with
+     * the same statement are resolved by the insert - exactly one wins, and the
+     * loser is refused. A read-then-insert would let both find nothing.
+     */
+    vouchedStatementId: text("vouched_statement_id"),
+    /**
+     * When the vouching lapses, after which no grant type issues a token.
+     *
+     * Enforced at the issuance chokepoint rather than by deleting the client,
+     * so enforcement never depends on a maintenance job having run.
+     */
+    vouchingExpiresAt: timestamp("vouching_expires_at", { withTimezone: true }),
+
     ...timestamps(),
   },
   (table) => [
     uniqueIndex("clients_client_id_unique").on(table.clientId),
     index("clients_endpoint_id_idx").on(table.endpointId),
     index("clients_created_by_idx").on(table.createdBy),
+    uniqueIndex("clients_endpoint_id_vouched_statement_id_unique").on(
+      table.endpointId,
+      table.vouchedStatementId,
+    ),
+    index("clients_vouching_expires_at_idx").on(table.vouchingExpiresAt),
   ],
 );
 

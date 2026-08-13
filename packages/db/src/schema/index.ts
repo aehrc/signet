@@ -15,3 +15,4 @@ export * from "./enums.js";
 export * from "./policies.js";
 export * from "./runtime.js";
 export * from "./tenancy.js";
+export * from "./trust.js";

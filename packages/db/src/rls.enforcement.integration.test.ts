@@ -68,6 +68,10 @@ import {
 } from "./repositories/scope.js";
 import { createTenant } from "./repositories/tenants.js";
 import {
+  upsertEndpointTicketIssuer,
+  upsertEndpointTrustAnchor,
+} from "./repositories/trust.js";
+import {
   currentTenantSetting,
   RLS_TABLES,
   TENANT_POLICY_NAME,
@@ -244,6 +248,19 @@ describeWithDatabase("row-level security as the serving role", () => {
       upsertIdpConfig(bound, {
         issuer: `https://idp-${unique()}.example.org`,
         clientId: "signet",
+      }),
+    );
+    await withTenantScope(owner, endpointScope, (bound) =>
+      upsertEndpointTrustAnchor(bound, {
+        issuer: `https://anchor-${unique()}.example.org`,
+        jwksUri: `https://anchor-${unique()}.example.org/jwks`,
+      }),
+    );
+    await withTenantScope(owner, endpointScope, (bound) =>
+      upsertEndpointTicketIssuer(bound, {
+        issuer: `https://tickets-${unique()}.example.org`,
+        jwksUri: `https://tickets-${unique()}.example.org/jwks`,
+        acceptedTicketTypes: ["patient-self-access"],
       }),
     );
 
