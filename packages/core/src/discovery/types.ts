@@ -120,6 +120,15 @@ export interface DiscoveryRuleOptions {
    * advertising the address anyway would be a promise nothing keeps.
    */
   readonly acceptsVouchedRegistration?: boolean;
+  /**
+   * The permission ticket types the endpoint's ticket issuer rule accepts.
+   *
+   * Absent means none, and so does empty: an endpoint with no rule refuses the
+   * token exchange grant, and a rule that names no type accepts no ticket.
+   * Advertising an empty array would say "exchange is supported" and then refuse
+   * every ticket presented.
+   */
+  readonly permissionTicketTypes?: readonly string[];
 }
 
 /**
@@ -138,6 +147,16 @@ export interface SmartConfiguration {
   )[];
   readonly token_endpoint_auth_methods_supported?: readonly TokenEndpointAuthMethod[];
   readonly registration_endpoint?: string;
+  /**
+   * The permission ticket types honoured at the token endpoint.
+   *
+   * Present only on an endpoint that names a ticket issuer, which is what makes
+   * it a promise rather than a hope: everywhere else the exchange grant is
+   * refused as unsupported.
+   *
+   * @see https://build.fhir.org/ig/HL7/smart-app-launch/permission-tickets.html
+   */
+  readonly smart_permission_ticket_types_supported?: readonly string[];
   readonly scopes_supported?: readonly string[];
   readonly response_types_supported?: readonly string[];
   readonly management_endpoint?: string;

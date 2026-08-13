@@ -1,5 +1,5 @@
 /**
- * The trust anchor rule, as the admin API accepts it.
+ * The two trust rules, as the admin API accepts them.
  *
  * Three fields and one rule of its own: both addresses must be well-formed
  * absolute URLs, because an unparseable rule has to be refused at configuration
@@ -44,3 +44,49 @@ export const trustAnchorWriteSchema = z.object({
 });
 
 export type TrustAnchorWrite = z.infer<typeof trustAnchorWriteSchema>;
+
+/**
+ * The longest an exchanged access token may live, in seconds.
+ *
+ * A day at the outside, and the useful answers are minutes. A permission ticket
+ * authorises one piece of work on one patient's record; a token that outlives the
+ * afternoon is a standing grant nobody reviewed.
+ */
+const MAX_EXCHANGED_TOKEN_LIFETIME_SECONDS = 86_400;
+
+/** The most ticket types one endpoint will enumerate. */
+const MAX_TICKET_TYPES = 20;
+
+/** Configuring the issuer whose permission tickets an endpoint exchanges. */
+export const ticketIssuerWriteSchema = z.object({
+  /** Matched exactly against a ticket's `iss`, so a trailing slash matters. */
+  issuer: z.string().url().max(2048),
+  /** Fetched through the outbound guard on every exchange. */
+  jwksUri: z.string().url().max(2048),
+  /**
+   * The ticket types this endpoint honours, and the list discovery advertises.
+   *
+   * Defaulted to none rather than to everything, and an empty list is accepted:
+   * a rule naming no type is a rule that refuses every ticket, which is the only
+   * safe reading. Reading silence as "all types" would make a half-configured
+   * endpoint accept types nobody chose.
+   */
+  acceptedTicketTypes: z
+    .array(z.string().min(1).max(128))
+    .max(MAX_TICKET_TYPES)
+    .default([]),
+  /**
+   * The endpoint's ceiling on an exchanged token's lifetime.
+   *
+   * One of three: the token expires at the earliest of the ticket's remaining
+   * validity, the endpoint's own access token lifetime, and this.
+   */
+  maxTokenLifetimeSecs: z
+    .number()
+    .int()
+    .min(30)
+    .max(MAX_EXCHANGED_TOKEN_LIFETIME_SECONDS)
+    .default(300),
+});
+
+export type TicketIssuerWrite = z.infer<typeof ticketIssuerWriteSchema>;

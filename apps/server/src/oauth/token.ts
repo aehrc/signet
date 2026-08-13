@@ -16,6 +16,8 @@
  * Author: John Grimes
  */
 
+import { TOKEN_EXCHANGE_GRANT_TYPE } from "@signet/core";
+
 import {
   authenticateClient,
   credentialFieldsFrom,
@@ -27,6 +29,7 @@ import {
   clientCredentialsGrant,
   formField,
   refreshTokenGrant,
+  tokenExchangeGrant,
 } from "./grants/index.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
@@ -140,6 +143,13 @@ export function tokenHandler(context: ServerContext) {
       }
       case "refresh_token": {
         outcome = await refreshTokenGrant(context, request);
+        break;
+      }
+      case TOKEN_EXCHANGE_GRANT_TYPE: {
+        // Dispatched like any other grant, and refused like an unimplemented one
+        // unless the endpoint names a ticket issuer - see
+        // `./grants/tokenExchange.js`, which makes that its first check.
+        outcome = await tokenExchangeGrant(context, request);
         break;
       }
       case undefined: {

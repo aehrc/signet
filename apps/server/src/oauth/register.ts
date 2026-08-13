@@ -51,9 +51,8 @@ import {
   isUniqueViolation,
   withTenantScope,
 } from "@signet/db";
-import { compactVerify, createLocalJWKSet, decodeProtectedHeader } from "jose";
 
-import { resolveRemoteJwks } from "./remoteJwks.js";
+import { verifyTrustedJws } from "./trustedJws.js";
 import {
   generateClientId,
   generateClientSecret,
@@ -62,7 +61,7 @@ import { requestMetadata } from "../http/requestMeta.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { VouchedClientMetadata, VouchedStatement } from "@signet/core";
-import type { Client, EndpointTrustAnchor } from "@signet/db";
+import type { Client } from "@signet/db";
 import type { Context } from "hono";
 
 /**
@@ -124,61 +123,6 @@ function authMethodFor(client: Client): string {
     default: {
       return "private_key_jwt";
     }
-  }
-}
-
-/**
- * Verifies a statement's signature against the anchor's currently published keys.
- *
- * Signature only. Everything temporal is decided by the pure validation that
- * follows, so that "the anchor did not sign this" and "the anchor signed this a
- * week ago" are distinguishable refusals rather than one opaque failure.
- */
-async function verifyStatement(
-  context: ServerContext,
-  anchor: EndpointTrustAnchor,
-  statement: string,
-): Promise<
-  | { readonly ok: true; readonly claims: unknown }
-  | { readonly ok: false; readonly description: string }
-> {
-  let kid: string | undefined;
-  try {
-    kid = decodeProtectedHeader(statement).kid;
-  } catch {
-    return { ok: false, description: "The software statement has no header" };
-  }
-
-  const resolved = await resolveRemoteJwks({
-    jwksUri: anchor.jwksUri,
-    cache: context.jwksCache,
-    now: context.clock(),
-    allowPrivateAddresses: context.config.allowPrivateOutboundFetches,
-    ...(kid === undefined ? {} : { kid }),
-  });
-  if (!resolved.ok) {
-    // Never fail-open. An anchor that cannot be reached has not vouched for
-    // anything, and treating its silence as assent is the one mistake this whole
-    // route exists to avoid.
-    return { ok: false, description: resolved.description };
-  }
-
-  try {
-    const verified = await compactVerify(
-      statement,
-      createLocalJWKSet(resolved.keys),
-      { algorithms: [...PERMITTED_STATEMENT_ALGORITHMS] },
-    );
-    return {
-      ok: true,
-      claims: JSON.parse(new TextDecoder().decode(verified.payload)) as unknown,
-    };
-  } catch {
-    return {
-      ok: false,
-      description:
-        "The software statement's signature could not be verified against the anchor's published keys",
-    };
   }
 }
 
@@ -290,11 +234,12 @@ export function registerHandler(context: ServerContext) {
       return await refuse(anchor.issuer, "invalid_request", parsed.description);
     }
 
-    const verified = await verifyStatement(
-      context,
-      anchor,
-      parsed.softwareStatement,
-    );
+    const verified = await verifyTrustedJws(context, {
+      jwksUri: anchor.jwksUri,
+      token: parsed.softwareStatement,
+      algorithms: PERMITTED_STATEMENT_ALGORITHMS,
+      noun: "software statement",
+    });
     if (!verified.ok) {
       return await refuse(
         anchor.issuer,

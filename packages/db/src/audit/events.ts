@@ -97,6 +97,7 @@ export type AuditAction =
   | "token.refreshed"
   | "token.refresh-reuse-detected"
   | "token.jti-replay-detected"
+  | "token.ticket-exchanged"
   | "token.revoked"
   | "token.introspected"
   | "consent.granted"
@@ -130,6 +131,8 @@ export type AuditAction =
   | "client.registration-attempted"
   | "trust-anchor.configured"
   | "trust-anchor.removed"
+  | "ticket-issuer.configured"
+  | "ticket-issuer.removed"
   | "client-request.submitted"
   | "client-request.approved"
   | "client-request.rejected"
@@ -169,6 +172,8 @@ export const AUDIT_ACTION_DESCRIPTIONS: Readonly<Record<AuditAction, string>> =
       "A refresh token was replayed; the whole token family was revoked",
     "token.jti-replay-detected":
       "A client assertion identifier was replayed and rejected",
+    "token.ticket-exchanged":
+      "A permission ticket was presented at the token endpoint and exchanged, or refused",
     "token.revoked": "Token revoked",
     "token.introspected": "Token introspected",
     "consent.granted": "Consent recorded for later reuse",
@@ -205,6 +210,10 @@ export const AUDIT_ACTION_DESCRIPTIONS: Readonly<Record<AuditAction, string>> =
       "Trust anchor configured on an endpoint, enabling vouched registration",
     "trust-anchor.removed":
       "Trust anchor removed from an endpoint, refusing further registrations",
+    "ticket-issuer.configured":
+      "Permission ticket issuer configured on an endpoint, enabling token exchange",
+    "ticket-issuer.removed":
+      "Permission ticket issuer removed from an endpoint, refusing further exchanges",
     "client-request.submitted": "Client registration requested by a developer",
     "client-request.approved": "Client registration request approved",
     "client-request.rejected": "Client registration request rejected",
@@ -237,6 +246,7 @@ export const AUDIT_ACTION_CATEGORIES: Readonly<
   "token.refreshed": "authorization",
   "token.refresh-reuse-detected": "authorization",
   "token.jti-replay-detected": "authorization",
+  "token.ticket-exchanged": "authorization",
   "token.revoked": "authorization",
   "token.introspected": "authorization",
   "consent.granted": "authorization",
@@ -270,6 +280,8 @@ export const AUDIT_ACTION_CATEGORIES: Readonly<
   "client.registration-attempted": "configuration",
   "trust-anchor.configured": "configuration",
   "trust-anchor.removed": "configuration",
+  "ticket-issuer.configured": "configuration",
+  "ticket-issuer.removed": "configuration",
   "client-request.submitted": "configuration",
   "client-request.approved": "configuration",
   "client-request.rejected": "configuration",
@@ -318,6 +330,7 @@ export type AuditTargetType =
   | "endpoint-key"
   | "idp-config"
   | "trust-anchor"
+  | "ticket-issuer"
   | "end-user"
   | "client"
   | "client-request"
@@ -346,6 +359,7 @@ const AUDIT_TARGET_TYPE_SET: Readonly<Record<AuditTargetType, true>> = {
   "endpoint-key": true,
   "idp-config": true,
   "trust-anchor": true,
+  "ticket-issuer": true,
   "end-user": true,
   client: true,
   "client-request": true,

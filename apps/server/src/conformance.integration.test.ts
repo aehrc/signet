@@ -21,6 +21,10 @@
  * Author: John Grimes
  */
 
+import {
+  JWT_SUBJECT_TOKEN_TYPE,
+  TOKEN_EXCHANGE_GRANT_TYPE,
+} from "@signet/core";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { adminRequest, endpointPath } from "./test/adminApi.js";
@@ -44,6 +48,7 @@ import {
   TEST_PUBLIC_URL,
   testDatabaseUrl,
 } from "./test/harness.js";
+import { jsonResponse, startLocalListener } from "./test/localListener.js";
 import { startTrustAnchor } from "./test/trustAnchor.js";
 
 import type { TestStack } from "./test/harness.js";
@@ -57,6 +62,7 @@ interface SmartConfiguration {
   readonly code_challenge_methods_supported: readonly string[];
   readonly scopes_supported?: readonly string[];
   readonly registration_endpoint?: string;
+  readonly smart_permission_ticket_types_supported?: readonly string[];
 }
 
 describe.skipIf(testDatabaseUrl === undefined)(
@@ -530,6 +536,108 @@ describe.skipIf(testDatabaseUrl === undefined)(
         ).toBeDefined();
       } finally {
         await anchor.close();
+      }
+    });
+
+    it("advertises no permission ticket types, since it accepts none", async () => {
+      // The negative half of the pair below. This endpoint names no ticket
+      // issuer, which is the default for every endpoint, so token exchange is
+      // not a grant type it has and there are no types to advertise.
+      expect(
+        advertised.smart_permission_ticket_types_supported,
+      ).toBeUndefined();
+
+      const response = await postForm(
+        stack,
+        "/token",
+        {
+          grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
+          subject_token: "not.a.ticket",
+          subject_token_type: JWT_SUBJECT_TOKEN_TYPE,
+          scope: "patient/Patient.rs",
+        },
+        { authorization: basicAuth(stack.symmetricClient.clientId) },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: "unsupported_grant_type",
+      });
+    });
+
+    it("advertises ticket types it will exchange, once an issuer is named", async () => {
+      // The positive half. An advertised
+      // `smart_permission_ticket_types_supported` is a promise that a ticket of
+      // that type produces a token, and an affirmative-only test above would
+      // pass against a server that advertised the list and refused every
+      // ticket.
+      //
+      // On an endpoint of its own, whose audience is a FHIR server on a real
+      // socket: subject resolution is a search, and a promise that stops short
+      // of one is not the promise being made.
+      const ticketIssuer = await startTrustAnchor();
+      const fhir = await startLocalListener(
+        async () =>
+          await Promise.resolve(
+            jsonResponse({
+              resourceType: "Bundle",
+              type: "searchset",
+              entry: [{ resource: { resourceType: "Patient", id: "pat-1" } }],
+            }),
+          ),
+      );
+      const exchanging = await createTestStack({
+        allowPrivateOutboundFetches: true,
+        endpoint: { fhirBaseUrl: `${fhir.origin}/fhir` },
+      });
+      try {
+        const cookie = await exchanging.signIn();
+        const configured = await adminRequest(
+          exchanging,
+          "PUT",
+          `${endpointPath(exchanging)}/trust/ticket-issuer`,
+          {
+            credential: { cookie },
+            body: {
+              issuer: ticketIssuer.issuer,
+              jwksUri: ticketIssuer.jwksUri,
+              acceptedTicketTypes: ["patient-self-access"],
+              maxTokenLifetimeSecs: 300,
+            },
+          },
+        );
+        expect(configured.status).toBe(200);
+
+        const document = (await (
+          await exchanging.app.request(
+            `${issuerPath(exchanging)}/.well-known/smart-configuration`,
+          )
+        ).json()) as SmartConfiguration;
+        expect(document.smart_permission_ticket_types_supported).toEqual([
+          "patient-self-access",
+        ]);
+
+        const exchanged = await postForm(
+          exchanging,
+          "/token",
+          {
+            grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
+            subject_token: await ticketIssuer.mintTicket({
+              issuedAt: exchanging.context.clock(),
+            }),
+            subject_token_type: JWT_SUBJECT_TOKEN_TYPE,
+            scope: "patient/Patient.rs",
+          },
+          { authorization: basicAuth(exchanging.symmetricClient.clientId) },
+        );
+        expect(exchanged.status).toBe(200);
+        expect(await exchanged.json()).toMatchObject({
+          scope: "patient/Patient.rs",
+          patient: "pat-1",
+        });
+      } finally {
+        await exchanging.close();
+        await fhir.close();
+        await ticketIssuer.close();
       }
     });
 

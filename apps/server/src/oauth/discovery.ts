@@ -25,6 +25,7 @@ import {
   buildSmartConfiguration,
 } from "@signet/core";
 import {
+  getEndpointTicketIssuer,
   getEndpointTrustAnchor,
   listPublishableEndpointKeys,
   toCapabilityConfig,
@@ -47,17 +48,27 @@ const CACHE_CONTROL = "public, max-age=300";
  *
  * The refusing answer is the one that needs no rule. An endpoint with no trust
  * anchor row advertises no registration endpoint, and there is nothing at
- * `/register` for it to advertise.
+ * `/register` for it to advertise; an endpoint with no ticket issuer row
+ * advertises no ticket types, and its token endpoint refuses the exchange grant.
  */
 async function discoveryRules(
   context: ServerContext,
   c: Context<SignetEnvironment>,
-): Promise<{ readonly acceptsVouchedRegistration: boolean }> {
+): Promise<{
+  readonly acceptsVouchedRegistration: boolean;
+  readonly permissionTicketTypes: readonly string[];
+}> {
   const { scope } = c.get("issuer");
   const anchor = await withTenantScope(context.db, scope, (bound) =>
     getEndpointTrustAnchor(bound),
   );
-  return { acceptsVouchedRegistration: anchor !== undefined };
+  const ticketIssuer = await withTenantScope(context.db, scope, (bound) =>
+    getEndpointTicketIssuer(bound),
+  );
+  return {
+    acceptsVouchedRegistration: anchor !== undefined,
+    permissionTicketTypes: ticketIssuer?.acceptedTicketTypes ?? [],
+  };
 }
 
 /**

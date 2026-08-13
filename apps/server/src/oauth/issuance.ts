@@ -38,6 +38,7 @@ import {
   withTenantScope,
 } from "@signet/db";
 
+import { buildEvaluationContext } from "./evaluationContext.js";
 import { loadSigningKey, signClaims } from "../keys/signing.js";
 
 import type { ServerContext, ResolvedIssuerContext } from "../context.js";
@@ -79,6 +80,19 @@ export interface IssuanceRequest {
    * Checking it here rather than in each grant is what makes "any" true.
    */
   readonly vouchingExpiresAt: Date | null;
+  /**
+   * A ceiling on the access token's lifetime, in seconds.
+   *
+   * For a grant whose authorisation expires before the endpoint's own token
+   * lifetime would - a permission ticket exchange, whose token must not outlive
+   * the ticket that authorised it. Applied to the evaluation rather than to the
+   * response, so the signed `exp` and the reported `expires_in` are the same
+   * number: capping only the response would advertise a short life for a token
+   * that a resource server would keep accepting for an hour.
+   *
+   * Absent means the policy's own lifetime stands, which is every other grant.
+   */
+  readonly accessTokenTtlCeiling?: number;
   /** Copied into the ID token when the authorization carried one. */
   readonly nonce?: string;
   /** When the end user authenticated, as seconds since the epoch. */
@@ -186,21 +200,27 @@ export async function issueTokens(
   // console's simulator renders a token from the same pair of calls over the same
   // context, and a second construction here is a second thing that could differ
   // from it.
-  const evaluationContext = {
-    endpoint: {
-      tenantSlug: issuerContext.tenant.slug,
-      slug: issuerContext.endpoint.slug,
-      issuer: issuerContext.issuer,
-      fhirBaseUrl: issuerContext.endpoint.fhirBaseUrl,
-    },
+  const evaluationContext = buildEvaluationContext({
+    issuerContext,
     client: request.client,
     user: request.user,
     requested: request.requested,
-    context: request.launchContext,
+    launchContext: request.launchContext,
     grantType: request.grantType,
-  };
+  });
 
-  const evaluation = evaluatePolicy(policy.document, evaluationContext);
+  const evaluated = evaluatePolicy(policy.document, evaluationContext);
+  // The grant's ceiling and the policy's, resolved once and before anything is
+  // assembled, so every consumer of the evaluation below - the claims, the
+  // response, the stored expiry - sees the same lifetime.
+  const ceiling = request.accessTokenTtlCeiling;
+  const evaluation =
+    ceiling === undefined
+      ? evaluated
+      : {
+          ...evaluated,
+          accessTokenTtl: Math.min(evaluated.accessTokenTtl, ceiling),
+        };
 
   if (evaluation.grantedScopes.length === 0) {
     return { ok: false, reason: "nothing-granted" };

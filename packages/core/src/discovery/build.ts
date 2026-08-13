@@ -152,6 +152,13 @@ export function buildSmartConfiguration(
     ...(rules.acceptsVouchedRegistration === true
       ? { registration_endpoint: urls.registration }
       : {}),
+    // From the ticket issuer rule, and only when it names a type. An endpoint
+    // with no rule refuses the exchange grant, and one whose rule names no type
+    // refuses every ticket - neither has anything to advertise.
+    ...(rules.permissionTicketTypes !== undefined &&
+    rules.permissionTicketTypes.length > 0
+      ? { smart_permission_ticket_types_supported: rules.permissionTicketTypes }
+      : {}),
     ...(config.scopesSupported.length > 0
       ? { scopes_supported: config.scopesSupported }
       : {}),

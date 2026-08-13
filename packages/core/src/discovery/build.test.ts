@@ -260,6 +260,30 @@ describe("buildSmartConfiguration", () => {
       );
     });
 
+    it("advertises ticket types only when the endpoint names a ticket issuer", () => {
+      // The same rule as the registration endpoint above, and the same default:
+      // an endpoint that has not been asked about a ticket issuer advertises no
+      // ticket support and refuses the exchange grant.
+      expect(
+        buildSmartConfiguration(config(), {
+          permissionTicketTypes: ["patient-self-access"],
+        }).smart_permission_ticket_types_supported,
+      ).toEqual(["patient-self-access"]);
+      expect(Object.keys(buildSmartConfiguration(config()))).not.toContain(
+        "smart_permission_ticket_types_supported",
+      );
+    });
+
+    it("advertises nothing for a ticket rule that accepts no types", () => {
+      // A rule naming no type accepts no ticket. Advertising an empty array
+      // would say "exchange is supported" and then refuse every ticket.
+      expect(
+        Object.keys(
+          buildSmartConfiguration(config(), { permissionTicketTypes: [] }),
+        ),
+      ).not.toContain("smart_permission_ticket_types_supported");
+    });
+
     it("is not advertised by the developer portal's own flag", () => {
       // `supportsDynamicRegistration` turns the human-reviewed portal on. It used
       // to drive this field, and an endpoint with the portal enabled and no anchor

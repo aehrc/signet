@@ -25,35 +25,34 @@
  * Author: John Grimes
  */
 
-import type { ClientType, GrantType } from "../policy/types.js";
-
-/**
- * The signature algorithms a software statement may be signed with.
- *
- * Asymmetric only, because a statement is verified against a key the anchor
- * publishes - there is no shared secret to verify an `HS*` signature against, and
- * `none` would make the whole exercise decorative. `ES256` leads because it is what
- * the connectathon programme's anchor mints; the rest are here so an anchor with an
- * RSA estate is not forced to re-key.
- *
- * A closed list rather than "whatever the key says", so an anchor cannot downgrade
- * the algorithm by publishing a key that names a weaker one.
- */
-export const PERMITTED_STATEMENT_ALGORITHMS: readonly string[] = [
-  "ES256",
-  "ES384",
-  "RS256",
-  "RS384",
-];
+import {
+  isCompactJws,
+  isJsonObject,
+  PERMITTED_TRUST_ALGORITHMS,
+  readTrustedTokenEnvelope,
+  textClaim,
+} from "../trust/claims.js";
 
 /**
  * How far a statement's `iat` may run ahead of Signet's clock, in seconds.
  *
- * Two correct clocks disagree by seconds. An hour is not disagreement, it is a
- * statement minted to become valid later, and accepting one would let an anchor
- * pre-date registrations.
+ * The same tolerance every token a trusted issuer signs is judged by.
  */
-export const STATEMENT_CLOCK_TOLERANCE_SECONDS = 60;
+export { TRUST_CLOCK_TOLERANCE_SECONDS as STATEMENT_CLOCK_TOLERANCE_SECONDS } from "../trust/claims.js";
+
+import type { ClientType, GrantType } from "../policy/types.js";
+import type { TrustedTokenRefusal } from "../trust/claims.js";
+
+/**
+ * The signature algorithms a software statement may be signed with.
+ *
+ * The same closed asymmetric list every token a trusted issuer signs is held to -
+ * see `../trust/claims.ts`. Named here as well because a caller verifying a
+ * statement should not have to know that it shares the list with a permission
+ * ticket, and because the two could diverge later without the callers changing.
+ */
+export const PERMITTED_STATEMENT_ALGORITHMS: readonly string[] =
+  PERMITTED_TRUST_ALGORITHMS;
 
 /** The most redirect URIs one registration may carry. */
 const MAX_REDIRECT_URIS = 20;
@@ -90,20 +89,10 @@ function refuseBody(
 }
 
 /** Whether a value is a JSON object rather than an array, null or a scalar. */
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const isObject = isJsonObject;
 
 /** A non-empty string, or undefined for anything else. */
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-/** Whether a string has the three dot-separated parts of a compact JWS. */
-function isCompactJws(value: string): boolean {
-  const parts = value.split(".");
-  return parts.length === 3 && parts.every((part) => part.length > 0);
-}
+const text = textClaim;
 
 /**
  * Reads a registration request body.
@@ -210,12 +199,25 @@ function refuseStatement(
   return { ok: false, code, description };
 }
 
-/** A finite numeric claim, or undefined for anything else. */
-function seconds(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
-}
+/**
+ * How the shared envelope's refusals read as a registration's refusals.
+ *
+ * A total record, so an envelope refusal that is added later cannot be silently
+ * dropped here. Only one of them is renamed, and the rename is the point: a
+ * statement's `jti` is what records it as spent, so "no jti" means "this could
+ * never be spent" rather than the generic "no identifier".
+ */
+const STATEMENT_REFUSAL_FOR: Readonly<
+  Record<TrustedTokenRefusal, StatementRefusal>
+> = {
+  "not-an-object": "not-an-object",
+  "issuer-mismatch": "issuer-mismatch",
+  "missing-token-id": "missing-statement-id",
+  "missing-issued-at": "missing-issued-at",
+  "missing-expiry": "missing-expiry",
+  expired: "expired",
+  "issued-in-the-future": "issued-in-the-future",
+};
 
 /**
  * Validates a statement's claims against the endpoint's trust anchor rule.
@@ -243,60 +245,23 @@ function seconds(value: unknown): number | undefined {
 export function validateSoftwareStatement(
   check: StatementCheck,
 ): StatementValidation {
-  const { claims, now } = check;
-  if (!isObject(claims)) {
-    return refuseStatement(
-      "not-an-object",
-      "The software statement's payload is not a JSON object",
-    );
+  const { now } = check;
+  const read = readTrustedTokenEnvelope({
+    claims: check.claims,
+    expectedIssuer: check.anchorIssuer,
+    now,
+    noun: "software statement",
+  });
+  if (!read.ok) {
+    return refuseStatement(STATEMENT_REFUSAL_FOR[read.code], read.description);
   }
-
-  if (text(claims["iss"]) !== check.anchorIssuer) {
-    return refuseStatement(
-      "issuer-mismatch",
-      `This endpoint accepts statements from ${check.anchorIssuer} only`,
-    );
-  }
-
-  const statementId = text(claims["jti"]);
-  if (statementId === undefined) {
-    return refuseStatement(
-      "missing-statement-id",
-      "The software statement has no jti, so it could not be recorded as spent",
-    );
-  }
-
-  const issuedAt = seconds(claims["iat"]);
-  if (issuedAt === undefined) {
-    return refuseStatement(
-      "missing-issued-at",
-      "The software statement has no iat",
-    );
-  }
-
-  const expiresAt = seconds(claims["exp"]);
-  if (expiresAt === undefined) {
-    return refuseStatement(
-      "missing-expiry",
-      "The software statement has no exp, and vouching without an end is not accepted",
-    );
-  }
-
-  const nowSeconds = Math.floor(now.getTime() / 1000);
-  if (expiresAt <= nowSeconds) {
-    return refuseStatement("expired", "The software statement has expired");
-  }
-  if (issuedAt > nowSeconds + STATEMENT_CLOCK_TOLERANCE_SECONDS) {
-    return refuseStatement(
-      "issued-in-the-future",
-      "The software statement's iat is in the future",
-    );
-  }
+  const envelope = read.envelope;
 
   // The endpoint's ceiling, measured from now rather than from `iat`: what is being
   // bounded is how long this registration may live, and it starts now.
+  const nowSeconds = Math.floor(now.getTime() / 1000);
   const ceiling = nowSeconds + check.maxVouchingDays * SECONDS_PER_DAY;
-  if (expiresAt > ceiling) {
+  if (Math.floor(envelope.expiresAt.getTime() / 1000) > ceiling) {
     return refuseStatement(
       "vouching-too-long",
       `This endpoint vouches for no longer than ${String(check.maxVouchingDays)} days`,
@@ -306,10 +271,10 @@ export function validateSoftwareStatement(
   return {
     ok: true,
     statement: {
-      issuer: check.anchorIssuer,
-      statementId,
-      issuedAt: new Date(issuedAt * 1000),
-      expiresAt: new Date(expiresAt * 1000),
+      issuer: envelope.issuer,
+      statementId: envelope.tokenId,
+      issuedAt: envelope.issuedAt,
+      expiresAt: envelope.expiresAt,
     },
   };
 }
