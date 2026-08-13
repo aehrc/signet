@@ -87,13 +87,17 @@ export const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
  *
  * Every predicate is a property of the row itself - an expiry that has passed -
  * so none of them can match a row that is still usable, and none returns anything
- * but a count. That, together with requiring the owning identity, is what makes a
+ * but a count. That includes the one registration among them: a vouched client
+ * whose vouching lapsed has been refused every grant type since the instant it
+ * did, enforced at issuance rather than by this delete, so removing the row a
+ * month later reclaims storage and withdraws nothing. That, together with requiring the owning identity, is what makes a
  * job with no tenant acceptable: attempted with the serving role each of these
  * deletes nothing, because the policies hide every row from a connection that has
  * declared no tenant.
  */
 export const SWEEP_FUNCTIONS: readonly string[] = [
   "repositories/accessTokens.deleteExpiredAccessTokens",
+  "repositories/clients.deleteLapsedVouchedClients",
   "repositories/adminPasskeys.deleteExpiredAdminPasskeyChallenges",
   "repositories/adminUsers.deleteExpiredAdminSessions",
   "repositories/authorizationCodes.deleteExpiredAuthorizationCodes",

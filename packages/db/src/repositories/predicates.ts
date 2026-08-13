@@ -19,6 +19,8 @@
  * Author: John Grimes
  */
 
+import type { ClientType } from "@signet/core";
+
 /** A row with a lifetime that may be unbounded. */
 export interface Expirable {
   readonly expiresAt: Date | null;
@@ -215,4 +217,47 @@ export function isEndUserEnabled(user: {
 /** Whether a client may be issued a token. */
 export function isClientUsable(client: { readonly status: string }): boolean {
   return client.status === "active";
+}
+
+/** The three client-type admission flags an endpoint carries. */
+export interface ClientTypeAdmission {
+  readonly allowsPublicClients: boolean;
+  readonly allowsConfidentialSymmetricClients: boolean;
+  readonly allowsConfidentialAsymmetricClients: boolean;
+}
+
+/**
+ * Whether an endpoint admits a client of this type at all.
+ *
+ * Asked wherever a client is created - the console, the developer portal's
+ * approval, and vouched registration - because an endpoint that refuses a type
+ * should refuse to register one rather than registering it and then refusing
+ * every authorization it attempts. The second produces a client that appears
+ * configured and never works.
+ *
+ * @param endpoint - The endpoint's admission flags.
+ * @param clientType - The type being registered.
+ * @returns Whether the registration may proceed.
+ * @example
+ * ```ts
+ * if (!endpointAllowsClientType(endpoint, metadata.clientType)) {
+ *   return refuse("invalid_client_metadata", "…");
+ * }
+ * ```
+ */
+export function endpointAllowsClientType(
+  endpoint: ClientTypeAdmission,
+  clientType: ClientType,
+): boolean {
+  switch (clientType) {
+    case "public": {
+      return endpoint.allowsPublicClients;
+    }
+    case "confidential-symmetric": {
+      return endpoint.allowsConfidentialSymmetricClients;
+    }
+    case "confidential-asymmetric": {
+      return endpoint.allowsConfidentialAsymmetricClients;
+    }
+  }
 }

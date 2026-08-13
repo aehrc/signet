@@ -25,6 +25,7 @@ import {
   buildSmartConfiguration,
 } from "@signet/core";
 import {
+  getEndpointTrustAnchor,
   listPublishableEndpointKeys,
   toCapabilityConfig,
   withTenantScope,
@@ -37,16 +38,46 @@ import type { Context } from "hono";
 const CACHE_CONTROL = "public, max-age=300";
 
 /**
+ * What the endpoint's opt-in rules add to a discovery document.
+ *
+ * One lookup, shared by both documents, because the two must answer the same
+ * question the same way: a resource server that merges from `openid-configuration`
+ * must not be told about a registration endpoint that `smart-configuration` does
+ * not advertise.
+ *
+ * The refusing answer is the one that needs no rule. An endpoint with no trust
+ * anchor row advertises no registration endpoint, and there is nothing at
+ * `/register` for it to advertise.
+ */
+async function discoveryRules(
+  context: ServerContext,
+  c: Context<SignetEnvironment>,
+): Promise<{ readonly acceptsVouchedRegistration: boolean }> {
+  const { scope } = c.get("issuer");
+  const anchor = await withTenantScope(context.db, scope, (bound) =>
+    getEndpointTrustAnchor(bound),
+  );
+  return { acceptsVouchedRegistration: anchor !== undefined };
+}
+
+/**
  * Serves `.well-known/smart-configuration`.
  *
- * A plain handler rather than a factory: unlike the JWKS it needs nothing from the
- * server context, because everything it publishes is derived from the endpoint row
- * the issuer middleware already resolved.
+ * A factory rather than a plain handler, and asynchronous, because
+ * `registration_endpoint` follows the endpoint's trust anchor rule rather than one
+ * of its capability columns - and a rule lives in a table of its own.
+ *
+ * @param context - The server's dependencies.
  */
-export function smartConfigurationHandler(c: Context<SignetEnvironment>) {
-  const { endpoint, issuer } = c.get("issuer");
-  c.header("Cache-Control", CACHE_CONTROL);
-  return c.json(buildSmartConfiguration(toCapabilityConfig(endpoint, issuer)));
+export function smartConfigurationHandler(context: ServerContext) {
+  return async (c: Context<SignetEnvironment>) => {
+    const { endpoint, issuer } = c.get("issuer");
+    const rules = await discoveryRules(context, c);
+    c.header("Cache-Control", CACHE_CONTROL);
+    return c.json(
+      buildSmartConfiguration(toCapabilityConfig(endpoint, issuer), rules),
+    );
+  };
 }
 
 /**
@@ -68,9 +99,11 @@ export function openIdConfigurationHandler(context: ServerContext) {
     const keys = await withTenantScope(context.db, scope, (bound) =>
       listPublishableEndpointKeys(bound),
     );
+    const rules = await discoveryRules(context, c);
     c.header("Cache-Control", CACHE_CONTROL);
     return c.json(
       buildOpenIdConfiguration(toCapabilityConfig(endpoint, issuer), {
+        ...rules,
         signingAlgorithms: advertisedAlgorithms(keys),
       }),
     );

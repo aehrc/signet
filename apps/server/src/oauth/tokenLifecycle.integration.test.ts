@@ -10,15 +10,22 @@
  */
 
 import {
+  createVouchedClient,
+  decryptSecret,
+  deleteEndpointTrustAnchor,
   findRefreshToken,
+  hashPassword,
   hashToken,
   introspectAccessToken,
   listRefreshTokensForSubject,
   queryAuditEvents,
+  upsertEndpointTrustAnchor,
   withTenantScope,
 } from "@signet/db";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { importJWK, SignJWT } from "jose";
 
+import { generateEndpointKey } from "../keys/material.js";
 import {
   authorizeToCode,
   basicAuth,
@@ -26,7 +33,12 @@ import {
   issuerPath,
   postForm,
 } from "../test/flows.js";
-import { createTestStack, testDatabaseUrl } from "../test/harness.js";
+import {
+  createTestStack,
+  TEST_CLIENT_SECRET,
+  TEST_MASTER_KEY,
+  testDatabaseUrl,
+} from "../test/harness.js";
 
 import type { TestStack } from "../test/harness.js";
 
@@ -489,6 +501,238 @@ describeWithDatabase("introspection, revocation and UserInfo", () => {
         )
       )?.revokedAt,
     ).not.toBeNull();
+  });
+});
+
+describeWithDatabase("a vouched client's expiry", () => {
+  let stack: TestStack;
+
+  /**
+   * The instant the harness clock starts at, so expiry is the test's to choose.
+   *
+   * Read from the stack rather than fixed, and only ever moved *forwards*. The
+   * repositories compare expiry against the database's own clock, so a process
+   * clock wound back would write rows the database considers already expired -
+   * which fails as an unrelated "session does not exist" rather than as anything
+   * about vouching.
+   */
+  let START: Date;
+
+  beforeAll(async () => {
+    stack = await createTestStack();
+    START = stack.context.clock();
+  });
+
+  afterAll(async () => {
+    await stack.close();
+  });
+
+  /**
+   * Registers a client an anchor vouched for, directly.
+   *
+   * Through the repository rather than through `/register`, so that what is being
+   * asserted is the enforcement at issuance and not the registration route: the
+   * expiry has to bite for a vouched client however it came to exist.
+   */
+  async function vouchedClient(
+    expiresAt: Date,
+    overrides: Partial<Parameters<typeof createVouchedClient>[1]> = {},
+  ) {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    return await withTenantScope(stack.context.db, stack.scope, (bound) =>
+      createVouchedClient(
+        bound,
+        {
+          clientId: `vouched-${suffix}`,
+          name: "Vouched app",
+          clientType: "public",
+          redirectUris: ["https://app.test/cb"],
+          grantTypes: ["authorization_code", "refresh_token"],
+          allowedScopes: ["openid", "offline_access", "user/Observation.rs"],
+          status: "active",
+          ...overrides,
+        },
+        {
+          vouchedByIssuer: "https://anchor.test",
+          vouchedStatementId: `statement-${suffix}`,
+          vouchingExpiresAt: expiresAt,
+        },
+      ),
+    );
+  }
+
+  it("issues tokens right up to the expiry and refuses every grant after it", async () => {
+    // SC-005 measured directly: a request that succeeded before the boundary is
+    // repeated after it, and the only thing that changed is the clock.
+    //
+    // Confidential, because the baseline preset grants `offline_access` only to a
+    // client that can authenticate - and the refresh grant is the half of this
+    // that a per-grant check would miss.
+    const client = await vouchedClient(new Date(START.getTime() + 3_600_000), {
+      clientType: "confidential-symmetric",
+      secretHash: await hashPassword(TEST_CLIENT_SECRET),
+    });
+
+    const first = await authorizeToCode(stack, {
+      clientId: client.clientId,
+      scope: "openid offline_access user/Observation.rs",
+    });
+    const issued = (await (
+      await postForm(
+        stack,
+        "/token",
+        {
+          grant_type: "authorization_code",
+          code: first.code,
+          redirect_uri: "https://app.test/cb",
+          code_verifier: first.verifier,
+          client_id: client.clientId,
+        },
+        { authorization: basicAuth(client.clientId) },
+      )
+    ).json()) as TokenResponseBody;
+    expect(issued.access_token).toBeDefined();
+    expect(issued.refresh_token).toBeDefined();
+
+    // A second authorization, redeemed after the vouching lapses. The code is
+    // minted while the client is live so that the refusal is the vouching rather
+    // than anything about the code.
+    const second = await authorizeToCode(stack, {
+      clientId: client.clientId,
+      scope: "openid user/Observation.rs",
+    });
+    stack.setNow(new Date(START.getTime() + 7_200_000));
+
+    const afterwards = await postForm(
+      stack,
+      "/token",
+      {
+        grant_type: "authorization_code",
+        code: second.code,
+        redirect_uri: "https://app.test/cb",
+        code_verifier: second.verifier,
+        client_id: client.clientId,
+      },
+      { authorization: basicAuth(client.clientId) },
+    );
+    expect(afterwards.status).toBe(401);
+    expect(
+      ((await afterwards.json()) as TokenResponseBody).error_description,
+    ).toContain("vouching");
+
+    // The refresh grant too: the token was issued while the client was live and
+    // would otherwise outlive the vouching by its own lifetime.
+    const refreshed = await postForm(
+      stack,
+      "/token",
+      {
+        grant_type: "refresh_token",
+        refresh_token: issued.refresh_token ?? "",
+        client_id: client.clientId,
+      },
+      { authorization: basicAuth(client.clientId) },
+    );
+    expect(refreshed.status).toBe(401);
+    expect(((await refreshed.json()) as TokenResponseBody).error).toBe(
+      "invalid_client",
+    );
+
+    stack.setNow(START);
+  });
+
+  it("refuses a backend service's grant once its vouching has lapsed", async () => {
+    // Every grant type, not only the interactive ones. `client_credentials`
+    // reaches issuance by a different path and must meet the same refusal.
+    const key = await generateEndpointKey("RS384", TEST_MASTER_KEY);
+    const client = await vouchedClient(new Date(START.getTime() + 3_600_000), {
+      clientType: "confidential-asymmetric",
+      jwks: { keys: [key.publicJwk] },
+      grantTypes: ["client_credentials"],
+      redirectUris: [],
+      allowedScopes: ["system/Observation.rs"],
+    });
+    stack.setNow(new Date(START.getTime() + 7_200_000));
+
+    const assertion = await new SignJWT({})
+      .setProtectedHeader({ alg: "RS384" })
+      .setIssuer(client.clientId)
+      .setSubject(client.clientId)
+      .setAudience(`${stack.issuer}/token`)
+      .setJti(crypto.randomUUID())
+      .setIssuedAt(Math.floor(stack.context.clock().getTime() / 1000))
+      .setExpirationTime(
+        Math.floor(stack.context.clock().getTime() / 1000) + 60,
+      )
+      .sign(
+        await importJWK(
+          JSON.parse(
+            await decryptSecret(key.privateJwkEncrypted, TEST_MASTER_KEY),
+          ) as Record<string, unknown>,
+          "RS384",
+        ),
+      );
+
+    const response = await postForm(stack, "/token", {
+      grant_type: "client_credentials",
+      scope: "system/Observation.rs",
+      client_assertion_type:
+        "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+      client_assertion: assertion,
+    });
+
+    expect(response.status).toBe(401);
+    expect(((await response.json()) as TokenResponseBody).error).toBe(
+      "invalid_client",
+    );
+
+    stack.setNow(START);
+  });
+
+  it("leaves a client an administrator created entirely alone", async () => {
+    // The enforcement must key on the expiry, not on being a client: a portal or
+    // console client carries no expiry and must be unaffected by any of this.
+    const { code, verifier } = await authorizeToCode(stack, {
+      clientId: stack.publicClient.clientId,
+      scope: "openid",
+    });
+    const response = await postForm(stack, "/token", {
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: "https://app.test/cb",
+      code_verifier: verifier,
+      client_id: stack.publicClient.clientId,
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it("keeps working after the anchor rule that created it is removed", async () => {
+    // Removing the rule refuses new registrations. It is not a revocation of the
+    // clients already registered, which carry their own expiry and nothing else.
+    const client = await vouchedClient(new Date(START.getTime() + 3_600_000));
+    await withTenantScope(stack.context.db, stack.scope, (bound) =>
+      upsertEndpointTrustAnchor(bound, {
+        issuer: "https://anchor.test",
+        jwksUri: "https://anchor.test/jwks",
+        maxVouchingDays: 30,
+      }),
+    );
+    await withTenantScope(stack.context.db, stack.scope, (bound) =>
+      deleteEndpointTrustAnchor(bound),
+    );
+
+    const { code, verifier } = await authorizeToCode(stack, {
+      clientId: client.clientId,
+      scope: "openid user/Observation.rs",
+    });
+    const response = await postForm(stack, "/token", {
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: "https://app.test/cb",
+      code_verifier: verifier,
+      client_id: client.clientId,
+    });
+
+    expect(response.status).toBe(200);
   });
 });
 

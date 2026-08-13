@@ -11,4 +11,5 @@ export * from "./launch.js";
 export * from "./passkeys.js";
 export * from "./policies.js";
 export * from "./tenants.js";
+export * from "./trust.js";
 export * from "./users.js";

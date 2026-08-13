@@ -23,6 +23,7 @@ import {
   assembleAccessTokenClaims,
   assembleIdTokenClaims,
   assembleTokenResponse,
+  describeVouching,
   evaluatePolicy,
   formatScopes,
 } from "@signet/core";
@@ -68,6 +69,16 @@ export interface IssuanceRequest {
   readonly launchContext: LaunchContext;
   /** The `sub` claim: the end user's id, or the client id for a backend service. */
   readonly subject: string;
+  /**
+   * When the client's vouching lapses, or null for a client nobody vouched for.
+   *
+   * Required rather than optional, so every grant has to state it and a new grant
+   * cannot forget to. That is the whole enforcement: a trust anchor's registration
+   * expires, and the expiry has to stop the client obtaining a token by *any*
+   * grant, including a refresh of a token issued while the vouching was live.
+   * Checking it here rather than in each grant is what makes "any" true.
+   */
+  readonly vouchingExpiresAt: Date | null;
   /** Copied into the ID token when the authorization carried one. */
   readonly nonce?: string;
   /** When the end user authenticated, as seconds since the epoch. */
@@ -87,6 +98,8 @@ export interface IssuanceRequest {
 
 /** Why an issuance could not proceed. */
 export type IssuanceRefusal =
+  /** The client was vouched for by a trust anchor, and that vouching has lapsed. */
+  | "vouching-expired"
   /** The endpoint has no published policy and the client has no override. */
   | "no-policy"
   /** The endpoint has no active signing key. */
@@ -154,6 +167,13 @@ export async function issueTokens(
   request: IssuanceRequest,
 ): Promise<IssuanceResult> {
   const { issuerContext, clientScope } = request;
+
+  // Before the policy is even read. A client whose vouching has lapsed obtains no
+  // token by any grant, and the cheapest possible refusal is the right one: this
+  // is not a policy decision, it is the registration having ended.
+  if (describeVouching(request.vouchingExpiresAt, context.clock()).expired) {
+    return { ok: false, reason: "vouching-expired" };
+  }
 
   const policy = await withTenantScope(context.db, clientScope, (bound) =>
     getEffectivePolicy(bound),

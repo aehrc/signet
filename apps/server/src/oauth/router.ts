@@ -47,6 +47,7 @@ import {
   manageSignInHandler,
   manageSignOutHandler,
 } from "./manage.js";
+import { registerHandler } from "./register.js";
 import { revokeHandler } from "./revoke.js";
 import { tokenHandler } from "./token.js";
 import { userinfoHandler } from "./userinfo.js";
@@ -78,7 +79,7 @@ export function createOAuthRouter(
   router.use(path("/jwks"), readOnlyCors);
   router.get(
     path("/.well-known/smart-configuration"),
-    smartConfigurationHandler,
+    smartConfigurationHandler(context),
   );
   router.get(
     path("/.well-known/openid-configuration"),
@@ -150,6 +151,21 @@ export function createOAuthRouter(
     manageAuthorizationsHandler(context),
   );
   router.post(path("/manage/revoke"), manageRevokeHandler(context));
+
+  // Vouched dynamic client registration. Off unless the endpoint names a trust
+  // anchor, in which case the handler answers 404 - see `./register.js`.
+  //
+  // The limiter is attached as middleware, so it runs before the rule is looked
+  // up rather than after. That is deliberate: an endpoint with no anchor would
+  // otherwise offer an unauthenticated caller an unlimited supply of rule
+  // lookups, and an endpoint with one would offer an unlimited supply of
+  // outbound fetches pointed at the anchor. Both postures are refusals either
+  // way, so nothing is disclosed by limiting first.
+  router.post(
+    path("/register"),
+    rateLimit("register", context.clock, context.rateLimits),
+    registerHandler(context),
+  );
 
   // The developer portal. Off unless the endpoint accepts self-serve requests.
   router.post(path("/apps/requests"), submitClientRequestHandler(context));

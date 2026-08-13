@@ -1406,6 +1406,61 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         ),
       ).toBeUndefined();
     });
+
+    it("tidies away a vouched client long after its vouching lapsed", async () => {
+      // Tidying, never enforcement: the client has been unable to obtain a token
+      // since the instant it expired, and this only reclaims the row.
+      const fixture = await newFixture();
+      const lapsed = `vouched-${unique()}`;
+      const recent = `vouched-${unique()}`;
+      const ordinary = `portal-${unique()}`;
+
+      const register = (clientId: string, expiresAt: Date) =>
+        inScope(fixture.endpointScope, (bound) =>
+          createVouchedClient(
+            bound,
+            {
+              clientId,
+              name: "Vouched app",
+              clientType: "public",
+              grantTypes: ["authorization_code"],
+            },
+            {
+              vouchedByIssuer: "https://anchor.example.org",
+              vouchedStatementId: `stmt-${unique()}`,
+              vouchingExpiresAt: expiresAt,
+            },
+          ),
+        );
+
+      await register(lapsed, new Date(Date.now() - 90 * 86_400_000));
+      await register(recent, new Date(Date.now() - 1000));
+      await inScope(fixture.endpointScope, (bound) =>
+        createClient(bound, {
+          clientId: ordinary,
+          name: "Portal app",
+          clientType: "public",
+          grantTypes: ["authorization_code"],
+        }),
+      );
+
+      expect(
+        (await sweepExpiredRuntimeRows(owner)).lapsedVouchedClients,
+      ).toBeGreaterThanOrEqual(1);
+
+      const survives = async (clientId: string) =>
+        (await inScope(fixture.endpointScope, (bound) =>
+          getClientByClientId(bound, clientId),
+        )) !== undefined;
+
+      expect(await survives(lapsed)).toBe(false);
+      // Inside the retention window, so still visible to an operator asking why
+      // an app stopped working.
+      expect(await survives(recent)).toBe(true);
+      // And a client nobody vouched for has no expiry to compare, so it can never
+      // match however long it has existed.
+      expect(await survives(ordinary)).toBe(true);
+    });
   });
 
   describe("client registration requests", () => {

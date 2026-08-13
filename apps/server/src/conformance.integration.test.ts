@@ -41,8 +41,10 @@ import {
   createTestStack,
   TEST_CLIENT_SECRET,
   TEST_PASSWORD,
+  TEST_PUBLIC_URL,
   testDatabaseUrl,
 } from "./test/harness.js";
+import { startTrustAnchor } from "./test/trustAnchor.js";
 
 import type { TestStack } from "./test/harness.js";
 import type { SmartCapability } from "@signet/core";
@@ -67,6 +69,10 @@ describe.skipIf(testDatabaseUrl === undefined)(
       // Everything on, so the document advertises the full set and each test has
       // something to check. The negative halves build their own endpoints.
       stack = await createTestStack({
+        // The trust anchor this suite stands up for the registration pair binds
+        // loopback, and the guard refuses that by default. Nothing else here
+        // makes an outbound request.
+        allowPrivateOutboundFetches: true,
         endpoint: {
           // Everything the capability table can express, so the document
           // advertises the full set. The tests that need a capability *off*
@@ -458,11 +464,14 @@ describe.skipIf(testDatabaseUrl === undefined)(
     });
 
     it("advertises no registration endpoint, since it serves none", async () => {
-      // Dynamic registration is off by default and there is nothing at
-      // `/register`. The developer portal is the deliberate alternative: a
-      // request an administrator approves, rather than self-service issuance of
-      // credentials to anybody who can reach the endpoint. If a future change
-      // turns the flag on, this fails until something answers there.
+      // The negative half of the pair below. This endpoint names no trust
+      // anchor, which is the default for every endpoint, so there is nothing at
+      // `/register` and nothing advertised. The developer portal is the
+      // deliberate alternative for an endpoint that wants self-serve
+      // registration reviewed by a person.
+      //
+      // Asserted with every capability flag turned on, `supportsDynamicRegistration`
+      // included, because the advertisement follows the rule and not a column.
       expect(advertised.registration_endpoint).toBeUndefined();
 
       const response = await stack.app.request(
@@ -474,6 +483,54 @@ describe.skipIf(testDatabaseUrl === undefined)(
         },
       );
       expect(response.status).toBe(404);
+    });
+
+    it("advertises a registration endpoint that registers, once an anchor is named", async () => {
+      // The positive half. An advertised `registration_endpoint` is a promise
+      // that a statement posted there produces a client, and an affirmative-only
+      // test above would pass against a server that advertised it and served
+      // nothing.
+      const anchor = await startTrustAnchor();
+      try {
+        const endpoint = await endpointWithout({});
+        const cookie = await stack.signIn();
+        const configured = await adminRequest(
+          stack,
+          "PUT",
+          `/api/v1/tenants/${stack.tenant.slug}/endpoints/${endpoint.slug}/trust/anchor`,
+          {
+            credential: { cookie },
+            body: {
+              issuer: anchor.issuer,
+              jwksUri: anchor.jwksUri,
+              maxVouchingDays: 30,
+            },
+          },
+        );
+        expect(configured.status).toBe(200);
+
+        const document = await configurationAt(endpoint.path);
+        expect(document.registration_endpoint).toBe(
+          `${TEST_PUBLIC_URL}${endpoint.path}/register`,
+        );
+
+        const registered = await stack.app.request(
+          `${endpoint.path}/register`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              software_statement: await anchor.mintStatement(),
+            }),
+          },
+        );
+        expect(registered.status).toBe(201);
+        expect(
+          ((await registered.json()) as { client_id?: string }).client_id,
+        ).toBeDefined();
+      } finally {
+        await anchor.close();
+      }
     });
 
     it("advertises only PKCE methods it accepts", async () => {

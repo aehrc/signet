@@ -127,6 +127,9 @@ export type AuditAction =
   | "client.suspended"
   | "client.deleted"
   | "client.secret-rotated"
+  | "client.registration-attempted"
+  | "trust-anchor.configured"
+  | "trust-anchor.removed"
   | "client-request.submitted"
   | "client-request.approved"
   | "client-request.rejected"
@@ -196,6 +199,12 @@ export const AUDIT_ACTION_DESCRIPTIONS: Readonly<Record<AuditAction, string>> =
     "client.suspended": "Client suspended",
     "client.deleted": "Client deleted",
     "client.secret-rotated": "Client secret rotated",
+    "client.registration-attempted":
+      "Dynamic client registration attempted with a trust anchor's software statement",
+    "trust-anchor.configured":
+      "Trust anchor configured on an endpoint, enabling vouched registration",
+    "trust-anchor.removed":
+      "Trust anchor removed from an endpoint, refusing further registrations",
     "client-request.submitted": "Client registration requested by a developer",
     "client-request.approved": "Client registration request approved",
     "client-request.rejected": "Client registration request rejected",
@@ -258,6 +267,9 @@ export const AUDIT_ACTION_CATEGORIES: Readonly<
   "client.suspended": "configuration",
   "client.deleted": "configuration",
   "client.secret-rotated": "configuration",
+  "client.registration-attempted": "configuration",
+  "trust-anchor.configured": "configuration",
+  "trust-anchor.removed": "configuration",
   "client-request.submitted": "configuration",
   "client-request.approved": "configuration",
   "client-request.rejected": "configuration",
@@ -305,6 +317,7 @@ export type AuditTargetType =
   | "endpoint"
   | "endpoint-key"
   | "idp-config"
+  | "trust-anchor"
   | "end-user"
   | "client"
   | "client-request"
@@ -332,6 +345,7 @@ const AUDIT_TARGET_TYPE_SET: Readonly<Record<AuditTargetType, true>> = {
   endpoint: true,
   "endpoint-key": true,
   "idp-config": true,
+  "trust-anchor": true,
   "end-user": true,
   client: true,
   "client-request": true,

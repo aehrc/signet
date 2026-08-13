@@ -234,15 +234,40 @@ describe("buildSmartConfiguration", () => {
   });
 
   describe("registration_endpoint", () => {
-    it("is present only when dynamic registration is enabled", () => {
+    it("is present only when the endpoint names a trust anchor", () => {
+      // The rule is the whole of the advertisement. An endpoint with no anchor
+      // serves nothing at `/register`, so advertising it would be a promise to
+      // every app that reads the document that Signet cannot keep.
       expect(
-        buildSmartConfiguration(config({ supportsDynamicRegistration: true }))
-          .registration_endpoint,
+        buildSmartConfiguration(config(), {
+          acceptsVouchedRegistration: true,
+        }).registration_endpoint,
       ).toBe(URLS.registration);
       expect(
         Object.keys(
+          buildSmartConfiguration(config(), {
+            acceptsVouchedRegistration: false,
+          }),
+        ),
+      ).not.toContain("registration_endpoint");
+    });
+
+    it("is absent by default, which is the endpoint with no anchor", () => {
+      // Omitting the option must not advertise: a caller that forgot to look the
+      // rule up gets the refusing answer, not the permissive one.
+      expect(Object.keys(buildSmartConfiguration(config()))).not.toContain(
+        "registration_endpoint",
+      );
+    });
+
+    it("is not advertised by the developer portal's own flag", () => {
+      // `supportsDynamicRegistration` turns the human-reviewed portal on. It used
+      // to drive this field, and an endpoint with the portal enabled and no anchor
+      // would then advertise a registration endpoint answering 404.
+      expect(
+        Object.keys(
           buildSmartConfiguration(
-            config({ supportsDynamicRegistration: false }),
+            config({ supportsDynamicRegistration: true }),
           ),
         ),
       ).not.toContain("registration_endpoint");
@@ -334,6 +359,16 @@ describe("buildSmartConfiguration", () => {
         const parsed = JSON.parse(json) as Record<string, unknown>;
         expect(Object.keys(parsed)).toEqual(Object.keys(document));
       }
+
+      // The one field that comes from a rule rather than a column, checked the
+      // same way: an advertised registration endpoint is a string, never a null.
+      expect(
+        emptyValuedKeys(
+          buildSmartConfiguration(config(), {
+            acceptsVouchedRegistration: true,
+          }),
+        ),
+      ).toEqual([]);
     });
 
     it("does not leak an omitted key into the serialised JSON", () => {
@@ -446,16 +481,24 @@ describe("buildOpenIdConfiguration", () => {
     expect(Object.keys(document)).not.toContain("userinfo_endpoint");
   });
 
-  it("includes the registration endpoint only when dynamic registration is on", () => {
+  it("includes the registration endpoint only when the endpoint names a trust anchor", () => {
     expect(
-      buildOpenIdConfiguration(config({ supportsDynamicRegistration: true }))
+      buildOpenIdConfiguration(config(), { acceptsVouchedRegistration: true })
         .registration_endpoint,
     ).toBe(URLS.registration);
     expect(
       Object.keys(
-        buildOpenIdConfiguration(
-          config({ supportsDynamicRegistration: false }),
-        ),
+        buildOpenIdConfiguration(config(), {
+          acceptsVouchedRegistration: false,
+        }),
+      ),
+    ).not.toContain("registration_endpoint");
+    // Both documents answer the same question the same way; a resource server
+    // that merges from this one must not see a registration endpoint that the
+    // SMART document does not advertise.
+    expect(
+      Object.keys(
+        buildOpenIdConfiguration(config({ supportsDynamicRegistration: true })),
       ),
     ).not.toContain("registration_endpoint");
   });

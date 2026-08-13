@@ -11,13 +11,14 @@
  * Author: John Grimes
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull, lte } from "drizzle-orm";
 
 import { requireRow } from "./rows.js";
 import { clientScopeFromRow, executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
 import { clients } from "../schema/clients.js";
 
+import type { Executor } from "./executor.js";
 import type { BoundClientScope, BoundEndpointScope } from "./scope.js";
 import type { Client, NewClient } from "../schema/clients.js";
 import type { SQL } from "drizzle-orm";
@@ -120,6 +121,55 @@ export async function createVouchedClient(
     .values({ ...input, ...vouching, endpointId: scope.endpointId })
     .returning();
   return requireRow(rows, "insert into clients");
+}
+
+/**
+ * How long a vouched client is kept after its vouching lapses, in days.
+ *
+ * Thirty. The client stops obtaining tokens at the instant its vouching expires -
+ * that is enforced at issuance and does not wait for anything - so this window is
+ * purely about how long the registration stays visible in the console afterwards,
+ * for an operator asking why an app stopped working.
+ */
+export const VOUCHED_CLIENT_RETENTION_DAYS = 30;
+
+/**
+ * Deletes vouched clients whose vouching lapsed longer ago than the retention.
+ *
+ * Tidying, never enforcement. Every client this removes has already been unable to
+ * obtain a token for a month, because {@link ClientVouching.vouchingExpiresAt} is
+ * checked at the issuance chokepoint on every grant - so a sweep that never runs
+ * costs storage and grants nothing, which is the property every other statement in
+ * `./sweep.ts` has.
+ *
+ * The predicate names `vouched_statement_id` as well as the expiry, so a client an
+ * administrator created can never match: the trio is written together or not at
+ * all, and this asks for two thirds of it rather than for a timestamp alone.
+ *
+ * @param db - A connection with the owning identity; see `./sweep.ts`.
+ * @param before - The instant expiry is compared against, already offset by the
+ *   retention window. Defaults to the database's own transaction time, which
+ *   would delete a client the moment it expired - so the sweep passes an offset.
+ * @returns How many clients were deleted.
+ * @example
+ * ```ts
+ * const removed = await deleteLapsedVouchedClients(db, retentionCutoff(now));
+ * ```
+ */
+export async function deleteLapsedVouchedClients(
+  db: Executor,
+  before?: Date,
+): Promise<number> {
+  const rows = await db
+    .delete(clients)
+    .where(
+      and(
+        isNotNull(clients.vouchedStatementId),
+        lte(clients.vouchingExpiresAt, nowValue(before)),
+      ),
+    )
+    .returning({ id: clients.id });
+  return rows.length;
 }
 
 /** Lists the scoped endpoint's clients, by name. */

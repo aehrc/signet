@@ -20,6 +20,7 @@ const COUNTS: SweepCounts = {
   adminSessions: 0,
   endUserSessions: 0,
   passkeyChallenges: 11,
+  lapsedVouchedClients: 0,
 };
 
 describe("sweepRecord", () => {

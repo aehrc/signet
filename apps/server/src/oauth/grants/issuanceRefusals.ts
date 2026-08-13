@@ -28,6 +28,19 @@ import type { IssuanceRefusal } from "../issuance.js";
 /** Turns an issuance refusal into a token endpoint refusal. */
 export function issuanceRefusalOutcome(reason: IssuanceRefusal): GrantOutcome {
   switch (reason) {
+    case "vouching-expired": {
+      // `invalid_client`, and therefore 401, for the same reason a suspended
+      // registration gets one: the credential authenticated, but the registration
+      // behind it is no longer one this endpoint honours. An app told
+      // `invalid_grant` would retry with a fresh authorization and fail again;
+      // told `invalid_client` it goes and gets registered again, which is exactly
+      // what an expired vouching requires it to do.
+      return grantRefusal(
+        "invalid_client",
+        "This client's vouching has expired, so it can no longer obtain tokens; register again with a current software statement",
+        { reason: "vouching-expired" },
+      );
+    }
     case "no-policy": {
       return grantRefusal(
         "invalid_request",

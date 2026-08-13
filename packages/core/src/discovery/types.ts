@@ -88,11 +88,38 @@ export interface EndpointCapabilityConfig {
   /** Advertised in `scopes_supported`. */
   readonly scopesSupported: readonly string[];
 
-  /** Enables the dynamic registration endpoint. Off by default. */
+  /**
+   * Enables the developer portal, where a human reviews each request.
+   *
+   * Not the registration endpoint, despite the name. `registration_endpoint` is
+   * advertised only when the endpoint names a trust anchor, which is a rule in a
+   * table of its own rather than a column here - see
+   * {@link DiscoveryRuleOptions.acceptsVouchedRegistration}.
+   */
   readonly supportsDynamicRegistration: boolean;
 
   readonly userAccessBrandBundle?: string;
   readonly userAccessBrandIdentifier?: string;
+}
+
+/**
+ * What the endpoint's opt-in rules say, for the fields that come from a rule
+ * rather than from a capability column.
+ *
+ * Separate from {@link EndpointCapabilityConfig} because the rules live in their
+ * own tables: the capability config is a copy of the endpoint row, and folding a
+ * rule into it would mean either a lie or a second lookup at every call site that
+ * only wants the columns. Every member is optional and every default is the
+ * refusing one, so a caller that has not looked a rule up advertises nothing.
+ */
+export interface DiscoveryRuleOptions {
+  /**
+   * Whether the endpoint names a trust anchor, and so serves `/register`.
+   *
+   * Absent means no: an endpoint with no anchor answers 404 there, and a document
+   * advertising the address anyway would be a promise nothing keeps.
+   */
+  readonly acceptsVouchedRegistration?: boolean;
 }
 
 /**
