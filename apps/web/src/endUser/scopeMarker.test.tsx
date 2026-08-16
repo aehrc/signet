@@ -34,4 +34,11 @@ describe("ScopeMarker", () => {
     );
     expect(markup).toContain("mr-2");
   });
+
+  it("lays the wrapper out inline-flex so the icon cannot break the line", () => {
+    // Tailwind's preflight sets `display: block` on svg, so a marker in a
+    // non-flex list item would otherwise push the description onto its own line.
+    const markup = renderToStaticMarkup(<ScopeMarker writes={false} />);
+    expect(markup).toContain("inline-flex");
+  });
 });

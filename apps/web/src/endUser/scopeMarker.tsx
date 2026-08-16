@@ -20,8 +20,13 @@ interface ScopeMarkerProps {
 
 /** The bullet in front of a scope: an alert for a write, a dot for a read. */
 export function ScopeMarker({ writes, className }: Readonly<ScopeMarkerProps>) {
+  // `inline-flex` because Tailwind's preflight makes svg `display: block`, which
+  // would otherwise break the line in a list item that is not itself flex.
   return (
-    <span aria-hidden="true" className={className}>
+    <span
+      aria-hidden="true"
+      className={`inline-flex ${className ?? ""}`.trim()}
+    >
       {writes ? (
         <AlertIcon size={12} className="text-warning" />
       ) : (
