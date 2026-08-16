@@ -18,6 +18,7 @@
 
 import { expect, test } from "@playwright/test";
 
+import { openPasskeyDialog } from "../support/console.js";
 import {
   choosePatient,
   completedTokenResponse,
@@ -491,6 +492,11 @@ const CONSOLE_ROUTES: readonly {
     heading: "Trust and tickets",
   },
   {
+    // Populated rather than empty, and that is the whole reason it is worth
+    // sweeping. The seed files two requests with long, entirely legal values -
+    // see `scripts/seedStack.mjs` - because this route used to be measurable only
+    // in its empty state: the endpoint accepted no self-serve requests, so no
+    // request could exist, and an empty queue fits any viewport.
     name: "the registration requests",
     url: `${ENDPOINT}/requests`,
     heading: "Registration requests",
@@ -633,6 +639,98 @@ test.describe("console surfaces", () => {
     );
     await expectUsableOnAPhone(page);
     await expectTapTargets(page, ENTRY_FIELDS);
+  });
+
+  test("holds a registration request's long values on a phone", async ({
+    page,
+  }) => {
+    // The sweep above measures the page; this measures the values on it, because
+    // "the body does not scroll" and "the launch URI is readable" are different
+    // claims and a page can satisfy the first by clipping the second (FR-007).
+    await page.goto(`${ENDPOINT}/requests`);
+    const pending = page
+      .locator("section.card")
+      .filter({ hasText: SEED.longRequestName });
+
+    // The contact address, the launch URI and the note: one unbroken word each,
+    // and each the width of the page on its own before it was given somewhere to
+    // break. Measured on the element, so a failure names the value rather than
+    // the document.
+    //
+    // Found by a label anchored to the start of the pair, rather than by its text
+    // anywhere: `getByText` matches a case-insensitive substring, and the note
+    // this request carries contains the phrase "launch URI".
+    for (const label of [
+      /^Contact/,
+      /^Launch URI/,
+      /^What they said it is for/,
+    ]) {
+      const value = pending
+        .locator("dl > div")
+        .filter({ hasText: label })
+        .locator("dd");
+      await expect(value).toBeVisible();
+      await expectWithinViewport(page, value);
+    }
+
+    // One chip holding a 158-character redirect URI. `Chips` wraps between chips,
+    // which does nothing for a list of one long one - so the chip itself has to
+    // break, and this is the assertion that says so.
+    const redirectUris = pending
+      .locator("dl > div")
+      .filter({ hasText: /^Redirect URIs/ })
+      .locator("code");
+    await expectWithinViewport(page, redirectUris.last());
+
+    // And the decided half of the page, whose only content is a refusal the seed
+    // filed: the reviewer's note is a paragraph somebody has to read (FR-012).
+    const decided = panelTitled(page, "Decided");
+    await expect(decided.getByText(SEED.refusedRequestName)).toBeVisible();
+    await expect(decided.getByText("Refused for now")).toBeVisible();
+    await expectUsableOnAPhone(page);
+  });
+
+  test("fits the passkey dialog on a phone", async ({ page }) => {
+    // No test opened this dialog at a mobile viewport, which is why nothing saw
+    // that its close button came out 42px wide. It is an overlay rather than a
+    // route, so the sweep cannot reach it: it has to be opened.
+    //
+    // The list is answered by a fixture rather than by the account's own
+    // passkeys, and for a reason the empty state cannot cover: the row's remove
+    // control is an icon and nothing else, and the console session used here
+    // holds no passkey - registering one needs a virtual authenticator and would
+    // put this file in the business of `passkeys.spec.ts`.
+    await page.route("**/api/v1/account/passkeys", async (route) => {
+      await route.fulfill({
+        json: {
+          passkeys: [
+            {
+              id: "11111111-2222-3333-4444-555555555555",
+              name: "Work laptop",
+              createdAt: "2026-08-01T09:15:00.000Z",
+              lastUsedAt: "2026-08-14T22:41:00.000Z",
+            },
+            {
+              id: "66666666-7777-8888-9999-000000000000",
+              name: "Personal phone, enrolled at the Brisbane connectathon",
+              createdAt: "2026-08-02T01:05:00.000Z",
+              lastUsedAt: null,
+            },
+          ],
+        },
+      });
+    });
+
+    await page.goto(`${SIGNET}/console/t/demo`);
+    await openPasskeyDialog(page);
+    await expect(page.getByText("Work laptop")).toBeVisible();
+
+    await expectUsableOnAPhone(page);
+
+    // Named individually as well, because the two that were wrong are the two
+    // with no text in them, and a sweep that skipped them would still pass.
+    await expectTapTargets(page, ".modal-box button[aria-label='Close']");
+    await expectTapTargets(page, ".modal-box [aria-label^='Remove ']");
   });
 
   test("fits the tenant list shown for a tenant you do not belong to", async ({

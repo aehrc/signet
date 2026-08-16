@@ -75,8 +75,15 @@ export function PasskeyDialog({ open, onClose }: Readonly<PasskeyDialogProps>) {
     <div className="modal modal-open" role="dialog" aria-modal="true">
       {/* The dialog is its own container, so the panel-wide button sizing does
           not reach into it: below `sm` its own controls are bumped to 44px
-          here, and its padding narrowed so the box fits a 360px viewport. */}
-      <div className="modal-box max-w-2xl max-sm:p-4 max-sm:[&_.btn]:min-h-11">
+          here, and its padding narrowed so the box fits a 360px viewport.
+
+          Both dimensions, not only the height. Two of the dialog's controls are
+          an icon and nothing else - the close button below and the remove button
+          on each row of the list - and a button with no text is as wide as its
+          padding: `btn-sm` comes out 42px and `btn-xs` 32px, both under the 44px
+          FR-003 asks for however tall they are made. That is the same pair
+          `appShell.tsx` and `layout.tsx` carry on their own icon-only buttons. */}
+      <div className="modal-box max-w-2xl max-sm:p-4 max-sm:[&_.btn]:min-h-11 max-sm:[&_.btn]:min-w-11">
         <div className="mb-1 flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold">Passkeys</h2>
           <button

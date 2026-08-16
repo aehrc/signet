@@ -157,7 +157,22 @@ export function StatusBadge({
   );
 }
 
-/** A list of short values, wrapped rather than truncated. */
+/**
+ * A list of short values, wrapped rather than truncated.
+ *
+ * "Short" is what a scope is and what a redirect URI is not. The container wraps
+ * from one chip to the next, which is enough for a list of scopes and nothing at
+ * all for a list of one 2048-character redirect URI: a URI has no space in it, so
+ * a single chip with no internal break point is one word as wide as the value, and
+ * a flex item's automatic minimum size is its longest word. It widens the page on
+ * its own.
+ *
+ * So each chip breaks inside itself, with `break-all` rather than the `break-words`
+ * used for prose elsewhere: a chip holds a URI in a monospace face, where breaking
+ * between any two characters fills the line better than breaking only where a whole
+ * word will not fit. That also takes the chip's minimum size down to one character,
+ * which is what lets the flex item shrink.
+ */
 export function Chips({
   values,
 }: Readonly<{ readonly values: readonly string[] }>) {
@@ -169,7 +184,7 @@ export function Chips({
       {values.map((value) => (
         <code
           key={value}
-          className="bg-base-200 rounded-field px-1.5 py-0.5 font-mono text-xs"
+          className="bg-base-200 rounded-field px-1.5 py-0.5 font-mono text-xs break-all"
         >
           {value}
         </code>

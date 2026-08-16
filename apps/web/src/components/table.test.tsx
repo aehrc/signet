@@ -20,7 +20,7 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { DataTable } from "./table.js";
+import { Chips, DataTable } from "./table.js";
 
 import type { Column } from "./table.js";
 
@@ -178,6 +178,28 @@ describe("DataTable with no rows", () => {
 
   it("renders the placeholder instead of either rendering", () => {
     expect(emptyMarkup).toBe("<p>No clients registered</p>");
+  });
+});
+
+describe("Chips", () => {
+  /** One redirect URI of 129 characters, which is a legal one. */
+  const LONG_URI =
+    "https://immunisation-registry.population-health-programmes.example.org" +
+    "/oauth2/callback/production-deployment-a/response";
+
+  it("gives a single long chip somewhere to break inside itself", () => {
+    // The container wraps from one chip to the next, which does nothing for a
+    // list of one: a URI has no space in it, so without an internal break point
+    // the chip is as wide as the value and widens the page with it. Measured in
+    // a browser by `e2e/tests/responsive.spec.ts`; asserted here because the
+    // component has eight call sites and each of them inherits this.
+    const markup = renderToStaticMarkup(<Chips values={[LONG_URI]} />);
+    expect(markup).toContain("break-all");
+    expect(markup).toContain(LONG_URI);
+  });
+
+  it("says so when there is nothing to list", () => {
+    expect(renderToStaticMarkup(<Chips values={[]} />)).toContain("none");
   });
 });
 

@@ -101,4 +101,20 @@ export const SEED = {
    * the seed rather than a confusing refusal three tests later.
    */
   ticketSubjectPatientId: "ticket-subject",
+  /**
+   * The registration request waiting in the console's queue.
+   *
+   * Filed by the seed with values that are long and entirely legal - a
+   * 316-character contact address, a 1129-character launch URI, a 158-character
+   * redirect URI - because the queue's only reachable state used to be empty, and
+   * an empty queue fits any viewport.
+   */
+  longRequestName: "Regional Immunisation Registry Synchronisation Connector",
+  /**
+   * The registration request the seed refuses, with a long decision note.
+   *
+   * A refusal rather than an approval: it registers no client, so it leaves the
+   * client list the other suites assert against exactly as it was.
+   */
+  refusedRequestName: "Population Analytics Extract Scheduler",
 } as const;
