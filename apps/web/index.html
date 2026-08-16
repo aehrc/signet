@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Declares that both schemes are supported, so the browser paints its own
+      canvas in the one the operating system asks for. Parsed before the
+      stylesheet loads, which is the point: without it the first frame of a slow
+      load is white even where the theme that follows is dark.
+    -->
+    <meta name="color-scheme" content="light dark" />
     <title>Signet</title>
   </head>
   <body>
