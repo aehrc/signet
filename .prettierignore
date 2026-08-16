@@ -16,6 +16,10 @@ e2e/playwright/.auth
 .local
 packages/db/drizzle
 bun.lock
+# Agent worktrees. Git ignores them, and ESLint ignores them in its flat config,
+# but Prettier reads neither, so `format:check` goes red on any machine that has
+# one checked out.
+.claude
 
 # Helm templates are Go templates, not YAML - Prettier cannot parse them.
 deploy/helm/*/templates

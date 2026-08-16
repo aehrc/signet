@@ -15,6 +15,7 @@
  * Author: John Grimes
  */
 
+import { ArrowLeftIcon } from "@primer/octicons-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
@@ -109,10 +110,11 @@ export function UserDetailPage() {
     <>
       <div className="mb-2">
         <Link
-          className="link link-hover text-sm"
+          className="link link-hover inline-flex items-center gap-1 text-sm"
           to={endpointRoute(tenant, endpointSlug, "/users")}
         >
-          ← Users
+          <ArrowLeftIcon size={14} />
+          Users
         </Link>
       </div>
 

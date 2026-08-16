@@ -11,6 +11,7 @@
     "test": "bun test src/ --timeout 120000"
   },
   "dependencies": {
+    "@primer/octicons-react": "^19.33.0",
     "@signet/contracts": "workspace:*",
     "@signet/core": "workspace:*",
     "@simplewebauthn/browser": "^13.3.0",

@@ -13,6 +13,12 @@
  * Author: John Grimes
  */
 
+import {
+  ChevronDownIcon,
+  PasskeyFillIcon,
+  SignOutIcon,
+} from "@primer/octicons-react";
+
 import type { ReactNode } from "react";
 
 interface AccountMenuProps {
@@ -61,16 +67,18 @@ export function AccountMenu({
         aria-label={`Account menu for ${label}`}
       >
         <span className="truncate">{label}</span>
-        <span aria-hidden="true">▾</span>
+        <ChevronDownIcon size={12} />
       </button>
       <ul className="dropdown-content menu bg-base-100 rounded-box border-base-300 z-10 mt-1 w-52 border p-2 shadow">
         <li>
           <button type="button" onClick={onManagePasskeys}>
+            <PasskeyFillIcon />
             Passkeys
           </button>
         </li>
         <li>
           <button type="button" disabled={signingOut} onClick={onSignOut}>
+            <SignOutIcon />
             Sign out
           </button>
         </li>

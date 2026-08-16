@@ -12,6 +12,20 @@
  * Author: John Grimes
  */
 
+import {
+  AppsIcon,
+  HomeIcon,
+  IdBadgeIcon,
+  InboxIcon,
+  KeyIcon,
+  LawIcon,
+  PeopleIcon,
+  RocketIcon,
+  VerifiedIcon,
+} from "@primer/octicons-react";
+
+import type { Icon } from "@primer/octicons-react";
+
 /** Where the console lives within the application. */
 export const CONSOLE_BASE = "/console";
 
@@ -59,16 +73,18 @@ export function endUserRoute(
 export const ENDPOINT_TABS: readonly {
   readonly path: string;
   readonly label: string;
+  /** Drawn beside the label in the tab bar. */
+  readonly icon: Icon;
 }[] = [
-  { path: "", label: "Overview" },
-  { path: "/clients", label: "Clients" },
-  { path: "/policy", label: "Policy" },
-  { path: "/users", label: "Users" },
-  { path: "/keys", label: "Keys" },
-  { path: "/identity", label: "Identity" },
-  { path: "/trust", label: "Trust & tickets" },
-  { path: "/requests", label: "Requests" },
-  { path: "/launch", label: "Launch" },
+  { path: "", label: "Overview", icon: HomeIcon },
+  { path: "/clients", label: "Clients", icon: AppsIcon },
+  { path: "/policy", label: "Policy", icon: LawIcon },
+  { path: "/users", label: "Users", icon: PeopleIcon },
+  { path: "/keys", label: "Keys", icon: KeyIcon },
+  { path: "/identity", label: "Identity", icon: IdBadgeIcon },
+  { path: "/trust", label: "Trust & tickets", icon: VerifiedIcon },
+  { path: "/requests", label: "Requests", icon: InboxIcon },
+  { path: "/launch", label: "Launch", icon: RocketIcon },
 ];
 
 /**

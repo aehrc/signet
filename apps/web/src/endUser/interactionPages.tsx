@@ -30,6 +30,7 @@ import { issuerBase } from "./api.js";
 import { ChoiceList } from "./choiceList.js";
 import { useAdvanceInteraction, useInteractionState } from "./queries.js";
 import { describeScopes, includesWrites } from "./scopeDescriptions.js";
+import { ScopeMarker } from "./scopeMarker.js";
 import { nextStepPath } from "./steps.js";
 import { describeError } from "../api/errors.js";
 import { CentredShell } from "../components/appShell.js";
@@ -444,9 +445,7 @@ export function ConsentPage() {
       <ul className="flex flex-col gap-2">
         {scopes.map((described) => (
           <li key={described.scope} className="flex items-start gap-2 text-sm">
-            <span aria-hidden="true" className="mt-0.5">
-              {described.writes ? "⚠" : "•"}
-            </span>
+            <ScopeMarker writes={described.writes} className="mt-0.5" />
             <span>
               {described.description}
               <code className="text-base-content/50 ml-2 font-mono text-xs">

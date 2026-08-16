@@ -10,6 +10,16 @@
  * Author: John Grimes
  */
 
+import {
+  AlertIcon,
+  CheckIcon,
+  CopyIcon,
+  InboxIcon,
+  InfoIcon,
+  XCircleIcon,
+} from "@primer/octicons-react";
+import { useState } from "react";
+
 import { describeError } from "../api/errors.js";
 
 import type { ReactNode } from "react";
@@ -110,6 +120,9 @@ export function EmptyState({
 }: Readonly<EmptyStateProps>) {
   return (
     <div className="border-base-300 rounded-box border border-dashed px-6 py-10 text-center">
+      <div className="text-base-content/40 mb-3 flex justify-center">
+        <InboxIcon size={24} />
+      </div>
       <p className="font-medium">{title}</p>
       <p className="text-base-content/70 mx-auto mt-2 max-w-md text-sm">
         {description}
@@ -126,6 +139,7 @@ export function ErrorAlert({
 }: Readonly<{ readonly message: string; readonly children?: ReactNode }>) {
   return (
     <div role="alert" className="alert alert-error">
+      <XCircleIcon className="shrink-0" />
       <div>
         <p className="font-medium">{message}</p>
         {children}
@@ -140,6 +154,7 @@ export function InfoAlert({
 }: Readonly<{ readonly children: ReactNode }>) {
   return (
     <div role="status" className="alert alert-info">
+      <InfoIcon className="shrink-0" />
       <div>{children}</div>
     </div>
   );
@@ -228,11 +243,17 @@ export function DetailList({
  * Issuers, JWKS URLs and client identifiers are all pasted into somebody else's
  * configuration, and a transcription error in any of them produces a failure that
  * looks like a Signet bug.
+ *
+ * The button is icon-only, and reports its own success: the copy icon becomes a
+ * green check for a moment, so a press that did something looks different from a
+ * press that did not.
  */
 export function CopyableValue({
   value,
   label,
 }: Readonly<{ readonly value: string; readonly label?: string }>) {
+  const [copied, setCopied] = useState(false);
+
   return (
     <div className="flex items-center gap-2">
       <code className="bg-base-200 rounded-field min-w-0 flex-1 overflow-x-auto px-2 py-1 font-mono text-xs">
@@ -244,9 +265,13 @@ export function CopyableValue({
         aria-label={label === undefined ? "Copy" : `Copy ${label}`}
         onClick={() => {
           void navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => {
+            setCopied(false);
+          }, 2000);
         }}
       >
-        Copy
+        {copied ? <CheckIcon className="text-success" /> : <CopyIcon />}
       </button>
     </div>
   );
@@ -265,6 +290,7 @@ export function ShownOnce({
 }: Readonly<{ readonly title: string; readonly value: string }>) {
   return (
     <div className="alert alert-warning items-start" role="status">
+      <AlertIcon className="shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="font-medium">{title}</p>
         <p className="mt-1 mb-2 text-sm">

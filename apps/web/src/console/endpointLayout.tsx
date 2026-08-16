@@ -78,8 +78,11 @@ export function EndpointLayout() {
             // and an exact match would deselect the tab on a detail page.
             end={tab.path === ""}
             to={endpointRoute(console_.tenant, endpointSlug ?? "", tab.path)}
-            className={({ isActive }) => `tab ${isActive ? "tab-active" : ""}`}
+            className={({ isActive }) =>
+              `tab gap-1.5 ${isActive ? "tab-active" : ""}`
+            }
           >
+            <tab.icon size={14} />
             {tab.label}
           </NavLink>
         ))}

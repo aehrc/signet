@@ -15,6 +15,8 @@
  * Author: John Grimes
  */
 
+import { ThreeBarsIcon } from "@primer/octicons-react";
+
 import type { ReactNode } from "react";
 
 interface AppShellProps {
@@ -46,21 +48,7 @@ export function AppShell({
               className="btn btn-square btn-ghost"
               aria-label="Open navigation"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
+              <ThreeBarsIcon />
             </label>
           </div>
           <div className="flex-1 px-2">

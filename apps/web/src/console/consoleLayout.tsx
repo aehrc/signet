@@ -14,6 +14,7 @@
  * Author: John Grimes
  */
 
+import { GearIcon, LogIcon, ServerIcon } from "@primer/octicons-react";
 import { useState } from "react";
 import { Navigate, NavLink, Outlet, useParams } from "react-router";
 
@@ -153,16 +154,19 @@ export function ConsoleLayout() {
         <>
           <li>
             <NavLink end to={tenantRoute(tenant)} className={navClass}>
+              <ServerIcon />
               Endpoints
             </NavLink>
           </li>
           <li>
             <NavLink to={tenantRoute(tenant, "/audit")} className={navClass}>
+              <LogIcon />
               Audit
             </NavLink>
           </li>
           <li>
             <NavLink to={tenantRoute(tenant, "/settings")} className={navClass}>
+              <GearIcon />
               Tenant settings
             </NavLink>
           </li>

@@ -17,6 +17,7 @@
  * Author: John Grimes
  */
 
+import { TrashIcon, XIcon } from "@primer/octicons-react";
 import { startRegistration } from "@simplewebauthn/browser";
 import { useState } from "react";
 
@@ -84,7 +85,7 @@ export function PasskeyDialog({ open, onClose }: Readonly<PasskeyDialogProps>) {
               onClose();
             }}
           >
-            ✕
+            <XIcon />
           </button>
         </div>
         <p className="text-base-content/70 mb-4 text-sm">
@@ -219,13 +220,14 @@ function PasskeyList({
                 <td className="text-right">
                   <button
                     type="button"
-                    className="btn btn-ghost btn-xs"
+                    className="btn btn-ghost btn-xs text-error tooltip"
+                    data-tip="Remove"
                     aria-label={`Remove ${passkey.name}`}
                     onClick={() => {
                       onRemove(passkey);
                     }}
                   >
-                    Remove
+                    <TrashIcon />
                   </button>
                 </td>
               </tr>
