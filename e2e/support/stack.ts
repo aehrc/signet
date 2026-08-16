@@ -105,7 +105,7 @@ export const SEED = {
    * The registration request waiting in the console's queue.
    *
    * Filed by the seed with values that are long and entirely legal - a
-   * 316-character contact address, a 1129-character launch URI, a 158-character
+   * 246-character contact address, a 493-character launch URI, a 157-character
    * redirect URI - because the queue's only reachable state used to be empty, and
    * an empty queue fits any viewport.
    */

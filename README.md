@@ -154,7 +154,7 @@ ignoring what it does not recognise.
 
 ```sh
 bun run stack:up      # build and start; waits for health
-bun run stack:seed    # create the endpoint, policy, clients and accounts
+bun run stack:seed    # endpoint, policy, clients, accounts and two requests
 bun run test:e2e      # drive a launch through a browser
 bun run stack:down
 ```

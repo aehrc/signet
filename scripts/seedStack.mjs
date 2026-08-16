@@ -486,13 +486,13 @@ const LONG_REQUEST_NAME =
 /** The refused request, named so the decided row is identifiable in a test. */
 const REFUSED_REQUEST_NAME = "Population Analytics Extract Scheduler";
 
-/** A contact address of 316 characters, under the schema's limit of 320. */
+/** A contact address of 246 characters, under the schema's limit of 320. */
 const LONG_CONTACT_EMAIL =
   "registration.requests.and.integration.enquiries.for.the.regional.immunisation.registry@" +
   "digital-health-integration-services.population-health-programmes.regional-immunisation-registry." +
   "health-informatics-and-interoperability-directorate.example.org";
 
-/** A launch URI of 1129 characters, under the schema's limit of 2048. */
+/** A launch URI of 493 characters, under the schema's limit of 2048. */
 const LONG_LAUNCH_URI =
   `${APP_ORIGIN}/launch/immunisation-registry-synchronisation-connector` +
   "?deployment=regional-immunisation-registry-production-a" +
@@ -506,17 +506,17 @@ const LONG_LAUNCH_URI =
     "opened by the electronic medical record when a clinician reviews an immunisation history",
   );
 
-/** A redirect URI of 158 characters, under the schema's limit of 2048. */
+/** A redirect URI of 157 characters, under the schema's limit of 2048. */
 const LONG_REDIRECT_URI =
   `${APP_ORIGIN}/oauth2/callback/immunisation-registry-synchronisation-connector` +
   "/regional-immunisation-registry-production-a/authorization-code-response";
 
-/** A scope of 121 characters, under the schema's limit of 256. */
+/** A scope of 127 characters, under the schema's limit of 256. */
 const LONG_SCOPE =
   "patient/Immunization.rs?category=" +
   "http://terminology.hl7.org/CodeSystem/observation-category|laboratory-and-immunisation-records";
 
-/** A note of 1096 characters, under the schema's limit of 2000. */
+/** A note of 1027 characters, under the schema's limit of 2000. */
 const LONG_NOTE =
   "The connector reconciles immunisation records between the regional registry and " +
   "the practices that submit to it, so that a clinician reviewing a patient's history " +
@@ -533,7 +533,7 @@ const LONG_NOTE =
   "URI to be narrowed further before approval if the endpoint's operators would prefer " +
   "a shorter one.";
 
-/** A decision note of 623 characters, under the schema's limit of 2000. */
+/** A decision note of 536 characters, under the schema's limit of 2000. */
 const LONG_DECISION_NOTE =
   "Refused for now, and the reason is the extract rather than the requester: a " +
   "scheduled population-level extract is a different permission from the " +
