@@ -69,7 +69,12 @@ export function EndpointLayout() {
         }
       />
 
-      <div role="tablist" className="tabs tabs-border mb-6">
+      {/* The tabs wrap onto four rows at 360px, which is fine; what is not is
+          daisyUI's 40px tab height, four pixels under what a thumb needs. */}
+      <div
+        role="tablist"
+        className="tabs tabs-border mb-6 max-sm:[&_.tab]:min-h-11"
+      >
         {ENDPOINT_TABS.map((tab) => (
           <NavLink
             key={tab.path}

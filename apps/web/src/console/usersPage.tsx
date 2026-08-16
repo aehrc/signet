@@ -82,7 +82,6 @@ export function UsersPage() {
     {
       key: "fhirUser",
       header: "fhirUser",
-      secondary: true,
       cell: (user) =>
         user.fhirUser === null ? (
           <span className="text-base-content/50">none</span>
@@ -93,7 +92,6 @@ export function UsersPage() {
     {
       key: "roles",
       header: "Roles",
-      secondary: true,
       cell: (user) => <Chips values={user.roles} />,
     },
     {

@@ -120,7 +120,6 @@ export function AuditPage() {
     {
       key: "target",
       header: "Target",
-      secondary: true,
       cell: (event) =>
         event.targetType === null ? (
           <span className="text-base-content/50">-</span>
@@ -138,7 +137,6 @@ export function AuditPage() {
     {
       key: "detail",
       header: "Detail",
-      secondary: true,
       cell: (event) => <AuditDetail event={event} />,
     },
   ];

@@ -73,7 +73,10 @@ export function PasskeyDialog({ open, onClose }: Readonly<PasskeyDialogProps>) {
 
   return (
     <div className="modal modal-open" role="dialog" aria-modal="true">
-      <div className="modal-box max-w-2xl">
+      {/* The dialog is its own container, so the panel-wide button sizing does
+          not reach into it: below `sm` its own controls are bumped to 44px
+          here, and its padding narrowed so the box fits a 360px viewport. */}
+      <div className="modal-box max-w-2xl max-sm:p-4 max-sm:[&_.btn]:min-h-11">
         <div className="mb-1 flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold">Passkeys</h2>
           <button
@@ -314,7 +317,7 @@ function RegisterForm({
       }}
     >
       <h3 className="font-medium">Register a passkey</h3>
-      <p className="text-base-content/70 text-sm">
+      <p className="text-base-content/70 text-sm max-sm:text-base">
         Confirm your password, then your browser will ask you to create the
         passkey.
       </p>
@@ -393,7 +396,7 @@ function RemoveForm({
       }}
     >
       <h3 className="font-medium">Remove &ldquo;{passkey.name}&rdquo;</h3>
-      <p className="text-base-content/70 text-sm">
+      <p className="text-base-content/70 text-sm max-sm:text-base">
         It stops working immediately. Your password still signs you in, so
         removing your last passkey cannot lock you out.
       </p>

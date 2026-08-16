@@ -16,6 +16,11 @@
  * would be a way to read a credential out of the database. The portal says so, and says
  * who to ask.
  *
+ * The layout is already a single column at every width, so the mobile work here is
+ * the page's own padding and the wrapping of what it displays back: a redirect URI,
+ * an issuer and a discovery URL are each one long word with nothing to break at.
+ * The form's controls take their mobile sizing from `../components/fields.js`.
+ *
  * Author: John Grimes
  */
 
@@ -95,7 +100,7 @@ export function PortalPage() {
   if (tenant === undefined || endpoint === undefined) {
     return (
       <CentredShell title="Not found">
-        <p className="text-base-content/70 text-sm">
+        <p className="text-base-content/70 text-sm max-sm:text-base">
           This portal belongs to a particular endpoint.
         </p>
       </CentredShell>
@@ -103,14 +108,14 @@ export function PortalPage() {
   }
 
   return (
-    <div className="bg-base-200 min-h-screen p-6">
+    <div className="bg-base-200 min-h-screen p-6 max-sm:p-4">
       <div className="mx-auto max-w-3xl">
         <header className="mb-6">
           <p className="text-xl font-bold">Signet</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight break-words">
             Register an app
           </h1>
-          <p className="text-base-content/70 mt-1 max-w-2xl text-sm">
+          <p className="text-base-content/70 mt-1 max-w-2xl text-sm break-words max-sm:text-base">
             Ask for a client on this endpoint. An administrator reviews the
             request; once it is approved, come back here with your tracking
             token to collect the client identifier.

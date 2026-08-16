@@ -31,4 +31,24 @@ describe("AccountMenu", () => {
   it("marks the sign-out item with the sign-out octicon", () => {
     expect(markup).toContain("octicon-sign-out");
   });
+
+  it("reads its trigger at 16px below sm", () => {
+    // `btn-sm` is 12px, and the trigger carries the signed-in identity - the
+    // one thing in the navbar somebody reads rather than presses.
+    expect(markup).toContain("max-w-48 max-sm:min-h-11 max-sm:text-base");
+  });
+
+  it("reads the bare sign-out button at 16px below sm", () => {
+    // The shape a personal access token gets: no menu, one button.
+    const bare = renderToStaticMarkup(
+      <AccountMenu
+        label="ci-token"
+        signingOut={false}
+        onSignOut={() => undefined}
+      />,
+    );
+    expect(bare).toContain(
+      "btn btn-ghost btn-sm max-sm:min-h-11 max-sm:text-base",
+    );
+  });
 });

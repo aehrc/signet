@@ -124,7 +124,6 @@ function MembersPanel({
     {
       key: "factor",
       header: "Second factor",
-      secondary: true,
       cell: (member) =>
         member.totpEnrolled ? (
           <StatusBadge tone="success">enrolled</StatusBadge>
@@ -135,7 +134,6 @@ function MembersPanel({
     {
       key: "lastLogin",
       header: "Last signed in",
-      secondary: true,
       cell: (member) => (
         <span className="text-xs">{formatInstant(member.lastLoginAt)}</span>
       ),
@@ -276,7 +274,6 @@ function TokensPanel({
     {
       key: "used",
       header: "Last used",
-      secondary: true,
       cell: (token) => (
         <span className="text-xs">{formatInstant(token.lastUsedAt)}</span>
       ),
@@ -284,7 +281,6 @@ function TokensPanel({
     {
       key: "expires",
       header: "Expires",
-      secondary: true,
       cell: (token) => (
         <span className="text-xs">{formatInstant(token.expiresAt)}</span>
       ),

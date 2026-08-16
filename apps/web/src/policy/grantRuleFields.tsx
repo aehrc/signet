@@ -82,7 +82,7 @@ export function GrantRuleFields({
           {CONTEXT_REQUIREMENTS.map((key) => (
             <label
               key={key}
-              className="flex cursor-pointer items-center gap-1 text-sm"
+              className="flex cursor-pointer items-center gap-1 text-sm max-sm:min-h-11 max-sm:text-base"
             >
               <input
                 type="checkbox"

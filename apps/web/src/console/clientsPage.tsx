@@ -85,7 +85,6 @@ export function ClientsPage() {
     {
       key: "grants",
       header: "Grants",
-      secondary: true,
       cell: (client) => <Chips values={client.grantTypes} />,
     },
     {

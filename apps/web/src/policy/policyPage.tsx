@@ -12,6 +12,12 @@
  * endpoint carries, and a confirmation dialogue that said "are you sure?" would be
  * asking about something the operator cannot see.
  *
+ * The two columns are a desktop arrangement and nothing more. Below `xl` the page is one
+ * column, and the column wrappers dissolve so that the panels can be put in the order a
+ * phone wants rather than the order two columns needed: rules, then the simulator that
+ * answers for them, then saving, presets and the history. Nothing is dropped on the way
+ * down - every control the desktop offers is in the single column too.
+ *
  * Author: John Grimes
  */
 
@@ -143,7 +149,13 @@ function PolicyEditor({
         actions={
           <>
             <DraftStatus changed={changed} issueCount={issues.length} />
-            <div role="tablist" className="tabs tabs-box tabs-sm">
+            {/* daisyUI's `tabs-sm` is 32px, which is fine beside a pointer and
+                twelve pixels under what a thumb needs. Sized on the list rather
+                than on each tab, as the endpoint's own tab strip does. */}
+            <div
+              role="tablist"
+              className="tabs tabs-box tabs-sm max-sm:[&_.tab]:min-h-11"
+            >
               <button
                 type="button"
                 role="tab"
@@ -177,168 +189,194 @@ function PolicyEditor({
         </InfoAlert>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <div>
-          {mode === "code" ? (
-            <Panel
-              title="Document"
-              description="The policy as JSON - the form it takes in the database and over the API. Problems are listed beneath and do not stop you typing."
-            >
-              <CodeEditor
-                value={text}
-                onChange={applyText}
-                issues={issues}
+      {/* A flex column on a phone and a two-column grid at `xl`. Not a grid at
+          both widths: a single implicit grid track is sized to its content, and
+          a panel holding an unbroken issuer URL or a paragraph of description
+          therefore made the track - and with it the page - 1370px wide at
+          360px. A block-level flex column takes the width it is given. */}
+      <div className="flex flex-col xl:grid xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:gap-6">
+        {/* `contents` dissolves each column below `xl`, so the panels inside
+            become items of the page's own column and the `order-*` classes can
+            interleave the two. Without it the simulator - the other half of the
+            edit-simulate loop this page exists for - sits below the save panel,
+            the presets and everything else the left column holds. */}
+        <div className="contents xl:block">
+          <div className="order-1">
+            {mode === "code" ? (
+              <Panel
+                title="Document"
+                description="The policy as JSON - the form it takes in the database and over the API. Problems are listed beneath and do not stop you typing."
+              >
+                <CodeEditor
+                  value={text}
+                  onChange={applyText}
+                  issues={issues}
+                  disabled={!mayEdit}
+                />
+              </Panel>
+            ) : (
+              <BuilderPane
+                document={document}
+                onChange={applyDocument}
                 disabled={!mayEdit}
               />
-            </Panel>
-          ) : (
-            <BuilderPane
-              document={document}
-              onChange={applyDocument}
-              disabled={!mayEdit}
-            />
-          )}
+            )}
+          </div>
 
           {mayEdit ? (
-            <Panel
-              id="save-panel"
-              title="Save"
-              description="Creates a new version. Publishing it makes it the one every token is issued under."
-            >
-              {changed && document !== undefined && starting !== undefined ? (
-                <PolicyDiff
-                  before={formatPolicy(startingDocument(starting) ?? document)}
-                  after={formatPolicy(document)}
-                />
-              ) : (
-                <p className="text-base-content/70 text-sm">
-                  {issues.length > 0
-                    ? "Fix the problems above before saving."
-                    : "No changes yet."}
-                </p>
-              )}
-
-              <form
-                className="flex flex-col gap-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (document === undefined) {
-                    return;
-                  }
-                  create.mutate({
-                    document,
-                    publish: true,
-                    ...(note.trim().length === 0 ? {} : { note: note.trim() }),
-                  });
-                }}
+            <div className="order-3">
+              <Panel
+                id="save-panel"
+                title="Save"
+                description="Creates a new version. Publishing it makes it the one every token is issued under."
               >
-                <TextField
-                  label="What changed"
-                  value={note}
-                  onChange={setNote}
-                  hint="Shown beside the version in the history. The code view has no comments, so this is the record of why."
-                />
-                {create.isError ? (
-                  <ErrorAlert message={describeError(create.error)} />
-                ) : null}
-                <div>
-                  <SubmitButton
-                    pending={create.isPending}
-                    disabled={!changed || document === undefined}
-                  >
-                    Save and publish
-                  </SubmitButton>
-                </div>
-              </form>
-            </Panel>
+                {changed && document !== undefined && starting !== undefined ? (
+                  <PolicyDiff
+                    before={formatPolicy(
+                      startingDocument(starting) ?? document,
+                    )}
+                    after={formatPolicy(document)}
+                  />
+                ) : (
+                  <p className="text-base-content/70 text-sm max-sm:text-base">
+                    {issues.length > 0
+                      ? "Fix the problems above before saving."
+                      : "No changes yet."}
+                  </p>
+                )}
+
+                <form
+                  className="flex flex-col gap-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (document === undefined) {
+                      return;
+                    }
+                    create.mutate({
+                      document,
+                      publish: true,
+                      ...(note.trim().length === 0
+                        ? {}
+                        : { note: note.trim() }),
+                    });
+                  }}
+                >
+                  <TextField
+                    label="What changed"
+                    value={note}
+                    onChange={setNote}
+                    hint="Shown beside the version in the history. The code view has no comments, so this is the record of why."
+                  />
+                  {create.isError ? (
+                    <ErrorAlert message={describeError(create.error)} />
+                  ) : null}
+                  <div>
+                    <SubmitButton
+                      pending={create.isPending}
+                      disabled={!changed || document === undefined}
+                    >
+                      Save and publish
+                    </SubmitButton>
+                  </div>
+                </form>
+              </Panel>
+            </div>
           ) : null}
 
           {mayEdit && presets.data !== undefined ? (
-            <Panel
-              title="Start from a preset"
-              description="Replaces the document in the editor. Nothing is saved until you publish."
-            >
-              <div className="flex flex-col gap-2">
-                {presets.data.map((preset) => (
-                  <div
-                    key={preset.id}
-                    className="border-base-300 flex flex-wrap items-start justify-between gap-2 border-b pb-2 last:border-b-0"
-                  >
-                    <div className="max-w-lg">
-                      <p className="text-sm font-medium">{preset.name}</p>
-                      <p className="text-base-content/70 text-xs">
-                        {preset.description}
-                      </p>
-                      {preset.references.length > 0 ? (
-                        <p className="text-base-content/60 mt-1 text-xs">
-                          {/* The citation, because a preset asserts what another
+            <div className="order-4">
+              <Panel
+                title="Start from a preset"
+                description="Replaces the document in the editor. Nothing is saved until you publish."
+              >
+                <div className="flex flex-col gap-2">
+                  {presets.data.map((preset) => (
+                    <div
+                      key={preset.id}
+                      className="border-base-300 flex flex-wrap items-start justify-between gap-2 border-b pb-2 last:border-b-0"
+                    >
+                      <div className="max-w-lg">
+                        <p className="text-sm font-medium">{preset.name}</p>
+                        <p className="text-base-content/70 text-xs">
+                          {preset.description}
+                        </p>
+                        {preset.references.length > 0 ? (
+                          <p className="text-base-content/60 mt-1 text-xs">
+                            {/* The citation, because a preset asserts what another
                               system does with a token and this is how an operator
                               checks that claim. */}
-                          Contract:{" "}
-                          {preset.references.map((reference, index) => (
-                            <span key={reference.url}>
-                              {index === 0 ? null : ", "}
-                              <a
-                                className="link"
-                                href={reference.url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                {reference.label}
-                              </a>
-                            </span>
-                          ))}
-                        </p>
-                      ) : null}
+                            Contract:{" "}
+                            {preset.references.map((reference, index) => (
+                              <span key={reference.url}>
+                                {index === 0 ? null : ", "}
+                                <a
+                                  className="link"
+                                  href={reference.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  {reference.label}
+                                </a>
+                              </span>
+                            ))}
+                          </p>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-xs"
+                        onClick={() => {
+                          // Loading over unsaved work discards it, and nothing can
+                          // bring it back - so that is asked, not assumed.
+                          if (
+                            (changed || issues.length > 0) &&
+                            !globalThis.confirm(
+                              `Load the ${preset.name} preset? Your unsaved edits are replaced and cannot be recovered.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          const parsed = parsePolicy(
+                            JSON.stringify(preset.policy),
+                          );
+                          if (parsed.ok) {
+                            applyDocument(withRuleIds(parsed.document));
+                          }
+                        }}
+                      >
+                        Load
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-xs"
-                      onClick={() => {
-                        // Loading over unsaved work discards it, and nothing can
-                        // bring it back - so that is asked, not assumed.
-                        if (
-                          (changed || issues.length > 0) &&
-                          !globalThis.confirm(
-                            `Load the ${preset.name} preset? Your unsaved edits are replaced and cannot be recovered.`,
-                          )
-                        ) {
-                          return;
-                        }
-                        const parsed = parsePolicy(
-                          JSON.stringify(preset.policy),
-                        );
-                        if (parsed.ok) {
-                          applyDocument(withRuleIds(parsed.document));
-                        }
-                      }}
-                    >
-                      Load
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </Panel>
+                  ))}
+                </div>
+              </Panel>
+            </div>
           ) : null}
         </div>
 
-        {/* Sticky, so the simulator stays beside the rule being edited: the
-            edit-simulate loop is the point of the page. */}
-        <div className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start xl:overflow-y-auto">
-          <SimulatePanel
-            tenant={tenant}
-            endpointSlug={endpointSlug}
-            document={document}
-          />
-          <VersionHistory
-            versions={versions}
-            mayEdit={mayEdit}
-            publishing={publish.isPending}
-            onPublish={(version) => {
-              publish.mutate(version);
-            }}
-            error={publish.error}
-          />
+        {/* Sticky at `xl`, so the simulator stays beside the rule being edited:
+            the edit-simulate loop is the point of the page. Below `xl` there is
+            no second column to stay beside, and a sticky element in a single
+            column is a panel that covers what is under it. */}
+        <div className="contents xl:sticky xl:top-4 xl:block xl:max-h-[calc(100vh-2rem)] xl:self-start xl:overflow-y-auto">
+          <div className="order-2">
+            <SimulatePanel
+              tenant={tenant}
+              endpointSlug={endpointSlug}
+              document={document}
+            />
+          </div>
+          <div className="order-5">
+            <VersionHistory
+              versions={versions}
+              mayEdit={mayEdit}
+              publishing={publish.isPending}
+              onPublish={(version) => {
+                publish.mutate(version);
+              }}
+              error={publish.error}
+            />
+          </div>
         </div>
       </div>
     </>
@@ -357,14 +395,19 @@ function DraftStatus({
 }: Readonly<{ readonly changed: boolean; readonly issueCount: number }>) {
   if (issueCount > 0) {
     return (
-      <span className="badge badge-error self-center">Draft has problems</span>
+      <span className="badge badge-error self-center max-sm:min-h-11">
+        Draft has problems
+      </span>
     );
   }
   if (changed) {
     return (
+      // A link, so it is something a thumb has to hit: a badge is 20px tall,
+      // and this one is the way back to the save panel from anywhere on a page
+      // that is nine panels long on a phone.
       <a
         href="#save-panel"
-        className="badge badge-warning self-center"
+        className="badge badge-warning self-center max-sm:min-h-11"
         title="Go to the save panel"
       >
         Unsaved changes
@@ -499,7 +542,7 @@ function VersionHistory({
         rows={versions}
         rowKey={(version) => String(version.version)}
         empty={
-          <p className="text-base-content/70 text-sm">
+          <p className="text-base-content/70 text-sm max-sm:text-base">
             No versions yet. Saving creates the first.
           </p>
         }

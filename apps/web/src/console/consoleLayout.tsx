@@ -103,22 +103,7 @@ export function ConsoleLayout() {
       navbarEnd={
         <>
           {tenants.length > 1 ? (
-            <select
-              className="select select-bordered select-sm max-w-40"
-              aria-label="Switch tenant"
-              value={tenant}
-              onChange={(event) => {
-                globalThis.location.assign(
-                  tenantRoute(event.currentTarget.value),
-                );
-              }}
-            >
-              {tenants.map((candidate) => (
-                <option key={candidate.slug} value={candidate.slug}>
-                  {candidate.name ?? candidate.slug}
-                </option>
-              ))}
-            </select>
+            <TenantSwitcher tenant={tenant} tenants={tenants} />
           ) : null}
           <AccountMenu
             label={
@@ -175,6 +160,50 @@ export function ConsoleLayout() {
     >
       <Outlet context={context} />
     </AppShell>
+  );
+}
+
+/**
+ * The navbar control that moves between the tenants a person belongs to.
+ *
+ * Exported, and a component rather than markup inside {@link ConsoleLayout},
+ * because it is the console's only form control outside `components/fields.js`
+ * and it needs the same mobile sizing they carry - 44px tall and 16px of text
+ * below `sm`, so a thumb can hit it and the browser does not zoom the page when
+ * it opens. It renders only for somebody who belongs to more than one tenant,
+ * which the end-to-end stack's single seeded tenant never produces, so its markup
+ * is what proves the sizing.
+ *
+ * Navigating assigns the location rather than routing, so the whole console
+ * remounts: every query in flight belongs to the tenant being left, and a soft
+ * navigation would show the new tenant's pages with the old tenant's data in them
+ * until each one refetched.
+ *
+ * `tenant` is the slug currently in the URL, which is the selected option;
+ * `tenants` is every tenant the caller may act on, as the session reports them.
+ */
+export function TenantSwitcher({
+  tenant,
+  tenants,
+}: Readonly<{
+  readonly tenant: string;
+  readonly tenants: SessionView["tenants"];
+}>) {
+  return (
+    <select
+      className="select select-bordered select-sm max-w-40 max-sm:min-h-11 max-sm:text-base"
+      aria-label="Switch tenant"
+      value={tenant}
+      onChange={(event) => {
+        globalThis.location.assign(tenantRoute(event.currentTarget.value));
+      }}
+    >
+      {tenants.map((candidate) => (
+        <option key={candidate.slug} value={candidate.slug}>
+          {candidate.name ?? candidate.slug}
+        </option>
+      ))}
+    </select>
   );
 }
 

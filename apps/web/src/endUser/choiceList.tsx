@@ -8,6 +8,15 @@
  * Buttons rather than a select, because the list is short, the choice is consequential,
  * and a select hides the options until it is opened.
  *
+ * The `max-sm:` classes are what make the list usable on a phone. daisyUI's menu
+ * entry is 33px tall and 14px, and this is a control a person taps to get through
+ * an authorization: below `sm` it grows to the 44px a thumb needs and the 16px a
+ * browser will not zoom into. The detail beside the label is an identifier - one
+ * word with nothing in it to break at - so it is given both a break opportunity
+ * and a shrinkable box, or a long one widens the card it sits in. `break-words`
+ * rather than `break-all`: it breaks the word that cannot fit on a line of its
+ * own and leaves `Patient/pat-9` alone.
+ *
  * Author: John Grimes
  */
 
@@ -49,16 +58,17 @@ export function ChoiceList({
           <li key={choice.value}>
             <button
               type="button"
+              className="max-sm:min-h-11 max-sm:text-base"
               disabled={disabled}
               onClick={() => {
                 onChoose(choice.value);
               }}
             >
-              <span className="flex-1 text-left">
+              <span className="min-w-0 flex-1 text-left">
                 {choice.label}
                 {choice.detail === undefined ||
                 choice.detail === null ? null : (
-                  <span className="text-base-content/60 ml-2 font-mono text-xs">
+                  <span className="text-base-content/60 ml-2 font-mono text-xs break-words">
                     {choice.detail}
                   </span>
                 )}

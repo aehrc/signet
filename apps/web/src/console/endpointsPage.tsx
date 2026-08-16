@@ -66,7 +66,6 @@ export function EndpointsPage() {
     {
       key: "fhir",
       header: "FHIR server",
-      secondary: true,
       cell: (endpoint) => (
         <span className="font-mono text-xs">{endpoint.fhirBaseUrl}</span>
       ),

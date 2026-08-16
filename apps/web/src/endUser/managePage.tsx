@@ -12,6 +12,12 @@
  * Withdrawn entries stay on the list, marked. Removing them would look, to somebody who
  * had just withdrawn access, like the record had been lost rather than ended.
  *
+ * The page is linked from apps, so it is read on a phone as often as anywhere. The
+ * `max-sm:` classes are that half of the layout: the two `btn-sm` controls - sign out,
+ * and the withdrawal that is the whole point of the page - are 32px tall on the
+ * desktop, which is not something to aim a thumb at, and the sentences describing
+ * each grant read at 16px.
+ *
  * Author: John Grimes
  */
 
@@ -50,7 +56,7 @@ export function ManagePage() {
   if (tenant === undefined || endpoint === undefined) {
     return (
       <CentredShell title="Not found">
-        <p className="text-base-content/70 text-sm">
+        <p className="text-base-content/70 text-sm max-sm:text-base">
           This page belongs to a particular endpoint. Follow the link your app
           or your provider gave you.
         </p>
@@ -95,22 +101,22 @@ function Authorizations({
   const liveTokens = data.liveTokens.access + data.liveTokens.refresh;
 
   return (
-    <div className="bg-base-200 min-h-screen p-6">
+    <div className="bg-base-200 min-h-screen p-6 max-sm:p-4">
       <div className="mx-auto max-w-3xl">
         <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <p className="text-xl font-bold">Signet</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight">
               Your app access
             </h1>
-            <p className="text-base-content/70 mt-1 text-sm">
+            <p className="text-base-content/70 mt-1 text-sm break-words max-sm:text-base">
               Signed in as {data.user.displayName}. These are the apps you have
               allowed to use your record.
             </p>
           </div>
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost btn-sm max-sm:min-h-11 max-sm:text-base"
             disabled={signOut.isPending}
             onClick={() => {
               signOut.mutate();
@@ -143,7 +149,7 @@ function Authorizations({
                 authorization.active ? (
                   <button
                     type="button"
-                    className="btn btn-outline btn-error btn-sm"
+                    className="btn btn-outline btn-error btn-sm max-sm:min-h-11 max-sm:w-full max-sm:text-base"
                     disabled={revoke.isPending}
                     onClick={() => {
                       if (
@@ -164,7 +170,10 @@ function Authorizations({
             >
               <ul className="flex flex-col gap-1">
                 {describeScopes(authorization.scope).map((described) => (
-                  <li key={described.scope} className="text-sm">
+                  <li
+                    key={described.scope}
+                    className="text-sm max-sm:text-base"
+                  >
                     <ScopeMarker writes={described.writes} className="mr-2" />
                     {described.description}
                   </li>

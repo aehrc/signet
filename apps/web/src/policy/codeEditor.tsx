@@ -32,9 +32,16 @@ const TOKEN_CLASSES: Readonly<Record<TokenKind, string>> = {
   plain: "",
 };
 
-/** Typography both layers must share, or the highlighting drifts from the text. */
+/**
+ * Typography both layers must share, or the highlighting drifts from the text.
+ *
+ * `max-sm:text-base` is on both for the same reason it is on every other control:
+ * a mobile browser zooms into a focused field whose text is under 16px and does
+ * not zoom back out. The line height is fixed at `leading-5` either way, so the
+ * two layers still agree line for line at the larger size.
+ */
 const EDITOR_TYPOGRAPHY =
-  "font-mono text-xs leading-5 whitespace-pre-wrap break-words p-3";
+  "font-mono text-xs max-sm:text-base leading-5 whitespace-pre-wrap break-words p-3";
 
 interface CodeEditorProps {
   readonly value: string;

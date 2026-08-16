@@ -63,7 +63,6 @@ export function KeysPage() {
     {
       key: "created",
       header: "Created",
-      secondary: true,
       cell: (key) => (
         <span className="text-xs">{formatInstant(key.createdAt)}</span>
       ),
@@ -71,7 +70,6 @@ export function KeysPage() {
     {
       key: "activated",
       header: "Activated",
-      secondary: true,
       cell: (key) => (
         <span className="text-xs">{formatInstant(key.activatedAt)}</span>
       ),
