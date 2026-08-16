@@ -6,6 +6,7 @@ import { describe, expect, it, mock } from "bun:test";
 
 import { createApp } from "./app.js";
 import { createUnlimitedStore } from "./http/rateLimit.js";
+import { createRemoteJwksCache } from "./oauth/remoteJwks.js";
 
 import type { ServerContext } from "./context.js";
 
@@ -29,6 +30,7 @@ function contextWith(execute: () => Promise<unknown>): ServerContext {
       allowPrivateOutboundFetches: false,
     },
     rateLimits: createUnlimitedStore(),
+    jwksCache: createRemoteJwksCache(),
     db: { execute } as unknown as ServerContext["db"],
     audit: { record: () => Promise.resolve() },
     clock: () => new Date(0),

@@ -37,6 +37,10 @@ import { deleteExpiredAdminPasskeyChallenges } from "./adminPasskeys.js";
 import { deleteExpiredAdminSessions } from "./adminUsers.js";
 import { deleteExpiredAuthorizationCodes } from "./authorizationCodes.js";
 import { deleteExpiredAuthorizationSessions } from "./authorizationSessions.js";
+import {
+  deleteLapsedVouchedClients,
+  VOUCHED_CLIENT_RETENTION_DAYS,
+} from "./clients.js";
 import { deleteExpiredConsents } from "./consents.js";
 import { deleteExpiredEndUserSessions } from "./endUserSessions.js";
 import { deleteExpiredJtis } from "./jtiReplay.js";
@@ -69,6 +73,15 @@ export interface SweepCounts {
    * ordinary use rather than only when something goes wrong.
    */
   readonly passkeyChallenges: number;
+  /**
+   * Vouched clients whose vouching lapsed longer ago than the retention window.
+   *
+   * The one entry here that is a registration rather than a runtime row, and it
+   * obeys the same rule as the rest: each one has already been refused every
+   * grant type since the instant it expired, so this reclaims storage and grants
+   * nothing. See `./clients.ts`.
+   */
+  readonly lapsedVouchedClients: number;
 }
 
 /** How far back the sweep reaches. */
@@ -127,6 +140,10 @@ export async function sweepExpiredRuntimeRows(
   const adminSessions = await deleteExpiredAdminSessions(db, now);
   const endUserSessions = await deleteExpiredEndUserSessions(db, now);
   const passkeyChallenges = await deleteExpiredAdminPasskeyChallenges(db, now);
+  const lapsedVouchedClients = await deleteLapsedVouchedClients(
+    db,
+    vouchedClientCutoff(now),
+  );
 
   return {
     launchContexts,
@@ -139,5 +156,22 @@ export async function sweepExpiredRuntimeRows(
     adminSessions,
     endUserSessions,
     passkeyChallenges,
+    lapsedVouchedClients,
   };
+}
+
+/**
+ * How far back the vouched-client tidy-up reaches.
+ *
+ * Undefined when the caller gave no instant, which leaves the comparison to the
+ * database's own transaction time - and that would delete a client the moment its
+ * vouching lapsed, taking a registration out of the console at exactly the point
+ * an operator goes looking for it. So the offset is applied here, where the
+ * retention window is stated, rather than at every call site.
+ */
+function vouchedClientCutoff(now: Date | undefined): Date {
+  const from = now ?? new Date();
+  return new Date(
+    from.getTime() - VOUCHED_CLIENT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  );
 }

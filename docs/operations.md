@@ -397,6 +397,156 @@ The endpoint's discovery document advertises the algorithms its published keys
 actually use, so a relying party configuring a verifier from it accepts what the
 endpoint signs with.
 
+## Trusting an outside issuer
+
+Two capabilities let an endpoint act on something a third party signed: dynamic
+client registration vouched by a **trust anchor**, and access granted by a
+**permission ticket** from a ticket issuer. Neither is on anywhere until an
+administrator names the issuer, and naming it is the whole of turning it on -
+there is no separate switch, and removing the rule turns the capability off.
+
+Both are configured on the endpoint's **Trust & tickets** tab in the console, or
+through the admin API at
+`/api/v1/tenants/{tenant}/endpoints/{endpoint}/trust/anchor` and
+`.../trust/ticket-issuer` (`GET`, `PUT`, `DELETE`, and `POST .../check`). The
+routes are in `apps/server/src/admin/trustRoutes.ts`.
+
+### The refusing default
+
+An endpoint with no trust anchor answers **404** at `{iss}/register` and
+advertises no `registration_endpoint`. An endpoint with no ticket issuer refuses
+the exchange grant with `unsupported_grant_type` and advertises no
+`smart_permission_ticket_types_supported`. Neither is a setting you can forget to
+turn off: it is what the code does when the rule is absent.
+
+Proved in both directions rather than asserted: the conformance suite
+(`apps/server/src/conformance.integration.test.ts`) asserts each of the two
+advertisements against an endpoint that has the rule and one that does not, and
+the end-to-end suite looks at a real endpoint before configuring anything -
+`bun run test:e2e`, `e2e/tests/trust.spec.ts`, "refuse registration and ticket
+exchange until an issuer is named".
+
+### Configuring a trust anchor
+
+Console → the endpoint → **Trust & tickets** → _Dynamic client registration_:
+
+| Field                     | What it is                                                                                                                                                                                      |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trust anchor issuer       | Matched **exactly** against a statement's `iss`. A trailing slash matters.                                                                                                                      |
+| JWKS address              | Fetched through the outbound guard every time a signature is checked.                                                                                                                           |
+| Maximum vouching lifetime | Days; 30 by default, 365 at the outside. A statement vouching for longer is refused rather than shortened - a registration capped without the anchor's knowledge is not the one it vouched for. |
+
+Then press **Fetch the published keys**, which resolves the address through the
+same resolver a registration will use and reports the key identifiers it found.
+Do it before telling anybody the registration endpoint exists: an anchor Signet
+cannot reach fails at the moment an app tries to register, where the app
+developer sees a refusal and the operator sees nothing.
+
+Registration is at `{iss}/register`, which the endpoint now advertises. The
+console echoes the address back, because deriving it by hand from the issuer is
+exactly the transcription that goes wrong.
+
+### Configuring a ticket issuer
+
+Console → the endpoint → **Trust & tickets** → _Permission ticket exchange_:
+
+| Field                            | What it is                                                          |
+| -------------------------------- | ------------------------------------------------------------------- |
+| Ticket issuer                    | Matched exactly against a ticket's `iss`.                           |
+| JWKS address                     | As above.                                                           |
+| Accepted ticket types            | The types this endpoint honours, and the list discovery advertises. |
+| Maximum exchanged-token lifetime | Seconds; 300 by default. One of the three ceilings below.           |
+
+An empty list of types is accepted and means every ticket is refused, which is
+the only safe reading of "no type was chosen". Reading silence as "all types"
+would have a half-configured endpoint honouring types nobody picked.
+
+Tickets are presented at the endpoint's existing token endpoint with
+`grant_type=urn:ietf:params:oauth:grant-type:token-exchange`. **The presenting
+client must authenticate**: a public client is refused, because a ticket names a
+patient and is not accepted from a caller whose identity cannot be verified.
+
+One thing to check before enabling it: the exchange resolves the ticket's subject
+identifier to a patient by searching the endpoint's FHIR server, with a token
+Signet issues to itself for `system/Patient.rs` through the endpoint's own policy.
+An endpoint whose published policy grants no system read cannot look a subject up,
+and every exchange refuses saying so. See
+[what each resource server wants in a token](resource-servers.md) for what that
+token has to carry for your server to accept it.
+
+### Security posture
+
+**Keys are never assumed current.** A fetched key set is reused for at most 300
+seconds and then not consulted at all, so a key the anchor withdraws stops
+verifying within a window you can state. Inside that window, a signature naming a
+`kid` the cached document does not hold forces exactly one refetch - so an anchor
+that rotates keys keeps working, and a statement signed with a key nobody
+publishes costs one outbound request rather than one per attempt. A fetch that
+fails **refuses**; it never falls back to a stale document, and an anchor's outage
+takes registration down rather than accepting statements against keys nobody can
+confirm. `apps/server/src/oauth/remoteJwks.ts`, asserted in
+`apps/server/src/oauth/remoteJwks.test.ts` (`bun run test`).
+
+**Every fetch goes through the outbound guard.** Both addresses are supplied by an
+endpoint administrator rather than by you, so they are exactly the untrusted-URL
+case `apps/server/src/security/outboundFetch.ts` exists for. An address that
+resolves to a private or internal one is refused, and the console's key check
+reports it. On a development or connectathon stack where the issuer really is on a
+private address, `SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES` turns the guard off -
+never in production.
+
+**A statement vouches for one registration.** The statement's `jti` is recorded
+per endpoint under a unique constraint, so a replayed statement is refused and two
+registrations racing on one statement produce exactly one client - the database
+arbitrates rather than a check-then-insert that can interleave. Asserted in
+`apps/server/src/oauth/register.integration.test.ts`, race included.
+
+**The statement's metadata is the whole registration.** Metadata sent alongside
+the statement is refused, not merged: the anchor vouches for what it signed. What
+it signed must still pass the same validation any other client is registered
+under, so a statement carrying an unusable redirect URI is refused - the anchor
+vouches for the metadata's origin, not for its validity.
+
+**Vouching expires, and expiry is enforced rather than swept.** A vouched client
+carries the statement's own expiry, and **every** grant type refuses once it
+passes - the check is at the
+one issuance chokepoint all grants go through
+(`apps/server/src/oauth/issuance.ts`), so it does not depend on the expiry sweep
+having run. Removing the anchor rule is not revocation: clients it vouched for
+keep working until their own expiry. Both halves are asserted in
+`apps/server/src/oauth/tokenLifecycle.integration.test.ts`. The console shows the
+anchor, the statement identifier and the remaining time on the client's detail
+page.
+
+**An exchanged token is bounded three ways.** Its scopes are the intersection of
+what the client asked for, what the ticket permits and what the endpoint's policy
+grants that client; an empty intersection refuses rather than minting a scopeless
+token. Its lifetime is the least of the ticket's remaining validity, the
+endpoint's access token lifetime and the rule's maximum. No refresh token is
+issued - a ticket authorises one piece of work, and a refresh token would turn it
+into a standing grant nobody reviewed.
+`apps/server/src/oauth/tokenExchange.integration.test.ts`, and end to end against
+a real FHIR server in `e2e/tests/trust.spec.ts` ("exchange a permission ticket for
+a token bounded by what the ticket permits"), where the resource type the ticket
+allowed answers 200 and the one it did not is refused by the FHIR server.
+
+**A subject resolves to exactly one patient, or not at all.** Zero matches and
+more than one are different refusals, because they need different fixes - a record
+that is not there, and a duplicate that is. Neither mints a token against a
+guessed patient. `apps/server/src/oauth/subjectResolution.ts`.
+
+**Both surfaces are rate limited and audited.** `{iss}/register` has its own limit
+of 30 a minute per client address, the token endpoint keeps its existing 60.
+Registration attempts are audited as `client.registration-attempted` and exchanges
+as `token.ticket-exchanged`, each carrying the outcome, the issuer and the
+statement or ticket identifier - and never the statement, the ticket, or a client
+secret.
+
+**Reproducing all of it.** `bun run test` covers the unit and integration
+assertions above; `bun run stack:up && bun run test:e2e` runs the browser-level
+proof against Signet, Pathling and a stub app in containers, including a client
+that no human approved completing a SMART launch.
+
 ## Deploying on Kubernetes
 
 ```sh

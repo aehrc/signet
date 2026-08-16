@@ -23,6 +23,11 @@ export default tseslint.config(
       "**/playwright-report/**",
       "**/test-results/**",
       "**/drizzle/**",
+      // Other worktrees the /build and /freehand skills check out for parallel
+      // feature work. ESLint's default file-finding skips dot-directories, which
+      // is the only reason `eslint .` does not already fail on these - an
+      // implicit behaviour this makes explicit rather than relying on.
+      "**/.claude/**",
     ],
   },
 

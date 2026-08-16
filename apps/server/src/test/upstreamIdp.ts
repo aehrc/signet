@@ -9,10 +9,11 @@
  * corresponding private key. A mock would have let every one of those be subtly
  * wrong while the suite went green.
  *
- * It listens on loopback, which is exactly what the outbound-fetch guard is built
- * to refuse - so a suite using this must construct its stack with
- * `allowPrivateOutboundFetches`. That is not an inconvenience to route around: it
- * is the guard proving it works before the test has asserted anything.
+ * It listens on loopback through `./localListener.ts`, which is exactly what the
+ * outbound-fetch guard is built to refuse - so a suite using this must construct
+ * its stack with `allowPrivateOutboundFetches`. That is not an inconvenience to
+ * route around: it is the guard proving it works before the test has asserted
+ * anything.
  *
  * Every response is controllable, because the interesting tests are the ones where
  * the provider misbehaves: an ID token for another audience, a stale nonce, a
@@ -21,10 +22,10 @@
  * Author: John Grimes
  */
 
-import { serve } from "@hono/node-server";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 
-import type { ServerType } from "@hono/node-server";
+import { jsonResponse as json, startLocalListener } from "./localListener.js";
+
 import type { JWK, KeyObject } from "jose";
 
 /** How the stub should behave for one test. */
@@ -89,7 +90,7 @@ export async function startUpstreamIdp(
   let nonce = "";
   let lastTokenRequest: Record<string, string> | undefined;
 
-  const server = await listen(async (request, issuer) => {
+  const server = await startLocalListener(async (request, issuer) => {
     const url = new URL(request.url);
     await options.whileHandling?.(url.pathname);
 
@@ -142,7 +143,7 @@ export async function startUpstreamIdp(
   });
 
   return {
-    issuer: server.issuer,
+    issuer: server.origin,
     clientId: UPSTREAM_CLIENT_ID,
     lastTokenRequest: () => lastTokenRequest,
     configure: (next) => {
@@ -172,57 +173,6 @@ async function signIdToken(
     .setProtectedHeader({ alg: "RS256", kid: "stub-1" })
     .setIssuer(typeof claims["iss"] === "string" ? claims["iss"] : issuer)
     .sign(privateKey);
-}
-
-/** A JSON response, as the stub always answers. */
-function json(body: unknown, status = 200): Response {
-  return Response.json(body, {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-/** Starts a request handler on an ephemeral loopback port. */
-async function listen(
-  handle: (request: Request, issuer: string) => Promise<Response>,
-): Promise<{ readonly issuer: string; readonly close: () => Promise<void> }> {
-  let issuer = "";
-  // Port zero, so parallel suites cannot collide on a fixed one. The port is only
-  // known once the socket is bound, which is what the callback is waited on for -
-  // reading `address()` synchronously returns null and produced a stub whose
-  // issuer was the empty string.
-  const server = await new Promise<ServerType>((resolve) => {
-    const started: ServerType = serve(
-      {
-        fetch: async (request: Request) => await handle(request, issuer),
-        hostname: "127.0.0.1",
-        port: 0,
-      },
-      () => {
-        resolve(started);
-      },
-    );
-  });
-
-  const address = server.address();
-  if (address === null || typeof address === "string") {
-    throw new Error("the stub provider did not bind a port");
-  }
-  issuer = `http://127.0.0.1:${String(address.port)}`;
-
-  return {
-    issuer,
-    close: async () =>
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error === undefined || error === null) {
-            resolve();
-          } else {
-            reject(error);
-          }
-        });
-      }),
-  };
 }
 
 /** A JWK, for a test that needs to look at the stub's key. */

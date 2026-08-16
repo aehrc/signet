@@ -99,6 +99,7 @@ export async function clientCredentialsGrant(
     // The client authenticates as itself, so it is its own subject. RFC 9068 §5
     // makes this explicit for a client-credentials token.
     subject: client.clientId,
+    vouchingExpiresAt: client.vouchingExpiresAt,
   });
 
   if (!issued.ok) {

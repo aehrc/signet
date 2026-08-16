@@ -17,6 +17,7 @@ import {
 import { verifyEnforcement } from "./enforcement.js";
 import { createRateLimitStore } from "./http/rateLimit.js";
 import { runMigrateCommand } from "./migrate.js";
+import { createRemoteJwksCache } from "./oauth/remoteJwks.js";
 import { runSweepCommand } from "./sweep.js";
 
 import type { AuditRecordFailure } from "@signet/db";
@@ -150,6 +151,7 @@ const app = createApp({
   audit: createAuditRecorder(reportAuditFailure),
   clock: () => new Date(),
   rateLimits: createRateLimitStore(),
+  jwksCache: createRemoteJwksCache(),
 });
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {

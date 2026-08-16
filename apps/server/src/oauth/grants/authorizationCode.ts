@@ -199,6 +199,7 @@ export async function authorizationCodeGrant(
     requested: parseScopes(session.requestedScopes.join(" ")).scopes,
     launchContext: session.resolvedContext ?? {},
     subject: user.id,
+    vouchingExpiresAt: client.vouchingExpiresAt,
     ...(session.nonce === null ? {} : { nonce: session.nonce }),
     ...(session.consentGrantedAt === null
       ? {}

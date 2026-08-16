@@ -30,6 +30,7 @@ import {
   clientScopeFromRow,
   createClient,
   deleteClient,
+  endpointAllowsClientType,
   getClientByClientId,
   getClientRequest,
   hashPassword,
@@ -56,12 +57,7 @@ import { clientRequestView, clientView } from "./views.js";
 import type { AdminEndpointContext } from "../context.js";
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { ClientCreate } from "@signet/contracts";
-import type {
-  ClientInput,
-  DecisionInput,
-  DecisionRefusal,
-  Endpoint,
-} from "@signet/db";
+import type { ClientInput, DecisionInput, DecisionRefusal } from "@signet/db";
 import type { Context, Hono } from "hono";
 
 /** The review states a registration request can be filtered by. */
@@ -114,24 +110,6 @@ function decisionFrom(
     reviewerId: principalAdminUserId(c.get("principal")),
     ...(decisionNote === undefined ? {} : { decisionNote }),
   };
-}
-
-/** Whether the endpoint permits a client of this type at all. */
-function endpointAllowsClientType(
-  endpoint: Endpoint,
-  clientType: ClientCreate["clientType"],
-): boolean {
-  switch (clientType) {
-    case "public": {
-      return endpoint.allowsPublicClients;
-    }
-    case "confidential-symmetric": {
-      return endpoint.allowsConfidentialSymmetricClients;
-    }
-    case "confidential-asymmetric": {
-      return endpoint.allowsConfidentialAsymmetricClients;
-    }
-  }
 }
 
 /** The insert a validated create body describes, and the secret it generated. */

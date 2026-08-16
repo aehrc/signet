@@ -177,6 +177,7 @@ export async function refreshTokenGrant(
     requested,
     launchContext: held.launchContext,
     subject: held.subject,
+    vouchingExpiresAt: client.vouchingExpiresAt,
     rotate: { tokenHash },
   });
 

@@ -56,6 +56,7 @@ import {
   createUnlimitedStore,
 } from "../http/rateLimit.js";
 import { generateEndpointKey } from "../keys/material.js";
+import { createRemoteJwksCache } from "../oauth/remoteJwks.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { PolicyDocument } from "@signet/core";
@@ -442,6 +443,9 @@ export async function createTestStack(
       options.rateLimits === "enforced"
         ? createRateLimitStore()
         : createUnlimitedStore(),
+    // One per stack, so a suite that counts what an anchor served is counting its
+    // own requests rather than another stack's cache hits.
+    jwksCache: createRemoteJwksCache(),
   };
 
   const app = createApp(context);

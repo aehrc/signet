@@ -88,11 +88,47 @@ export interface EndpointCapabilityConfig {
   /** Advertised in `scopes_supported`. */
   readonly scopesSupported: readonly string[];
 
-  /** Enables the dynamic registration endpoint. Off by default. */
+  /**
+   * Enables the developer portal, where a human reviews each request.
+   *
+   * Not the registration endpoint, despite the name. `registration_endpoint` is
+   * advertised only when the endpoint names a trust anchor, which is a rule in a
+   * table of its own rather than a column here - see
+   * {@link DiscoveryRuleOptions.acceptsVouchedRegistration}.
+   */
   readonly supportsDynamicRegistration: boolean;
 
   readonly userAccessBrandBundle?: string;
   readonly userAccessBrandIdentifier?: string;
+}
+
+/**
+ * What the endpoint's opt-in rules say, for the fields that come from a rule
+ * rather than from a capability column.
+ *
+ * Separate from {@link EndpointCapabilityConfig} because the rules live in their
+ * own tables: the capability config is a copy of the endpoint row, and folding a
+ * rule into it would mean either a lie or a second lookup at every call site that
+ * only wants the columns. Every member is optional and every default is the
+ * refusing one, so a caller that has not looked a rule up advertises nothing.
+ */
+export interface DiscoveryRuleOptions {
+  /**
+   * Whether the endpoint names a trust anchor, and so serves `/register`.
+   *
+   * Absent means no: an endpoint with no anchor answers 404 there, and a document
+   * advertising the address anyway would be a promise nothing keeps.
+   */
+  readonly acceptsVouchedRegistration?: boolean;
+  /**
+   * The permission ticket types the endpoint's ticket issuer rule accepts.
+   *
+   * Absent means none, and so does empty: an endpoint with no rule refuses the
+   * token exchange grant, and a rule that names no type accepts no ticket.
+   * Advertising an empty array would say "exchange is supported" and then refuse
+   * every ticket presented.
+   */
+  readonly permissionTicketTypes?: readonly string[];
 }
 
 /**
@@ -111,6 +147,16 @@ export interface SmartConfiguration {
   )[];
   readonly token_endpoint_auth_methods_supported?: readonly TokenEndpointAuthMethod[];
   readonly registration_endpoint?: string;
+  /**
+   * The permission ticket types honoured at the token endpoint.
+   *
+   * Present only on an endpoint that names a ticket issuer, which is what makes
+   * it a promise rather than a hope: everywhere else the exchange grant is
+   * refused as unsupported.
+   *
+   * @see https://build.fhir.org/ig/HL7/smart-app-launch/permission-tickets.html
+   */
+  readonly smart_permission_ticket_types_supported?: readonly string[];
   readonly scopes_supported?: readonly string[];
   readonly response_types_supported?: readonly string[];
   readonly management_endpoint?: string;

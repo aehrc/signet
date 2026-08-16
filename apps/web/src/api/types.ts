@@ -105,8 +105,54 @@ export interface ClientView {
   readonly allowedScopes: readonly string[];
   readonly status: "pending" | "active" | "suspended" | "rejected";
   readonly contactEmail: string | null;
+  /**
+   * The trust anchor that vouched for this registration, or null.
+   *
+   * All three fields or none - see the server's `clientView`. A client an
+   * administrator created carries null, and shows no vouching card.
+   */
+  readonly vouching: {
+    readonly issuer: string;
+    readonly statementId: string;
+    readonly expiresAt: string;
+  } | null;
   readonly createdAt: string;
 }
+
+/** The trust anchor an endpoint accepts registrations from. */
+export interface TrustAnchorView {
+  readonly issuer: string;
+  readonly jwksUri: string;
+  readonly maxVouchingDays: number;
+  readonly updatedAt: string;
+  /** What an operator gives the anchor so it can vouch for apps here. */
+  readonly registrationEndpoint: string;
+}
+
+/** The issuer whose permission tickets an endpoint exchanges for tokens. */
+export interface TicketIssuerView {
+  readonly issuer: string;
+  readonly jwksUri: string;
+  /** The ticket types this endpoint honours, and what discovery advertises. */
+  readonly acceptedTicketTypes: readonly string[];
+  readonly maxTokenLifetimeSecs: number;
+  readonly updatedAt: string;
+  /** What an operator gives the issuer so its tickets can be presented here. */
+  readonly tokenEndpoint: string;
+}
+
+/** What a fetch of a trusted issuer's published keys found. */
+export type TrustAnchorCheckView =
+  | {
+      readonly ok: true;
+      readonly fetchedAt: string;
+      readonly keyIds: readonly string[];
+    }
+  | {
+      readonly ok: false;
+      readonly problem: string;
+      readonly description: string;
+    };
 
 /** One end user or persona. */
 export interface EndUserView {

@@ -134,6 +134,8 @@ const TENANT_PREDICATES: Readonly<Record<string, string>> = {
 
   // One hop: through the endpoint the row is configured on.
   endpoint_keys: viaEndpoint("endpoint_keys"),
+  endpoint_trust_anchors: viaEndpoint("endpoint_trust_anchors"),
+  endpoint_ticket_issuers: viaEndpoint("endpoint_ticket_issuers"),
   idp_configs: viaEndpoint("idp_configs"),
   end_users: viaEndpoint("end_users"),
   clients: viaEndpoint("clients"),

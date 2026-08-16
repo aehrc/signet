@@ -25,6 +25,7 @@
     "stack:down": "docker compose -f deploy/compose/docker-compose.yml down",
     "stack:logs": "docker compose -f deploy/compose/docker-compose.yml logs -f",
     "stack:seed": "bun scripts/seedStack.mjs",
+    "stack:seed:fhir": "bun scripts/seedFhir.mjs",
     "stack:up": "docker compose -f deploy/compose/docker-compose.yml up -d --build --wait",
     "test": "bun test src/ --timeout 120000",
     "test:coverage": "bun test src/ --coverage --timeout 120000 && node scripts/checkCoverage.mjs",

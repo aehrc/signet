@@ -78,4 +78,18 @@ export default async function globalSetup(): Promise<void> {
     },
   });
   process.stdout.write(stdout);
+
+  // And the FHIR fixture, which is a separate command because it cannot run where
+  // the seed above does. That one is a compose service that has to finish *before*
+  // Pathling starts; this one writes to Pathling, so it can only run after - which
+  // is here, and only here. See `scripts/seedFhir.mjs`.
+  const seededFhir = await run("bun", ["scripts/seedFhir.mjs"], {
+    cwd: new URL("..", import.meta.url).pathname,
+    env: {
+      ...process.env,
+      SIGNET_BASE_URL: SIGNET,
+      SIGNET_SEED_FHIR_BASE: FHIR,
+    },
+  });
+  process.stdout.write(seededFhir.stdout);
 }

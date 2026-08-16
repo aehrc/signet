@@ -26,6 +26,7 @@ function clientView(overrides: Partial<ClientView> = {}): ClientView {
     allowedScopes: ["patient/Observation.rs", "launch/patient"],
     status: "active",
     contactEmail: null,
+    vouching: null,
     createdAt: "2026-08-03T14:02:11.000Z",
     ...overrides,
   };

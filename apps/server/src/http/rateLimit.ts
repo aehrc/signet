@@ -65,6 +65,16 @@ export const RATE_LIMITS = {
    * guesses a minute per address against an Argon2id hash.
    */
   signIn: { limit: 10, windowMs: 60_000 },
+  /**
+   * Vouched dynamic client registration.
+   *
+   * Tighter than the token endpoint, because every accepted request creates a
+   * client row and every one that gets as far as a signature check may cost an
+   * outbound fetch of the anchor's keys. Thirty a minute is far more registration
+   * than any real deployment performs and far less amplification than an
+   * unlimited route would offer against the anchor.
+   */
+  register: { limit: 30, windowMs: 60_000 },
 } as const satisfies Readonly<Record<string, WindowLimit>>;
 
 /** Which limit a route is under. */

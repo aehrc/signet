@@ -141,8 +141,12 @@ describe("the declared unscoped surface", () => {
     for (const name of called) {
       expect(swept).toContain(name);
     }
+    // Any delete the sweep calls, not only the `deleteExpired*` ones: the
+    // vouched-client tidy-up is named for what it removes rather than for the
+    // column it compares, and a pattern tied to one prefix would stop covering
+    // the next statement somebody adds under a different name.
     expect(
-      [...swept.matchAll(/\bdeleteExpired\w+/g)].map((match) => match[0]),
+      [...swept.matchAll(/\bdelete[A-Z]\w+/g)].map((match) => match[0]),
     ).toEqual(expect.arrayContaining(called));
   });
 

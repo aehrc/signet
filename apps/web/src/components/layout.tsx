@@ -10,6 +10,8 @@
  * Author: John Grimes
  */
 
+import { describeError } from "../api/errors.js";
+
 import type { ReactNode } from "react";
 
 interface PageHeaderProps {
@@ -141,6 +143,51 @@ export function InfoAlert({
       <div>{children}</div>
     </div>
   );
+}
+
+/**
+ * What a "check this remote thing" button says before it has anything to show.
+ *
+ * Two console pages ask Signet to reach out to somebody else's server and report
+ * back - the upstream identity provider's discovery document, and a trust anchor's
+ * published keys - and the three answers that are not the answer are identical for
+ * both: the request itself failed, nobody has pressed the button yet, or the far
+ * end replied with a problem. Only the success has anything page-specific in it,
+ * so only the success is the caller's to render.
+ *
+ * The caller narrows its own result before passing children, because a component
+ * boundary loses the narrowing: `children` is built by the caller and shown here
+ * only when there is something to show.
+ *
+ * `result` is the check's outcome, or undefined before it has run; `error` is why
+ * the request itself failed, if it did; `children` is what a success looks like.
+ */
+export function CheckOutcome({
+  result,
+  error,
+  children,
+}: Readonly<{
+  readonly result:
+    | { readonly ok: true }
+    | {
+        readonly ok: false;
+        readonly problem: string;
+        readonly description: string;
+      }
+    | undefined;
+  readonly error: unknown;
+  readonly children: ReactNode;
+}>) {
+  if (error !== null && error !== undefined) {
+    return <ErrorAlert message={describeError(error)} />;
+  }
+  if (result === undefined) {
+    return null;
+  }
+  if (!result.ok) {
+    return <ErrorAlert message={`${result.problem}: ${result.description}`} />;
+  }
+  return <>{children}</>;
 }
 
 /** The placeholder shown while a query is in flight. */

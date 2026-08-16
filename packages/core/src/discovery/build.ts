@@ -6,6 +6,7 @@ import { deriveCapabilities } from "./capabilities.js";
 import { endpointUrls, normaliseIssuer } from "./endpoints.js";
 
 import type {
+  DiscoveryRuleOptions,
   EndpointCapabilityConfig,
   OpenIdConfiguration,
   SmartConfiguration,
@@ -116,10 +117,15 @@ function smartGrantTypes(
  * to tell a deliberately unsupported feature from a broken server.
  *
  * @param config - The endpoint configuration.
+ * @param rules - What the endpoint's opt-in rules say. Omitted means none of
+ *   them are in force, which is the refusing default: an endpoint that has not
+ *   been asked about its trust anchor advertises no registration endpoint.
+ * @returns The document to serve.
  * @see https://hl7.org/fhir/smart-app-launch/conformance.html
  */
 export function buildSmartConfiguration(
   config: EndpointCapabilityConfig,
+  rules: DiscoveryRuleOptions = {},
 ): SmartConfiguration {
   const urls = endpointUrls(config.issuer);
   const methods = smartAuthMethods(config);
@@ -140,8 +146,18 @@ export function buildSmartConfiguration(
     ...(methods.length > 0
       ? { token_endpoint_auth_methods_supported: methods }
       : {}),
-    ...(config.supportsDynamicRegistration
+    // From the trust anchor rule, never from a capability column: this address is
+    // served only by an endpoint that names an anchor, and every other endpoint
+    // answers 404 there.
+    ...(rules.acceptsVouchedRegistration === true
       ? { registration_endpoint: urls.registration }
+      : {}),
+    // From the ticket issuer rule, and only when it names a type. An endpoint
+    // with no rule refuses the exchange grant, and one whose rule names no type
+    // refuses every ticket - neither has anything to advertise.
+    ...(rules.permissionTicketTypes !== undefined &&
+    rules.permissionTicketTypes.length > 0
+      ? { smart_permission_ticket_types_supported: rules.permissionTicketTypes }
       : {}),
     ...(config.scopesSupported.length > 0
       ? { scopes_supported: config.scopesSupported }
@@ -169,15 +185,19 @@ export function buildSmartConfiguration(
  * completely even for endpoints whose primary purpose is not single sign-on.
  *
  * @param config - The endpoint configuration.
- * @param options - What the document should say about this endpoint's keys.
+ * @param options - What the document should say about this endpoint's keys, and
+ *   what its opt-in rules say.
  * @param options.signingAlgorithms - The algorithms of the keys the endpoint
  *   publishes, in advertisement order. Omit for an endpoint with none, which
  *   falls back to the pair SMART names.
+ * @returns The document to serve.
  * @see https://openid.net/specs/openid-connect-discovery-1_0.html
  */
 export function buildOpenIdConfiguration(
   config: EndpointCapabilityConfig,
-  options: { readonly signingAlgorithms?: readonly string[] } = {},
+  options: DiscoveryRuleOptions & {
+    readonly signingAlgorithms?: readonly string[];
+  } = {},
 ): OpenIdConfiguration {
   const urls = endpointUrls(config.issuer);
   const grants: string[] = [...smartGrantTypes(config)];
@@ -195,7 +215,10 @@ export function buildOpenIdConfiguration(
     ...(config.supportsOpenIdConnect
       ? { userinfo_endpoint: urls.userinfo }
       : {}),
-    ...(config.supportsDynamicRegistration
+    // The same rule as the SMART document above, and deliberately the same
+    // answer: a resource server that merges from this one must not be told about
+    // a registration endpoint the other does not advertise.
+    ...(options.acceptsVouchedRegistration === true
       ? { registration_endpoint: urls.registration }
       : {}),
     introspection_endpoint: urls.introspection,

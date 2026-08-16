@@ -13,6 +13,7 @@
 import type { AdminPrincipal } from "./admin/principal.js";
 import type { SignetConfig } from "./config.js";
 import type { RateLimitStore } from "./http/rateLimit.js";
+import type { RemoteJwksCache } from "./oauth/remoteJwks.js";
 import type { EndpointUrls } from "@signet/core";
 import type {
   AuditRecorder,
@@ -52,6 +53,16 @@ export interface ServerContext {
    * must not exhaust each other's allowance.
    */
   readonly rateLimits: RateLimitStore;
+  /**
+   * The trust anchors' published keys this application has already fetched.
+   *
+   * On the context for the same reason the rate-limit counters are: an application
+   * is a value, and two applications in one test process must not share the
+   * mutable state that decides whether an outbound request happens. See
+   * `./oauth/remoteJwks.ts` for how long an entry may be reused, which is the part
+   * that bounds how long a withdrawn key keeps verifying.
+   */
+  readonly jwksCache: RemoteJwksCache;
 }
 
 /**

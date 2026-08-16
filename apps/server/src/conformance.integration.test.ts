@@ -21,6 +21,10 @@
  * Author: John Grimes
  */
 
+import {
+  JWT_SUBJECT_TOKEN_TYPE,
+  TOKEN_EXCHANGE_GRANT_TYPE,
+} from "@signet/core";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { adminRequest, endpointPath } from "./test/adminApi.js";
@@ -41,8 +45,11 @@ import {
   createTestStack,
   TEST_CLIENT_SECRET,
   TEST_PASSWORD,
+  TEST_PUBLIC_URL,
   testDatabaseUrl,
 } from "./test/harness.js";
+import { jsonResponse, startLocalListener } from "./test/localListener.js";
+import { startTrustAnchor } from "./test/trustAnchor.js";
 
 import type { TestStack } from "./test/harness.js";
 import type { SmartCapability } from "@signet/core";
@@ -55,6 +62,7 @@ interface SmartConfiguration {
   readonly code_challenge_methods_supported: readonly string[];
   readonly scopes_supported?: readonly string[];
   readonly registration_endpoint?: string;
+  readonly smart_permission_ticket_types_supported?: readonly string[];
 }
 
 describe.skipIf(testDatabaseUrl === undefined)(
@@ -67,6 +75,10 @@ describe.skipIf(testDatabaseUrl === undefined)(
       // Everything on, so the document advertises the full set and each test has
       // something to check. The negative halves build their own endpoints.
       stack = await createTestStack({
+        // The trust anchor this suite stands up for the registration pair binds
+        // loopback, and the guard refuses that by default. Nothing else here
+        // makes an outbound request.
+        allowPrivateOutboundFetches: true,
         endpoint: {
           // Everything the capability table can express, so the document
           // advertises the full set. The tests that need a capability *off*
@@ -458,11 +470,14 @@ describe.skipIf(testDatabaseUrl === undefined)(
     });
 
     it("advertises no registration endpoint, since it serves none", async () => {
-      // Dynamic registration is off by default and there is nothing at
-      // `/register`. The developer portal is the deliberate alternative: a
-      // request an administrator approves, rather than self-service issuance of
-      // credentials to anybody who can reach the endpoint. If a future change
-      // turns the flag on, this fails until something answers there.
+      // The negative half of the pair below. This endpoint names no trust
+      // anchor, which is the default for every endpoint, so there is nothing at
+      // `/register` and nothing advertised. The developer portal is the
+      // deliberate alternative for an endpoint that wants self-serve
+      // registration reviewed by a person.
+      //
+      // Asserted with every capability flag turned on, `supportsDynamicRegistration`
+      // included, because the advertisement follows the rule and not a column.
       expect(advertised.registration_endpoint).toBeUndefined();
 
       const response = await stack.app.request(
@@ -474,6 +489,156 @@ describe.skipIf(testDatabaseUrl === undefined)(
         },
       );
       expect(response.status).toBe(404);
+    });
+
+    it("advertises a registration endpoint that registers, once an anchor is named", async () => {
+      // The positive half. An advertised `registration_endpoint` is a promise
+      // that a statement posted there produces a client, and an affirmative-only
+      // test above would pass against a server that advertised it and served
+      // nothing.
+      const anchor = await startTrustAnchor();
+      try {
+        const endpoint = await endpointWithout({});
+        const cookie = await stack.signIn();
+        const configured = await adminRequest(
+          stack,
+          "PUT",
+          `/api/v1/tenants/${stack.tenant.slug}/endpoints/${endpoint.slug}/trust/anchor`,
+          {
+            credential: { cookie },
+            body: {
+              issuer: anchor.issuer,
+              jwksUri: anchor.jwksUri,
+              maxVouchingDays: 30,
+            },
+          },
+        );
+        expect(configured.status).toBe(200);
+
+        const document = await configurationAt(endpoint.path);
+        expect(document.registration_endpoint).toBe(
+          `${TEST_PUBLIC_URL}${endpoint.path}/register`,
+        );
+
+        const registered = await stack.app.request(
+          `${endpoint.path}/register`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              software_statement: await anchor.mintStatement(),
+            }),
+          },
+        );
+        expect(registered.status).toBe(201);
+        expect(
+          ((await registered.json()) as { client_id?: string }).client_id,
+        ).toBeDefined();
+      } finally {
+        await anchor.close();
+      }
+    });
+
+    it("advertises no permission ticket types, since it accepts none", async () => {
+      // The negative half of the pair below. This endpoint names no ticket
+      // issuer, which is the default for every endpoint, so token exchange is
+      // not a grant type it has and there are no types to advertise.
+      expect(
+        advertised.smart_permission_ticket_types_supported,
+      ).toBeUndefined();
+
+      const response = await postForm(
+        stack,
+        "/token",
+        {
+          grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
+          subject_token: "not.a.ticket",
+          subject_token_type: JWT_SUBJECT_TOKEN_TYPE,
+          scope: "patient/Patient.rs",
+        },
+        { authorization: basicAuth(stack.symmetricClient.clientId) },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: "unsupported_grant_type",
+      });
+    });
+
+    it("advertises ticket types it will exchange, once an issuer is named", async () => {
+      // The positive half. An advertised
+      // `smart_permission_ticket_types_supported` is a promise that a ticket of
+      // that type produces a token, and an affirmative-only test above would
+      // pass against a server that advertised the list and refused every
+      // ticket.
+      //
+      // On an endpoint of its own, whose audience is a FHIR server on a real
+      // socket: subject resolution is a search, and a promise that stops short
+      // of one is not the promise being made.
+      const ticketIssuer = await startTrustAnchor();
+      const fhir = await startLocalListener(
+        async () =>
+          await Promise.resolve(
+            jsonResponse({
+              resourceType: "Bundle",
+              type: "searchset",
+              entry: [{ resource: { resourceType: "Patient", id: "pat-1" } }],
+            }),
+          ),
+      );
+      const exchanging = await createTestStack({
+        allowPrivateOutboundFetches: true,
+        endpoint: { fhirBaseUrl: `${fhir.origin}/fhir` },
+      });
+      try {
+        const cookie = await exchanging.signIn();
+        const configured = await adminRequest(
+          exchanging,
+          "PUT",
+          `${endpointPath(exchanging)}/trust/ticket-issuer`,
+          {
+            credential: { cookie },
+            body: {
+              issuer: ticketIssuer.issuer,
+              jwksUri: ticketIssuer.jwksUri,
+              acceptedTicketTypes: ["patient-self-access"],
+              maxTokenLifetimeSecs: 300,
+            },
+          },
+        );
+        expect(configured.status).toBe(200);
+
+        const document = (await (
+          await exchanging.app.request(
+            `${issuerPath(exchanging)}/.well-known/smart-configuration`,
+          )
+        ).json()) as SmartConfiguration;
+        expect(document.smart_permission_ticket_types_supported).toEqual([
+          "patient-self-access",
+        ]);
+
+        const exchanged = await postForm(
+          exchanging,
+          "/token",
+          {
+            grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
+            subject_token: await ticketIssuer.mintTicket({
+              issuedAt: exchanging.context.clock(),
+            }),
+            subject_token_type: JWT_SUBJECT_TOKEN_TYPE,
+            scope: "patient/Patient.rs",
+          },
+          { authorization: basicAuth(exchanging.symmetricClient.clientId) },
+        );
+        expect(exchanged.status).toBe(200);
+        expect(await exchanged.json()).toMatchObject({
+          scope: "patient/Patient.rs",
+          patient: "pat-1",
+        });
+      } finally {
+        await exchanging.close();
+        await fhir.close();
+        await ticketIssuer.close();
+      }
     });
 
     it("advertises only PKCE methods it accepts", async () => {

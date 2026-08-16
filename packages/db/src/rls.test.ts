@@ -36,6 +36,8 @@ const schemaTables = Object.values<unknown>(schema)
 /** Tables whose tenant is reached through their own `endpoint_id`. */
 const ONE_HOP_TABLES = [
   "endpoint_keys",
+  "endpoint_trust_anchors",
+  "endpoint_ticket_issuers",
   "idp_configs",
   "end_users",
   "clients",

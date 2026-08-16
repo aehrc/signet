@@ -83,6 +83,10 @@ const client: Client = {
   contactEmail: null,
   attributes: { vendor: "example" },
   createdBy: null,
+  // Not vouched: created by an administrator rather than by a trust anchor.
+  vouchedByIssuer: null,
+  vouchedStatementId: null,
+  vouchingExpiresAt: null,
   createdAt: ISSUED,
   updatedAt: ISSUED,
 };

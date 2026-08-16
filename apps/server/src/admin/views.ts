@@ -134,6 +134,24 @@ export function clientView(client: Client): Record<string, unknown> {
     status: client.status,
     contactEmail: client.contactEmail,
     attributes: client.attributes,
+    /**
+     * The trust anchor that vouched for this registration, or null.
+     *
+     * All three or none: the trio is written together at registration and never
+     * edited, so a client is vouched exactly when it carries all of them. Sending
+     * one object rather than three loose fields keeps the console from having to
+     * decide what a half-set means, because it cannot occur.
+     */
+    vouching:
+      client.vouchedByIssuer === null ||
+      client.vouchedStatementId === null ||
+      client.vouchingExpiresAt === null
+        ? null
+        : {
+            issuer: client.vouchedByIssuer,
+            statementId: client.vouchedStatementId,
+            expiresAt: client.vouchingExpiresAt,
+          },
     createdAt: client.createdAt,
     updatedAt: client.updatedAt,
   };

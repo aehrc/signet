@@ -23,6 +23,7 @@ import {
   assembleAccessTokenClaims,
   assembleIdTokenClaims,
   assembleTokenResponse,
+  describeVouching,
   evaluatePolicy,
   formatScopes,
 } from "@signet/core";
@@ -37,6 +38,7 @@ import {
   withTenantScope,
 } from "@signet/db";
 
+import { buildEvaluationContext } from "./evaluationContext.js";
 import { loadSigningKey, signClaims } from "../keys/signing.js";
 
 import type { ServerContext, ResolvedIssuerContext } from "../context.js";
@@ -68,6 +70,29 @@ export interface IssuanceRequest {
   readonly launchContext: LaunchContext;
   /** The `sub` claim: the end user's id, or the client id for a backend service. */
   readonly subject: string;
+  /**
+   * When the client's vouching lapses, or null for a client nobody vouched for.
+   *
+   * Required rather than optional, so every grant has to state it and a new grant
+   * cannot forget to. That is the whole enforcement: a trust anchor's registration
+   * expires, and the expiry has to stop the client obtaining a token by *any*
+   * grant, including a refresh of a token issued while the vouching was live.
+   * Checking it here rather than in each grant is what makes "any" true.
+   */
+  readonly vouchingExpiresAt: Date | null;
+  /**
+   * A ceiling on the access token's lifetime, in seconds.
+   *
+   * For a grant whose authorisation expires before the endpoint's own token
+   * lifetime would - a permission ticket exchange, whose token must not outlive
+   * the ticket that authorised it. Applied to the evaluation rather than to the
+   * response, so the signed `exp` and the reported `expires_in` are the same
+   * number: capping only the response would advertise a short life for a token
+   * that a resource server would keep accepting for an hour.
+   *
+   * Absent means the policy's own lifetime stands, which is every other grant.
+   */
+  readonly accessTokenTtlCeiling?: number;
   /** Copied into the ID token when the authorization carried one. */
   readonly nonce?: string;
   /** When the end user authenticated, as seconds since the epoch. */
@@ -87,6 +112,8 @@ export interface IssuanceRequest {
 
 /** Why an issuance could not proceed. */
 export type IssuanceRefusal =
+  /** The client was vouched for by a trust anchor, and that vouching has lapsed. */
+  | "vouching-expired"
   /** The endpoint has no published policy and the client has no override. */
   | "no-policy"
   /** The endpoint has no active signing key. */
@@ -155,6 +182,13 @@ export async function issueTokens(
 ): Promise<IssuanceResult> {
   const { issuerContext, clientScope } = request;
 
+  // Before the policy is even read. A client whose vouching has lapsed obtains no
+  // token by any grant, and the cheapest possible refusal is the right one: this
+  // is not a policy decision, it is the registration having ended.
+  if (describeVouching(request.vouchingExpiresAt, context.clock()).expired) {
+    return { ok: false, reason: "vouching-expired" };
+  }
+
   const policy = await withTenantScope(context.db, clientScope, (bound) =>
     getEffectivePolicy(bound),
   );
@@ -166,21 +200,27 @@ export async function issueTokens(
   // console's simulator renders a token from the same pair of calls over the same
   // context, and a second construction here is a second thing that could differ
   // from it.
-  const evaluationContext = {
-    endpoint: {
-      tenantSlug: issuerContext.tenant.slug,
-      slug: issuerContext.endpoint.slug,
-      issuer: issuerContext.issuer,
-      fhirBaseUrl: issuerContext.endpoint.fhirBaseUrl,
-    },
+  const evaluationContext = buildEvaluationContext({
+    issuerContext,
     client: request.client,
     user: request.user,
     requested: request.requested,
-    context: request.launchContext,
+    launchContext: request.launchContext,
     grantType: request.grantType,
-  };
+  });
 
-  const evaluation = evaluatePolicy(policy.document, evaluationContext);
+  const evaluated = evaluatePolicy(policy.document, evaluationContext);
+  // The grant's ceiling and the policy's, resolved once and before anything is
+  // assembled, so every consumer of the evaluation below - the claims, the
+  // response, the stored expiry - sees the same lifetime.
+  const ceiling = request.accessTokenTtlCeiling;
+  const evaluation =
+    ceiling === undefined
+      ? evaluated
+      : {
+          ...evaluated,
+          accessTokenTtl: Math.min(evaluated.accessTokenTtl, ceiling),
+        };
 
   if (evaluation.grantedScopes.length === 0) {
     return { ok: false, reason: "nothing-granted" };

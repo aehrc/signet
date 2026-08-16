@@ -12,6 +12,14 @@ Verified August 2026. If a vendor changes their contract, the preset is wrong un
 somebody re-reads the page and fixes it - so the dates below are part of the
 record, not decoration.
 
+One token an endpoint mints is not an app's: to resolve a permission ticket's
+subject identifier to a patient, Signet issues itself a short-lived
+`system/Patient.rs` token through the endpoint's own policy and searches the FHIR
+server with it. So an endpoint accepting permission tickets needs a policy whose
+system-read rule produces a token _this_ server accepts - the same claims
+contract as everything below, asked of Signet rather than of an app. See
+[trusting an outside issuer](operations.md#trusting-an-outside-issuer).
+
 ## SMART baseline
 
 The only preset writable from a specification: the token claims and launch-context

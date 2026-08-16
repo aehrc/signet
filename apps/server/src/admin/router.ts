@@ -52,6 +52,7 @@ import {
   adminSessionHandler,
 } from "./session.js";
 import { registerTenantRoutes } from "./tenantRoutes.js";
+import { registerTrustRoutes } from "./trustRoutes.js";
 import { rateLimit } from "../http/rateLimit.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
@@ -183,6 +184,7 @@ export function createAdminRouter(
   // rather than as a route table nobody can hold in their head.
   registerEndpointRoutes(router, context);
   registerFederationRoutes(router, context);
+  registerTrustRoutes(router, context);
   registerClientRoutes(router, context);
   registerPolicyRoutes(router, context);
   registerEndUserRoutes(router, context);
