@@ -231,7 +231,9 @@ function TenantList({ session }: Readonly<{ session: SessionView }>) {
   }
 
   return (
-    <ul className="menu bg-base-100 w-full">
+    // Sized the way the drawer's menu is sized, and for the same reason: the
+    // entries are the only way off this screen, and daisyUI's menu row is 33px.
+    <ul className="menu bg-base-100 w-full max-sm:[&_a]:min-h-11 max-sm:[&_a]:text-base">
       {session.tenants.map((tenant) => (
         <li key={tenant.slug}>
           <a href={tenantRoute(tenant.slug)}>

@@ -634,6 +634,22 @@ test.describe("console surfaces", () => {
     await expectUsableOnAPhone(page);
     await expectTapTargets(page, ENTRY_FIELDS);
   });
+
+  test("fits the tenant list shown for a tenant you do not belong to", async ({
+    page,
+  }) => {
+    // The one console screen the route sweep cannot reach, because it is what a
+    // tenant slug that resolves to no membership produces rather than a route
+    // anybody navigates to. Its tenant list is also the chooser a member of
+    // several tenants lands on, which the stack seeds nobody to be - so this is
+    // the only way to measure that list in a browser at all.
+    await page.goto(`${SIGNET}/console/t/not-a-tenant`);
+    await expect(
+      page.getByText("You are not a member of that tenant"),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: /Demo/ })).toBeVisible();
+    await expectUsableOnAPhone(page);
+  });
 });
 
 /**

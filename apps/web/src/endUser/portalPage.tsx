@@ -380,7 +380,13 @@ function StatusPanel({
             </DetailRow>
             {result.request.decisionNote === null ? null : (
               <DetailRow label="Note from the reviewer">
-                {result.request.decisionNote}
+                {/* A detail row's value is usually an identifier or a chip that
+                    sets its own size, which is why the row stays at 14px. This
+                    one is a sentence somebody wrote to be read, so it takes the
+                    prose floor and is marked for the assertion that holds it. */}
+                <span data-prose className="max-sm:text-base">
+                  {result.request.decisionNote}
+                </span>
               </DetailRow>
             )}
             {result.clientId === undefined ? null : (
