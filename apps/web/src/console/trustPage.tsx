@@ -523,7 +523,7 @@ function KeysPanel({
     <Panel title={title} description={description}>
       <div className="flex flex-col gap-3">
         <CopyableValue label={address.label} value={address.value} />
-        <p className="text-base-content/60 text-xs">
+        <p className="text-base-content/60 text-xs max-sm:text-base">
           Rule last changed {formatInstant(address.updatedAt)}.
         </p>
         <div>

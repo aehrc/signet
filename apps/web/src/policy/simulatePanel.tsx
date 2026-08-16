@@ -175,7 +175,7 @@ export function SimulatePanel({
             Simulate
           </button>
           {document === undefined ? (
-            <p className="text-warning mt-2 text-xs">
+            <p className="text-warning mt-2 text-xs max-sm:text-base">
               The document has a problem, so there is nothing valid to simulate.
             </p>
           ) : null}
@@ -188,7 +188,10 @@ export function SimulatePanel({
         {simulate.data === undefined ? null : (
           <>
             {stale ? (
-              <p className="text-warning text-xs" role="status">
+              <p
+                className="text-warning text-xs max-sm:text-base"
+                role="status"
+              >
                 The document has changed since this result. Simulate again to
                 see the current draft.
               </p>
@@ -212,7 +215,7 @@ function SimulationResult({
   return (
     <div className="border-base-300 flex flex-col gap-3 border-t pt-3">
       <div>
-        <p className="mb-1 text-sm font-medium">Granted</p>
+        <p className="mb-1 text-sm max-sm:text-base font-medium">Granted</p>
         <Chips
           values={result.scope.length === 0 ? [] : result.scope.split(" ")}
         />
@@ -220,10 +223,10 @@ function SimulationResult({
 
       {result.denied.length === 0 ? null : (
         <div>
-          <p className="mb-1 text-sm font-medium">Refused</p>
+          <p className="mb-1 text-sm max-sm:text-base font-medium">Refused</p>
           <ul className="flex flex-col gap-1">
             {result.denied.map((entry, index) => (
-              <li key={String(index)} className="text-xs">
+              <li key={String(index)} className="text-xs max-sm:text-base">
                 <code className="font-mono">{scopeText(entry.scope)}</code> -{" "}
                 {entry.reason}
                 {entry.ruleId === undefined ? null : (
@@ -240,10 +243,10 @@ function SimulationResult({
 
       {result.narrowed.length === 0 ? null : (
         <div>
-          <p className="mb-1 text-sm font-medium">Narrowed</p>
+          <p className="mb-1 text-sm max-sm:text-base font-medium">Narrowed</p>
           <ul className="flex flex-col gap-1">
             {result.narrowed.map((entry, index) => (
-              <li key={String(index)} className="text-xs">
+              <li key={String(index)} className="text-xs max-sm:text-base">
                 <code className="font-mono">{scopeText(entry.requested)}</code>{" "}
                 became{" "}
                 <code className="font-mono">{scopeText(entry.granted)}</code>
@@ -255,10 +258,12 @@ function SimulationResult({
 
       {result.rejectedScopes.length === 0 ? null : (
         <div>
-          <p className="mb-1 text-sm font-medium">Not valid SMART scopes</p>
+          <p className="mb-1 text-sm max-sm:text-base font-medium">
+            Not valid SMART scopes
+          </p>
           <ul className="flex flex-col gap-1">
             {result.rejectedScopes.map((entry) => (
-              <li key={entry.raw} className="text-xs">
+              <li key={entry.raw} className="text-xs max-sm:text-base">
                 <code className="font-mono">{entry.raw}</code> - {entry.message}
               </li>
             ))}
@@ -286,7 +291,7 @@ function SimulationResult({
 
       <ClaimsBlock title="Access token" claims={result.accessTokenClaims} />
       {result.idTokenClaims === null ? (
-        <p className="text-base-content/60 text-xs">
+        <p className="text-base-content/60 text-xs max-sm:text-base">
           No ID token: that needs the openid scope granted, a signed-in user,
           and an endpoint configured for OpenID Connect.
         </p>
@@ -313,7 +318,7 @@ function ClaimsBlock({
 }>) {
   return (
     <div>
-      <p className="mb-1 text-sm font-medium">{title}</p>
+      <p className="mb-1 text-sm max-sm:text-base font-medium">{title}</p>
       <pre className="bg-base-200 rounded-box overflow-x-auto p-3 font-mono text-xs">
         {JSON.stringify(claims, undefined, 2)}
       </pre>

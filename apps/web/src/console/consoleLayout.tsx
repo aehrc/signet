@@ -79,7 +79,7 @@ export function ConsoleLayout() {
     return (
       <AppShell title="Signet">
         <ErrorAlert message="You are not a member of that tenant">
-          <p className="text-sm">
+          <p className="text-sm max-sm:text-base">
             It may not exist, or your membership may have been removed. Pick one
             you do belong to from the list.
           </p>

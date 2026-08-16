@@ -318,7 +318,7 @@ export function LoginPage() {
             <p className="mb-1 text-sm font-medium max-sm:text-base">
               Or continue as
             </p>
-            <p className="text-base-content/60 mb-2 text-xs max-sm:text-sm">
+            <p className="text-base-content/60 mb-2 text-xs max-sm:text-base">
               These are demonstration accounts. This endpoint is not marked
               production, so they need no password.
             </p>

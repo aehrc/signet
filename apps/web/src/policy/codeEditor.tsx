@@ -99,7 +99,7 @@ export function CodeEditor({
             return (
               <li
                 key={`${issue.path}-${issue.message}`}
-                className="text-error text-xs"
+                className="text-error text-xs max-sm:text-base"
               >
                 <code className="font-mono">
                   {issue.path === "" ? "document" : issue.path}

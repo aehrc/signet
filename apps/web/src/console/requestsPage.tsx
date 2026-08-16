@@ -157,7 +157,7 @@ export function RequestsPage() {
                   {formatInstant(request.decidedAt)}
                 </span>
                 {request.decisionNote === null ? null : (
-                  <p className="text-base-content/70 w-full text-xs">
+                  <p className="text-base-content/70 w-full text-xs max-sm:text-base">
                     {request.decisionNote}
                   </p>
                 )}

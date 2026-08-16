@@ -77,7 +77,9 @@ export function GrantRuleFields({
       />
 
       <div>
-        <span className="label-text text-sm">Requires launch context</span>
+        <span className="label-text text-sm max-sm:text-base">
+          Requires launch context
+        </span>
         <div className="mt-1 flex flex-wrap gap-3">
           {CONTEXT_REQUIREMENTS.map((key) => (
             <label
@@ -103,7 +105,7 @@ export function GrantRuleFields({
             </label>
           ))}
         </div>
-        <p className="text-base-content/60 mt-1 text-xs">
+        <p className="text-base-content/60 mt-1 text-xs max-sm:text-base">
           Granting a patient-context scope with no patient resolved would hand
           the app a token whose meaning depends on what the FHIR server infers.
         </p>

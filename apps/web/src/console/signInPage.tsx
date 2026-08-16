@@ -183,7 +183,7 @@ function PasskeySignIn() {
       </button>
       {failure === undefined ? null : (
         <p
-          className="text-base-content/70 mt-2 text-center text-sm"
+          className="text-base-content/70 mt-2 text-center text-sm max-sm:text-base"
           role="status"
         >
           {failure}

@@ -106,9 +106,21 @@ export function RuleCard({
             {position}
           </span>
           <span className="min-w-0 flex-1">
-            <span className={`${SUMMARY_LINE} text-sm`}>{summary}</span>
+            {/* `data-prose` on both, because both are sentences addressed to the
+                reader and neither can be a `p`: a button's content model admits
+                phrasing content only. It is what puts them inside the 16px floor
+                the responsive suite measures. */}
+            <span
+              data-prose
+              className={`${SUMMARY_LINE} text-sm max-sm:text-base`}
+            >
+              {summary}
+            </span>
             {rule.description === undefined || expanded ? null : (
-              <span className={`text-base-content/60 ${SUMMARY_LINE} text-xs`}>
+              <span
+                data-prose
+                className={`text-base-content/60 ${SUMMARY_LINE} text-xs max-sm:text-base`}
+              >
                 {rule.description}
               </span>
             )}

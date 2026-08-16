@@ -24,6 +24,21 @@
  * markup would be two things to change, and the phone would eventually show
  * something the desktop did not.
  *
+ * ## The card's links are its controls
+ *
+ * A row's first column is almost always a link to the thing the row is about, and
+ * on a card that link is usually the only way off the card. On a desktop it is a
+ * pointer target inside a 700px row; at 360px it is the card's navigation, and an
+ * anchor is 18px tall because an anchor is text. So every anchor in a card is
+ * given a 44px box below `sm` - `inline-flex` first, because `min-height` does
+ * nothing to an inline box, and `items-center` so the text sits in the middle of
+ * the box rather than at the top of it.
+ *
+ * Applied here rather than at each list for the same reason `ACTION_ROW` and the
+ * drawer's entries are: the links are a caller's children, eight pages render
+ * through this component, and a rule per page is a rule somebody forgets. It also
+ * reaches the per-row action links, which FR-006 keeps on the card.
+ *
  * Author: John Grimes
  */
 
@@ -92,7 +107,7 @@ export function DataTable<Row>({
         {rows.map((row) => (
           <li
             key={rowKey(row)}
-            className={`border-base-300 rounded-box min-w-0 border p-4 max-sm:[&_.btn]:min-h-11 ${rowClassName?.(row) ?? ""}`}
+            className={`border-base-300 rounded-box min-w-0 border p-4 max-sm:[&_a]:inline-flex max-sm:[&_a]:min-h-11 max-sm:[&_a]:min-w-11 max-sm:[&_a]:items-center max-sm:[&_.btn]:min-h-11 ${rowClassName?.(row) ?? ""}`}
           >
             <div className="min-w-0 font-medium break-words">
               {title === undefined ? null : title.cell(row)}

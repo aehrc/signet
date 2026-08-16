@@ -296,12 +296,14 @@ function PolicyEditor({
                       className="border-base-300 flex flex-wrap items-start justify-between gap-2 border-b pb-2 last:border-b-0"
                     >
                       <div className="max-w-lg">
-                        <p className="text-sm font-medium">{preset.name}</p>
-                        <p className="text-base-content/70 text-xs">
+                        <p className="text-sm max-sm:text-base font-medium">
+                          {preset.name}
+                        </p>
+                        <p className="text-base-content/70 text-xs max-sm:text-base">
                           {preset.description}
                         </p>
                         {preset.references.length > 0 ? (
-                          <p className="text-base-content/60 mt-1 text-xs">
+                          <p className="text-base-content/60 mt-1 text-xs max-sm:text-base">
                             {/* The citation, because a preset asserts what another
                               system does with a token and this is how an operator
                               checks that claim. */}
@@ -436,7 +438,7 @@ function BuilderPane({
     return (
       <Panel title="Rules">
         <ErrorAlert message="The document does not parse, so the builder cannot show it">
-          <p className="text-sm">
+          <p className="text-sm max-sm:text-base">
             Switch to the code view to fix it. Nothing has been changed.
           </p>
         </ErrorAlert>

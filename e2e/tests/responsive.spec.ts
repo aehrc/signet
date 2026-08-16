@@ -53,8 +53,10 @@ const MINIMUM_TAP_TARGET = 44;
  * `apps/web/src/components/layout.tsx`. The short of it: text the reader enters,
  * the inherited body size, and running prose. Not the annotation layer - card
  * field labels, badges, timestamps, monospace identifiers and code - which the
- * approved wireframes size at 0.7rem and 0.85rem. Only the first of those is
- * measured here, because it is the one with a mechanical consequence.
+ * approved wireframes size at 0.7rem and 0.85rem. The first is measured by
+ * {@link expectNoAutoZoom}, because it is the one with a mechanical consequence;
+ * the third by {@link expectProseReadable}, because a reading nothing checks is a
+ * reading that drifts.
  */
 const MINIMUM_CONTROL_TEXT = 16;
 
@@ -79,6 +81,19 @@ interface Styled {
       };
     };
   };
+}
+
+/**
+ * As much of an element as deciding whether it carries text of its own needs.
+ *
+ * Declared here for the same reason {@link Styled} is: the package names no DOM
+ * library, so the shape the callback relies on is written down where it is used.
+ */
+interface Prose extends Styled {
+  readonly childNodes: Iterable<{
+    readonly nodeType: number;
+    readonly textContent: string | null;
+  }>;
 }
 
 /**
@@ -173,15 +188,44 @@ export async function expectTapTargets(
 }
 
 /**
- * Everything a thumb has to hit on an end-user surface.
+ * Everything a thumb has to hit.
  *
- * Buttons and the anchors styled as buttons: the controls that advance a flow.
+ * Four kinds of control, and the first two are the reason this is not the
+ * narrower selector it started as. `a.btn` sampled only the anchors already
+ * styled as buttons - the class that was never at risk - and excluded the bare
+ * `link` anchor, which is 18px tall and is the *only* navigation on every card
+ * in every console list below `sm`. A sampler that cannot match the failing
+ * class cannot fail on it, so the requirement it was standing in for was not
+ * being held. `a[href]` matches both.
+ *
+ * `label.btn` is the drawer's hamburger, which is a control rather than a
+ * caption. `label:has(input[type='checkbox'])` is a checkbox's tap target: the
+ * box itself is deliberately left at 20px and the label wrapped around it is
+ * what a thumb aims at, which is the design `fields.tsx` writes down, so the
+ * label is the thing worth measuring and the box is not.
+ *
+ * A field's caption - a bare `label` pointing at an input by `htmlFor` - is
+ * deliberately absent. It is a 24px line of text that happens to focus the
+ * control when tapped, not a control in its own right, and the control it names
+ * is measured through {@link ENTRY_FIELDS}.
+ *
+ * The one exemption is an anchor inside a paragraph, written as `:not(p a)` so
+ * that it exempts the position rather than the element - the same component
+ * outside a paragraph is still measured. This is WCAG 2.5.8's own "inline"
+ * exception: a target "in a sentence, or whose size is otherwise constrained by
+ * the line-height of non-target text". Two anchors are in that position - the
+ * portal address inside the requests page's description, and the specification
+ * citations inside the policy presets' "Contract:" lines - and giving either a
+ * 44px box would break the sentence it sits in rather than make it easier to
+ * hit.
+ *
  * The text inputs are measured by the same helper through {@link ENTRY_FIELDS},
  * separately, because a field that is too short and a button that is too small
  * are different defects with different fixes and reading one failure should not
  * hide the other.
  */
-const CONTROLS = "button, a.btn";
+const CONTROLS =
+  "button, a[href]:not(p a), label.btn, label:has(input[type='checkbox'])";
 
 /** The text entry controls on an end-user surface. */
 const ENTRY_FIELDS = "input:not([type='checkbox']), select, textarea";
@@ -233,6 +277,80 @@ export async function expectNoAutoZoom(page: Page): Promise<void> {
 }
 
 /**
+ * Running prose, as a selector.
+ *
+ * FR-004's floor covers more than the fields a browser zooms, and the reading
+ * written in `apps/web/src/components/layout.tsx` says what: prose addressed to
+ * the reader - descriptions, hints, empty states, validation and status
+ * messages - as against an annotation layer of badges, timestamps, monospace
+ * identifiers and the labelled values inside a mobile card, which the approved
+ * wireframes fix below 16px on purpose. That reading is only worth writing down
+ * if something checks it, so this is where prose lives structurally:
+ *
+ * - `p`, which this product uses for nothing but prose, less the monospace ones
+ *   - a `p` in a monospace face is a value being shown exactly (the rule
+ *   builder's pattern preview), which the reading excludes as an identifier.
+ * - `li`, for prose that comes as a list: the simulator reports each refused
+ *   scope and the reason it was refused as one list item.
+ * - `.label-text` and `legend`, the captions above a control and above a group
+ *   of them. Not prose in the strict sense, but read the same way and sized the
+ *   same way, and `fields.tsx` already raises the shared one - so leaving the
+ *   half-dozen written by hand at 14px is a difference with no reason behind it.
+ * - `[data-prose]`, for the two lines that cannot be a `p`: a rule card's
+ *   summary and its description sit inside the `button` that expands the card,
+ *   whose content model admits no paragraph.
+ *
+ * Measured on the element that carries the text rather than on the text, so a
+ * paragraph that sets 12px and holds a `code` child is reported against the
+ * paragraph, which is where the class that caused it lives. An element with no
+ * text of its own is skipped for the same reason: the picker's choices are
+ * `li`s inside a daisyUI menu, which sizes them at 14px, and every word in them
+ * is inside a 16px `button` - the `li`'s own size governs nothing, and failing on
+ * it would be reporting a number nobody can read.
+ *
+ * @param page - The page to measure, already navigated and settled.
+ * @throws {Error} When visible prose renders under 16px.
+ * @example
+ * ```ts
+ * await page.goto(`${ENDPOINT}/policy`);
+ * await expectProseReadable(page);
+ * ```
+ */
+export async function expectProseReadable(page: Page): Promise<void> {
+  const passages = page.locator(PROSE);
+  const count = await passages.count();
+
+  for (let index = 0; index < count; index++) {
+    const passage = passages.nth(index);
+    if (!(await passage.isVisible())) {
+      continue;
+    }
+    const measured = await passage.evaluate((element: Prose) => ({
+      // 3 is `Node.TEXT_NODE`, spelled as its value because this package names
+      // no DOM library and so has no `Node` to read it from.
+      carriesText: [...element.childNodes].some(
+        (node) => node.nodeType === 3 && (node.textContent ?? "").trim() !== "",
+      ),
+      size: Number.parseFloat(
+        element.ownerDocument.defaultView.getComputedStyle(element).fontSize,
+      ),
+    }));
+    if (!measured.carriesText) {
+      continue;
+    }
+    const text = (await passage.textContent())?.trim() ?? "";
+    expect(
+      measured.size,
+      `"${text.slice(0, 60)}" renders at ${String(measured.size)}px, under the 16px floor`,
+    ).toBeGreaterThanOrEqual(MINIMUM_CONTROL_TEXT);
+  }
+}
+
+/** Where prose lives in this product's markup. See {@link expectProseReadable}. */
+const PROSE =
+  "p:not(.font-mono), li:not(.font-mono), .label-text, legend, [data-prose]";
+
+/**
  * Asserts a page is readable and operable at the mobile viewport.
  *
  * @param page - The page to measure, already navigated and settled.
@@ -242,6 +360,7 @@ async function expectUsableOnAPhone(page: Page): Promise<void> {
   await expectNoPageOverflow(page);
   await expectTapTargets(page, CONTROLS);
   await expectNoAutoZoom(page);
+  await expectProseReadable(page);
 }
 
 test.describe("end-user surfaces", () => {

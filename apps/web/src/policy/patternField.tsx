@@ -69,9 +69,13 @@ export function PatternField({
 
   return (
     <fieldset className="border-base-300 rounded-box border p-3">
-      <legend className="px-1 text-sm font-medium">{label}</legend>
+      <legend className="px-1 text-sm max-sm:text-base font-medium">
+        {label}
+      </legend>
       {hint === undefined ? null : (
-        <p className="text-base-content/60 mb-2 text-xs">{hint}</p>
+        <p className="text-base-content/60 mb-2 text-xs max-sm:text-base">
+          {hint}
+        </p>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -108,7 +112,7 @@ export function PatternField({
       </div>
 
       <div className="mt-2">
-        <span className="label-text text-sm">Permissions</span>
+        <span className="label-text text-sm max-sm:text-base">Permissions</span>
         <div className="mt-1 flex flex-wrap gap-3">
           {PERMISSION_ORDER.map((permission) => (
             <label

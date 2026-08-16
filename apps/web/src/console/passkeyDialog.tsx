@@ -91,7 +91,7 @@ export function PasskeyDialog({ open, onClose }: Readonly<PasskeyDialogProps>) {
             <XIcon />
           </button>
         </div>
-        <p className="text-base-content/70 mb-4 text-sm">
+        <p className="text-base-content/70 mb-4 text-sm max-sm:text-base">
           Sign in to the console without typing your password. Passkeys belong
           to your account and work across all of your tenants.
         </p>
@@ -245,7 +245,9 @@ function PasskeyList({
         </span>
       </div>
       {blocked === undefined ? null : (
-        <p className="text-base-content/70 mt-2 text-xs">{blocked}</p>
+        <p className="text-base-content/70 mt-2 text-xs max-sm:text-base">
+          {blocked}
+        </p>
       )}
     </>
   );

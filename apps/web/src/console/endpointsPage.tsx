@@ -154,7 +154,9 @@ export function EndpointsPage() {
           <div className="flex flex-col gap-3">
             {endpoints.data.map((endpoint) => (
               <div key={endpoint.slug}>
-                <p className="mb-1 text-sm font-medium">{endpoint.name}</p>
+                <p className="mb-1 text-sm max-sm:text-base font-medium">
+                  {endpoint.name}
+                </p>
                 <CopyableValue value={endpoint.issuer} label="issuer" />
               </div>
             ))}

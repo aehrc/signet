@@ -83,7 +83,7 @@ export function ClaimRuleFields({
     <>
       {withCondition ? (
         kind === undefined ? (
-          <p className="text-warning text-xs">
+          <p className="text-warning text-xs max-sm:text-base">
             This rule&apos;s condition combines fields the builder does not
             offer. Edit it in the code view; nothing here will change it.
           </p>
@@ -183,10 +183,10 @@ function EmitRows({ emit, disabled, onChange }: Readonly<EmitRowsProps>) {
 
   return (
     <div>
-      <span className="label-text text-sm">Emits</span>
+      <span className="label-text text-sm max-sm:text-base">Emits</span>
 
       {entries.length === 0 ? (
-        <p className="text-base-content/60 mt-1 text-xs">
+        <p className="text-base-content/60 mt-1 text-xs max-sm:text-base">
           Nothing yet. A rule that emits nothing has no effect.
         </p>
       ) : (

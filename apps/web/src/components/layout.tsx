@@ -25,18 +25,32 @@
  *    renders at 14px however the page is written. Below `sm` that property is put
  *    back to 1rem, here and in `CentredShell`.
  * 3. **Running prose addressed to the reader** - page and panel descriptions,
- *    shell subtitles, empty-state copy, field hints, validation and status
- *    messages. Each carries `max-sm:text-base` beside its desktop `text-sm` or
- *    `text-xs`, so the denser desktop rendering is untouched (SC-006).
+ *    shell subtitles, empty-state copy, field hints, the captions above a
+ *    control and above a group of them, validation and status messages, and the
+ *    lines a tool writes back about what it decided: a policy rule's summary and
+ *    description, a preset's description and its citation, the simulator's
+ *    reason for refusing a scope, the code view's parse errors. Each carries
+ *    `max-sm:text-base` beside its desktop `text-sm` or `text-xs`, so the denser
+ *    desktop rendering is untouched (SC-006).
  *
- * It deliberately does **not** cover the annotation layer: the uppercase field
- * labels and the values inside a mobile card, badges, timestamps, monospace
- * identifiers, code and diff text, and the tab strips. Those are read as marks
- * against a value rather than as text, and `wireframes/mobile-card-list.html` -
- * the approved design - fixes them at 0.7rem and 0.85rem while putting its
- * buttons at 0.95rem. Raising the annotations would change that design rather
- * than implement it, and would cost the density that makes a card list legible
- * at 360px in the first place.
+ * It deliberately does **not** cover the annotation layer: badges, timestamps,
+ * monospace identifiers, code and diff text, the tab strips, and the two halves
+ * of a label-and-value pair - the uppercase labels and values inside a mobile
+ * card, and the {@link DetailRow}s of a configuration list, which are the same
+ * species one breakpoint up. Those are read as marks against a value rather than
+ * as text, and `wireframes/mobile-card-list.html` - the approved design - fixes
+ * them at 0.7rem and 0.85rem while putting its buttons at 0.95rem. Raising the
+ * annotations would change that design rather than implement it, and would cost
+ * the density that makes a card list legible at 360px in the first place. A
+ * `DetailRow` is the case worth naming rather than leaving to be inferred: its
+ * values are overwhelmingly issuers, URLs, scope chips and copyable code, each of
+ * which sets its own smaller size, so raising the row around them would produce a
+ * list whose label read larger than the value it labels.
+ *
+ * The reading is checked rather than asserted. `e2e/tests/responsive.spec.ts`
+ * measures the computed size of every visible paragraph, list item, control
+ * caption and `data-prose` element on every route it sweeps, which is what stops
+ * this comment and the product drifting apart.
  *
  * Wrapping is the other thing kept in one place. Almost every long value in this
  * product - an issuer, a JWKS URL, a client identifier, a key thumbprint - is one
