@@ -31,6 +31,7 @@
   "include": [
     "packages/*/src/**/*.test.ts",
     "apps/*/src/**/*.test.ts",
+    "apps/*/src/**/*.test.tsx",
     "e2e/src/**/*.test.ts"
   ]
 }

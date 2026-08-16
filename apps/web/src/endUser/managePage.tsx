@@ -26,6 +26,7 @@ import {
   useRevokeAuthorization,
 } from "./queries.js";
 import { describeScopes } from "./scopeDescriptions.js";
+import { ScopeMarker } from "./scopeMarker.js";
 import { describeError, isUnauthenticated } from "../api/errors.js";
 import { CentredShell } from "../components/appShell.js";
 import { SubmitButton, TextField } from "../components/fields.js";
@@ -164,9 +165,7 @@ function Authorizations({
               <ul className="flex flex-col gap-1">
                 {describeScopes(authorization.scope).map((described) => (
                   <li key={described.scope} className="text-sm">
-                    <span aria-hidden="true" className="mr-2">
-                      {described.writes ? "⚠" : "•"}
-                    </span>
+                    <ScopeMarker writes={described.writes} className="mr-2" />
                     {described.description}
                   </li>
                 ))}

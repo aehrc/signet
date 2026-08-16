@@ -18,6 +18,14 @@
  * Author: John Grimes
  */
 
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  TrashIcon,
+} from "@primer/octicons-react";
+
 import { moveRule, removeRule, replaceRule, setRuleEnabled } from "./rules.js";
 import { CheckboxField, TextField } from "../components/fields.js";
 
@@ -85,8 +93,12 @@ export function RuleCard({
             )}
           </span>
           {enabled ? null : <span className="badge badge-sm">off</span>}
-          <span aria-hidden="true" className="text-base-content/60 text-xs">
-            {expanded ? "▲" : "▼"}
+          <span aria-hidden="true" className="text-base-content/60">
+            {expanded ? (
+              <ChevronUpIcon size={12} />
+            ) : (
+              <ChevronDownIcon size={12} />
+            )}
           </span>
         </button>
 
@@ -102,7 +114,7 @@ export function RuleCard({
                   onChange(moveRule(document, list, id, -1));
                 }}
               >
-                ↑
+                <ArrowUpIcon />
               </button>
               <button
                 type="button"
@@ -113,17 +125,19 @@ export function RuleCard({
                   onChange(moveRule(document, list, id, 1));
                 }}
               >
-                ↓
+                <ArrowDownIcon />
               </button>
             </div>
             <button
               type="button"
-              className="btn btn-ghost btn-xs text-error"
+              className="btn btn-ghost btn-xs text-error tooltip"
+              data-tip="Delete rule"
+              aria-label="Delete rule"
               onClick={() => {
                 onChange(removeRule(document, list, id));
               }}
             >
-              Delete
+              <TrashIcon />
             </button>
           </>
         )}

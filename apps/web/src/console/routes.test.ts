@@ -7,6 +7,7 @@ import { describe, expect, it } from "bun:test";
 import {
   activeEndpointTab,
   clientRoute,
+  ENDPOINT_TABS,
   endpointRoute,
   endUserRoute,
   tenantRoute,
@@ -86,5 +87,15 @@ describe("activeEndpointTab", () => {
 
   it("falls back to the overview for a path outside the endpoint", () => {
     expect(activeEndpointTab("demo", "fhir", "/console/t/demo/audit")).toBe("");
+  });
+});
+
+describe("ENDPOINT_TABS", () => {
+  it("gives every tab an icon", () => {
+    // The tab bar renders each tab's octicon beside its label, so a tab added
+    // without one would render nothing where the icon belongs.
+    for (const tab of ENDPOINT_TABS) {
+      expect(tab.icon).toBeDefined();
+    }
   });
 });
