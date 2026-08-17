@@ -94,18 +94,37 @@ export function RuleCard({
         enabled ? "" : "bg-base-200 opacity-70"
       }`}
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 max-sm:flex-col max-sm:items-stretch">
         <button
           type="button"
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left max-sm:min-h-11"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left max-sm:min-h-11 max-sm:flex-col max-sm:items-stretch"
           aria-expanded={expanded}
           title={id}
           onClick={onToggle}
         >
-          <span className="badge badge-neutral badge-sm font-mono max-sm:shrink-0">
-            {position}
+          {/* On a phone the position, the off marker and the chevron form their own
+              row above the summary; on a desktop `sm:contents` dissolves the wrapper
+              and the `sm:order-*` classes restore the inline order of
+              badge · summary · off · chevron. */}
+          <span className="flex items-center gap-2 sm:contents">
+            <span className="badge badge-neutral badge-sm shrink-0 font-mono">
+              {position}
+            </span>
+            {enabled ? null : (
+              <span className="badge badge-sm sm:order-2">off</span>
+            )}
+            <span
+              aria-hidden="true"
+              className="text-base-content/60 ml-auto sm:order-3 sm:ml-0"
+            >
+              {expanded ? (
+                <ChevronUpIcon size={12} />
+              ) : (
+                <ChevronDownIcon size={12} />
+              )}
+            </span>
           </span>
-          <span className="min-w-0 flex-1">
+          <span className="min-w-0 flex-1 sm:order-1">
             {/* `data-prose` on both, because both are sentences addressed to the
                 reader and neither can be a `p`: a button's content model admits
                 phrasing content only. It is what puts them inside the 16px floor
@@ -125,18 +144,10 @@ export function RuleCard({
               </span>
             )}
           </span>
-          {enabled ? null : <span className="badge badge-sm">off</span>}
-          <span aria-hidden="true" className="text-base-content/60">
-            {expanded ? (
-              <ChevronUpIcon size={12} />
-            ) : (
-              <ChevronDownIcon size={12} />
-            )}
-          </span>
         </button>
 
         {disabled ? null : (
-          <>
+          <div className="flex items-center gap-2 sm:contents">
             <div className="join">
               <button
                 type="button"
@@ -172,7 +183,7 @@ export function RuleCard({
             >
               <TrashIcon />
             </button>
-          </>
+          </div>
         )}
       </div>
 
