@@ -182,7 +182,7 @@ function RuleSection({
         disabled ? undefined : (
           <button
             type="button"
-            className="btn btn-outline btn-sm"
+            className="btn btn-primary btn-sm"
             onClick={() => {
               // The identifier is chosen here rather than left to appendRule, so
               // the new card can be expanded for editing.

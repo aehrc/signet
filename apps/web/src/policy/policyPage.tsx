@@ -298,7 +298,7 @@ function PolicyEditor({
                       key={preset.id}
                       className="flex items-center gap-4 py-3 first:pt-0 last:pb-0"
                     >
-                      <div className="max-w-lg flex-1">
+                      <div className="flex-1">
                         <p className="text-sm max-sm:text-base font-medium">
                           {preset.name}
                         </p>
@@ -329,7 +329,7 @@ function PolicyEditor({
                       </div>
                       <button
                         type="button"
-                        className="btn btn-outline btn-sm"
+                        className="btn btn-primary btn-sm"
                         onClick={() => {
                           // Loading over unsaved work discards it, and nothing can
                           // bring it back - so that is asked, not assumed.

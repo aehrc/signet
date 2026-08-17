@@ -195,7 +195,7 @@ function RequestCard({
           <>
             <button
               type="button"
-              className="btn btn-primary btn-sm"
+              className="btn btn-success btn-sm"
               disabled={pendingDecision}
               onClick={() => {
                 onDecide(true);
@@ -205,7 +205,7 @@ function RequestCard({
             </button>
             <button
               type="button"
-              className="btn btn-outline btn-sm"
+              className="btn btn-error btn-sm"
               disabled={pendingDecision}
               onClick={() => {
                 onDecide(false);

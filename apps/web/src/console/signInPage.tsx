@@ -155,11 +155,11 @@ function PasskeySignIn() {
   }
 
   return (
-    <div className="mt-6">
+    <div>
       <div className="divider text-base-content/50 text-xs">or</div>
       <button
         type="button"
-        className="btn btn-outline w-full"
+        className="btn btn-primary btn-sm w-full"
         disabled={passkeySignIn.isPending}
         onClick={() => {
           setFailure(undefined);

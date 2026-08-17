@@ -82,7 +82,7 @@ export function EndpointOverviewPage() {
           </DetailRow>
           <DetailRow label="HAPI FHIR">
             <a
-              className="btn btn-outline btn-xs"
+              className="btn btn-soft btn-primary btn-xs mb-1"
               href={endpointPath(
                 tenant,
                 endpointSlug,
