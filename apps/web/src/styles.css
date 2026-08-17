@@ -18,6 +18,6 @@
  */
 @plugin "daisyui" {
   themes:
-    corporate --default,
-    business --prefersdark;
+    light --default,
+    dark --prefersdark;
 }
