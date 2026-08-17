@@ -7,8 +7,9 @@
  * secret - and the form show them against the right input without restating any of
  * them in the browser.
  *
- * Accessibility is structural rather than added: the label is associated by `id`
- * from `useId`, and an error is linked with `aria-describedby` and marked
+ * Accessibility is structural rather than added: each field is a `fieldset` whose
+ * `legend` is the label, the control is named from that legend with
+ * `aria-labelledby`, and an error is linked with `aria-describedby` and marked
  * `aria-invalid`, so a screen reader reaches the message from the input.
  *
  * Every control carries `max-sm:text-base`, and that one class fixes the worst
@@ -39,12 +40,13 @@ interface FieldFrameProps {
   /** Receives the ids to attach to the control. */
   readonly children: (ids: {
     readonly id: string;
+    readonly labelledBy: string;
     readonly describedBy: string | undefined;
     readonly invalid: boolean;
   }) => ReactNode;
 }
 
-/** The label, hint and error around any control. */
+/** The legend, hint and error around any control. */
 function FieldFrame({
   label,
   hint,
@@ -52,6 +54,7 @@ function FieldFrame({
   children,
 }: Readonly<FieldFrameProps>) {
   const id = useId();
+  const legendId = `${id}-legend`;
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
   const describedBy =
@@ -63,20 +66,30 @@ function FieldFrame({
       .join(" ") || undefined;
 
   return (
-    <div className="form-control w-full">
-      {/* daisyUI's label never wraps, so a long one - "Maximum exchanged-token
-          lifetime (seconds)" is the worst of them - is a single 335px line that
-          pushes the page sideways at 360px. Unprefixed rather than `max-sm:`
-          because a label that fits on one line renders identically either way,
-          so there is no width at which the arrangement changes. */}
-      <label className="label whitespace-normal" htmlFor={id}>
-        <span className="label-text max-sm:text-base">{label}</span>
-      </label>
-      {children({ id, describedBy, invalid: error !== undefined })}
+    // `min-w-0` because a fieldset's UA default of `min-inline-size: min-content`
+    // stops it shrinking inside the two-column grids, which is exactly the
+    // sideways scroll the responsive classes elsewhere exist to prevent.
+    <fieldset className="fieldset w-full min-w-0">
+      {/* A legend cannot carry `htmlFor`, so the control points back at it with
+          `aria-labelledby`. `whitespace-normal` because a long legend - "Maximum
+          exchanged-token lifetime (seconds)" is the worst of them - must wrap
+          rather than push the page sideways at 360px. */}
+      <legend
+        id={legendId}
+        className="fieldset-legend whitespace-normal max-sm:text-base"
+      >
+        {label}
+      </legend>
+      {children({
+        id,
+        labelledBy: legendId,
+        describedBy,
+        invalid: error !== undefined,
+      })}
       {hint === undefined ? null : (
         <p
           id={hintId}
-          className="text-base-content/60 mt-1 text-xs max-sm:text-base"
+          className="label whitespace-normal mt-1 text-xs max-sm:text-base"
         >
           {hint}
         </p>
@@ -86,7 +99,7 @@ function FieldFrame({
           {error}
         </p>
       )}
-    </div>
+    </fieldset>
   );
 }
 
@@ -118,7 +131,7 @@ export function TextField({
 }: Readonly<TextFieldProps>) {
   return (
     <FieldFrame label={label} hint={hint} error={error}>
-      {({ id, describedBy, invalid }) => (
+      {({ id, labelledBy, describedBy, invalid }) => (
         <input
           id={id}
           type={type}
@@ -129,6 +142,7 @@ export function TextField({
           autoComplete={autoComplete}
           disabled={disabled}
           aria-invalid={invalid}
+          aria-labelledby={labelledBy}
           aria-describedby={describedBy}
           onChange={(event) => {
             onChange(event.currentTarget.value);
@@ -163,7 +177,7 @@ export function TextAreaField({
 }: Readonly<TextAreaFieldProps>) {
   return (
     <FieldFrame label={label} hint={hint} error={error}>
-      {({ id, describedBy, invalid }) => (
+      {({ id, labelledBy, describedBy, invalid }) => (
         <textarea
           id={id}
           rows={rows}
@@ -173,6 +187,7 @@ export function TextAreaField({
           value={value}
           disabled={disabled}
           aria-invalid={invalid}
+          aria-labelledby={labelledBy}
           aria-describedby={describedBy}
           onChange={(event) => {
             onChange(event.currentTarget.value);
@@ -208,13 +223,14 @@ export function SelectField({
 }: Readonly<SelectFieldProps>) {
   return (
     <FieldFrame label={label} hint={hint} error={error}>
-      {({ id, describedBy, invalid }) => (
+      {({ id, labelledBy, describedBy, invalid }) => (
         <select
           id={id}
           className={`select select-bordered w-full max-sm:min-h-11 max-sm:text-base ${invalid ? "select-error" : ""}`}
           value={value}
           disabled={disabled}
           aria-invalid={invalid}
+          aria-labelledby={labelledBy}
           aria-describedby={describedBy}
           onChange={(event) => {
             onChange(event.currentTarget.value);

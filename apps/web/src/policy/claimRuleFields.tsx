@@ -182,11 +182,13 @@ function EmitRows({ emit, disabled, onChange }: Readonly<EmitRowsProps>) {
   const entries = Object.entries(emit);
 
   return (
-    <div>
-      <span className="label-text text-sm max-sm:text-base">Emits</span>
+    <fieldset className="fieldset min-w-0">
+      <legend className="fieldset-legend text-sm max-sm:text-base">
+        Emits
+      </legend>
 
       {entries.length === 0 ? (
-        <p className="text-base-content/60 mt-1 text-xs max-sm:text-base">
+        <p className="label whitespace-normal text-xs max-sm:text-base">
           Nothing yet. A rule that emits nothing has no effect.
         </p>
       ) : (
@@ -255,7 +257,7 @@ function EmitRows({ emit, disabled, onChange }: Readonly<EmitRowsProps>) {
           </button>
         </div>
       )}
-    </div>
+    </fieldset>
   );
 }
 

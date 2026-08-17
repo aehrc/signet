@@ -111,9 +111,11 @@ export function PatternField({
         </div>
       </div>
 
-      <div className="mt-2">
-        <span className="label-text text-sm max-sm:text-base">Permissions</span>
-        <div className="mt-1 flex flex-wrap gap-3">
+      <fieldset className="fieldset mt-2 min-w-0">
+        <legend className="fieldset-legend text-sm max-sm:text-base">
+          Permissions
+        </legend>
+        <div className="flex flex-wrap gap-3">
           {PERMISSION_ORDER.map((permission) => (
             <label
               key={permission}
@@ -143,7 +145,7 @@ export function PatternField({
             </label>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       {/* The pattern as it will be stored. `break-all` because it is one word
           with nothing in it to break at, and at 360px a long resource type puts
