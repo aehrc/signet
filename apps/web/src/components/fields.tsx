@@ -530,7 +530,7 @@ export function SubmitButton({
   return (
     <button
       type="submit"
-      className="btn btn-primary max-sm:min-h-11 max-sm:text-base"
+      className="btn btn-sm btn-primary max-sm:min-h-11 max-sm:text-base"
       disabled={pending === true || disabled === true}
     >
       {pending === true ? (
