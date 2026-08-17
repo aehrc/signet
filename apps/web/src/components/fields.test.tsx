@@ -29,14 +29,22 @@ import {
   TextField,
 } from "./fields.js";
 
-/** Every field renders the same label frame, so it is asserted once. */
-describe("a field's label", () => {
+/** Every field renders the same legend frame, so it is asserted once. */
+describe("a field's legend", () => {
   const markup = renderToStaticMarkup(
     <TextField label="Client identifier" value="" onChange={() => undefined} />,
   );
 
-  it("reads at 16px below sm", () => {
-    expect(markup).toContain("label-text max-sm:text-base");
+  it("is a fieldset legend that reads at 16px below sm", () => {
+    expect(markup).toContain(
+      "fieldset-legend whitespace-normal max-sm:text-base",
+    );
+  });
+
+  it("names the control from the legend", () => {
+    expect(markup).toMatch(/<legend id="([^"]+)"/);
+    const legendId = /<legend id="([^"]+)"/.exec(markup)?.[1];
+    expect(markup).toContain(`aria-labelledby="${legendId ?? ""}"`);
   });
 });
 
