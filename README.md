@@ -103,11 +103,10 @@ bun run lint          # eslint
 bun run typecheck     # tsc
 ```
 
-Run the server and the console:
+Run the server and the console via the `Procfile`:
 
 ```sh
-bun run --filter @signet/server dev     # http://localhost:3000
-bun run --filter @signet/web dev        # http://localhost:5173
+overmind start     # server on http://localhost:3000, web on http://localhost:5173
 ```
 
 ### Configuration
