@@ -97,7 +97,7 @@ export function RuleCard({
       <div className="flex flex-wrap items-center gap-2 max-sm:flex-col max-sm:items-stretch">
         <button
           type="button"
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left max-sm:min-h-11 max-sm:flex-col max-sm:items-stretch"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left max-sm:min-h-11 max-sm:flex-col max-sm:items-stretch"
           aria-expanded={expanded}
           title={id}
           onClick={onToggle}
@@ -107,7 +107,7 @@ export function RuleCard({
               and the `sm:order-*` classes restore the inline order of
               badge · summary · off · chevron. */}
           <span className="flex items-center gap-2 sm:contents">
-            <span className="badge badge-neutral badge-sm shrink-0 font-mono">
+            <span className="badge badge-accent badge-sm shrink-0 font-mono">
               {position}
             </span>
             {enabled ? null : (
