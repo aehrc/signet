@@ -289,13 +289,16 @@ function PolicyEditor({
                 title="Start from a preset"
                 description="Replaces the document in the editor. Nothing is saved until you publish."
               >
-                <ul className="list">
+                {/* Flex rows rather than DaisyUI's grid-based list-row, so the
+                    Load button centres vertically against the variable-height
+                    text block beside it. */}
+                <ul className="flex flex-col">
                   {presets.data.map((preset) => (
                     <li
                       key={preset.id}
-                      className="list-row items-start px-0 first:pt-0 last:pb-0"
+                      className="flex items-center gap-4 py-3 first:pt-0 last:pb-0"
                     >
-                      <div className="list-col-grow max-w-lg">
+                      <div className="max-w-lg flex-1">
                         <p className="text-sm max-sm:text-base font-medium">
                           {preset.name}
                         </p>
@@ -326,7 +329,7 @@ function PolicyEditor({
                       </div>
                       <button
                         type="button"
-                        className="btn btn-outline btn-xs"
+                        className="btn btn-outline btn-sm"
                         onClick={() => {
                           // Loading over unsaved work discards it, and nothing can
                           // bring it back - so that is asked, not assumed.
