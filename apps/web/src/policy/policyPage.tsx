@@ -289,13 +289,13 @@ function PolicyEditor({
                 title="Start from a preset"
                 description="Replaces the document in the editor. Nothing is saved until you publish."
               >
-                <div className="flex flex-col gap-2">
+                <ul className="list">
                   {presets.data.map((preset) => (
-                    <div
+                    <li
                       key={preset.id}
-                      className="border-base-300 flex flex-wrap items-start justify-between gap-2 border-b pb-2 last:border-b-0"
+                      className="list-row items-start px-0 first:pt-0 last:pb-0"
                     >
-                      <div className="max-w-lg">
+                      <div className="list-col-grow max-w-lg">
                         <p className="text-sm max-sm:text-base font-medium">
                           {preset.name}
                         </p>
@@ -348,9 +348,9 @@ function PolicyEditor({
                       >
                         Load
                       </button>
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </Panel>
             </div>
           ) : null}
