@@ -11,6 +11,16 @@
  * from `useId`, and an error is linked with `aria-describedby` and marked
  * `aria-invalid`, so a screen reader reaches the message from the input.
  *
+ * Every control carries `max-sm:text-base`, and that one class fixes the worst
+ * mobile defect in the product. A mobile browser zooms the page when it focuses
+ * an input whose text is under 16px - daisyUI's is 14px, and the monospace list
+ * fields are 12px - and it does not zoom back out when the field is left, so a
+ * form filled on a phone ends up sideways-scrolled through no action of the
+ * reader's. Bumping the size responsively fixes it without touching the denser
+ * rendering the desktop was designed around. The same reasoning gives the buttons
+ * and the single-line controls `max-sm:min-h-11`: daisyUI's button and input are
+ * both 40px tall, and a thumb wants 44.
+ *
  * Author: John Grimes
  */
 
@@ -54,17 +64,25 @@ function FieldFrame({
 
   return (
     <div className="form-control w-full">
-      <label className="label" htmlFor={id}>
-        <span className="label-text">{label}</span>
+      {/* daisyUI's label never wraps, so a long one - "Maximum exchanged-token
+          lifetime (seconds)" is the worst of them - is a single 335px line that
+          pushes the page sideways at 360px. Unprefixed rather than `max-sm:`
+          because a label that fits on one line renders identically either way,
+          so there is no width at which the arrangement changes. */}
+      <label className="label whitespace-normal" htmlFor={id}>
+        <span className="label-text max-sm:text-base">{label}</span>
       </label>
       {children({ id, describedBy, invalid: error !== undefined })}
       {hint === undefined ? null : (
-        <p id={hintId} className="text-base-content/60 mt-1 text-xs">
+        <p
+          id={hintId}
+          className="text-base-content/60 mt-1 text-xs max-sm:text-base"
+        >
           {hint}
         </p>
       )}
       {error === undefined ? null : (
-        <p id={errorId} className="text-error mt-1 text-xs">
+        <p id={errorId} className="text-error mt-1 text-xs max-sm:text-base">
           {error}
         </p>
       )}
@@ -104,7 +122,7 @@ export function TextField({
         <input
           id={id}
           type={type}
-          className={`input input-bordered w-full ${invalid ? "input-error" : ""}`}
+          className={`input input-bordered w-full max-sm:min-h-11 max-sm:text-base ${invalid ? "input-error" : ""}`}
           value={value}
           placeholder={placeholder}
           required={required}
@@ -149,7 +167,7 @@ export function TextAreaField({
         <textarea
           id={id}
           rows={rows}
-          className={`textarea textarea-bordered w-full ${
+          className={`textarea textarea-bordered w-full max-sm:text-base ${
             monospace === true ? "font-mono text-xs" : ""
           } ${invalid ? "textarea-error" : ""}`}
           value={value}
@@ -193,7 +211,7 @@ export function SelectField({
       {({ id, describedBy, invalid }) => (
         <select
           id={id}
-          className={`select select-bordered w-full ${invalid ? "select-error" : ""}`}
+          className={`select select-bordered w-full max-sm:min-h-11 max-sm:text-base ${invalid ? "select-error" : ""}`}
           value={value}
           disabled={disabled}
           aria-invalid={invalid}
@@ -226,6 +244,12 @@ interface CheckboxFieldProps {
  *
  * Laid out with the control before the label, unlike the text inputs, because a
  * column of checkboxes reads as a list when the boxes align.
+ *
+ * The label wraps the box rather than only pointing at it, so that the tap target
+ * is the whole row - a 16px box is not something to aim a thumb at, and growing
+ * the box itself to 44px would make a column of them look like a form of buttons.
+ * The hint sits outside the label, indented to the label's text, because a
+ * paragraph of explanation is not part of the control's accessible name.
  */
 export function CheckboxField({
   label,
@@ -238,28 +262,32 @@ export function CheckboxField({
   const hintId = `${id}-hint`;
 
   return (
-    <div className="flex items-start gap-3 py-1">
-      <input
-        id={id}
-        type="checkbox"
-        className="checkbox checkbox-sm mt-1"
-        checked={checked}
-        disabled={disabled}
-        aria-describedby={hint === undefined ? undefined : hintId}
-        onChange={(event) => {
-          onChange(event.currentTarget.checked);
-        }}
-      />
-      <div>
-        <label className="cursor-pointer text-sm" htmlFor={id}>
-          {label}
-        </label>
-        {hint === undefined ? null : (
-          <p id={hintId} className="text-base-content/60 text-xs">
-            {hint}
-          </p>
-        )}
-      </div>
+    <div className="py-1">
+      <label
+        className="flex cursor-pointer items-start gap-3 text-sm max-sm:min-h-11 max-sm:items-center max-sm:text-base"
+        htmlFor={id}
+      >
+        <input
+          id={id}
+          type="checkbox"
+          className="checkbox checkbox-sm mt-1 max-sm:mt-0"
+          checked={checked}
+          disabled={disabled}
+          aria-describedby={hint === undefined ? undefined : hintId}
+          onChange={(event) => {
+            onChange(event.currentTarget.checked);
+          }}
+        />
+        <span className="min-w-0">{label}</span>
+      </label>
+      {hint === undefined ? null : (
+        <p
+          id={hintId}
+          className="text-base-content/60 ml-7 text-xs max-sm:text-base"
+        >
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
@@ -338,12 +366,16 @@ export function FormFooter({
   return (
     <>
       {showGeneral ? <ErrorAlert message={describeError(error)} /> : null}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <SubmitButton pending={pending} disabled={disabled}>
           {submitLabel}
         </SubmitButton>
         {onCancel === undefined ? null : (
-          <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          <button
+            type="button"
+            className="btn btn-ghost max-sm:min-h-11 max-sm:text-base"
+            onClick={onCancel}
+          >
             Cancel
           </button>
         )}
@@ -472,12 +504,12 @@ export function SaveRow({
   readonly className?: string | undefined;
 }>) {
   return (
-    <div className={`flex items-center gap-3 ${className ?? ""}`}>
+    <div className={`flex flex-wrap items-center gap-3 ${className ?? ""}`}>
       <SubmitButton pending={pending} disabled={!hasChanges}>
         {label}
       </SubmitButton>
       {hasChanges ? null : (
-        <span className="text-base-content/60 text-xs">
+        <span className="text-base-content/60 text-xs max-sm:text-base">
           {disabledReason ?? "Nothing has changed."}
         </span>
       )}
@@ -498,7 +530,7 @@ export function SubmitButton({
   return (
     <button
       type="submit"
-      className="btn btn-primary"
+      className="btn btn-primary max-sm:min-h-11 max-sm:text-base"
       disabled={pending === true || disabled === true}
     >
       {pending === true ? (

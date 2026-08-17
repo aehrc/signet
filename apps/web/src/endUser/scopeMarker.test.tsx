@@ -35,6 +35,13 @@ describe("ScopeMarker", () => {
     expect(markup).toContain("mr-2");
   });
 
+  it("keeps its own width when the description beside it wraps", () => {
+    // In a flex row a 12px icon is the item a browser will shrink first, and a
+    // squashed marker is the difference between a read and a write going
+    // unnoticed on a narrow screen.
+    expect(renderToStaticMarkup(<ScopeMarker writes />)).toContain("shrink-0");
+  });
+
   it("lays the wrapper out inline-flex so the icon cannot break the line", () => {
     // Tailwind's preflight sets `display: block` on svg, so a marker in a
     // non-flex list item would otherwise push the description onto its own line.

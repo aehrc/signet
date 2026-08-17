@@ -6,6 +6,11 @@
  * the scope's description carries the meaning in words - so it is hidden from
  * assistive technology.
  *
+ * It never shrinks. In the flex row a scope is laid out as, a 12px icon is the
+ * item a browser squashes first when the description beside it has to wrap, and
+ * the difference between the read marker and the write marker is exactly what a
+ * person granting access needs to be able to see.
+ *
  * Author: John Grimes
  */
 
@@ -25,7 +30,7 @@ export function ScopeMarker({ writes, className }: Readonly<ScopeMarkerProps>) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex ${className ?? ""}`.trim()}
+      className={`inline-flex shrink-0 ${className ?? ""}`.trim()}
     >
       {writes ? (
         <AlertIcon size={12} className="text-warning" />

@@ -109,8 +109,11 @@ export function UserDetailPage() {
   return (
     <>
       <div className="mb-2">
+        {/* The only way back to the list on a phone, and an anchor is text: 20px
+            tall until it is given a box. Sized here rather than shared, because
+            this is the console's only back link. */}
         <Link
-          className="link link-hover inline-flex items-center gap-1 text-sm"
+          className="link link-hover inline-flex items-center gap-1 text-sm max-sm:min-h-11 max-sm:text-base"
           to={endpointRoute(tenant, endpointSlug, "/users")}
         >
           <ArrowLeftIcon size={14} />

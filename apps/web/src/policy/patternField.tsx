@@ -10,6 +10,11 @@
  * non-resource scope like `openid` - falls back to a plain text field, so the builder
  * never rewrites a value it did not fully parse.
  *
+ * The five boxes stay five boxes on a phone. They wrap onto as many rows as they need
+ * and each row is a 44px tap target, because the alternative - hiding them behind the
+ * text field they exist to replace - would take the difference between `.rs` and
+ * `.cruds` away from exactly the reader least able to check it.
+ *
  * Author: John Grimes
  */
 
@@ -64,9 +69,13 @@ export function PatternField({
 
   return (
     <fieldset className="border-base-300 rounded-box border p-3">
-      <legend className="px-1 text-sm font-medium">{label}</legend>
+      <legend className="px-1 text-sm max-sm:text-base font-medium">
+        {label}
+      </legend>
       {hint === undefined ? null : (
-        <p className="text-base-content/60 mb-2 text-xs">{hint}</p>
+        <p className="text-base-content/60 mb-2 text-xs max-sm:text-base">
+          {hint}
+        </p>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -103,12 +112,12 @@ export function PatternField({
       </div>
 
       <div className="mt-2">
-        <span className="label-text text-sm">Permissions</span>
+        <span className="label-text text-sm max-sm:text-base">Permissions</span>
         <div className="mt-1 flex flex-wrap gap-3">
           {PERMISSION_ORDER.map((permission) => (
             <label
               key={permission}
-              className="flex cursor-pointer items-center gap-1 text-sm"
+              className="flex cursor-pointer items-center gap-1 text-sm max-sm:min-h-11 max-sm:text-base"
             >
               <input
                 type="checkbox"
@@ -136,7 +145,12 @@ export function PatternField({
         </div>
       </div>
 
-      <p className="text-base-content/60 mt-2 font-mono text-xs">{value}</p>
+      {/* The pattern as it will be stored. `break-all` because it is one word
+          with nothing in it to break at, and at 360px a long resource type puts
+          it past the edge of the card. */}
+      <p className="text-base-content/60 mt-2 font-mono text-xs break-all">
+        {value}
+      </p>
 
       {/* A datalist rather than a select: FHIR has around 150 resource types, and
           the field accepts anything the grammar does. */}

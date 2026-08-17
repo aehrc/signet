@@ -15,6 +15,12 @@
  * rather than a developer, so they carry no console chrome and every scope is translated
  * into a sentence - see `./scopeDescriptions.js`.
  *
+ * They are also the pages most likely to be read on a phone: an authorization redirect
+ * arrives on whatever device the app is running on. The `max-sm:` classes are that
+ * half of the layout - the two consent decisions stack full-width rather than sitting
+ * side by side as a pair of 70px buttons, the scope descriptions read at 16px, and
+ * every identifier is allowed to break rather than widen the card.
+ *
  * Author: John Grimes
  */
 
@@ -173,7 +179,7 @@ function InteractionShell({
     return (
       <CentredShell title="This request cannot continue">
         <ErrorAlert message={describeError(fatal)} />
-        <p className="text-base-content/70 text-sm">
+        <p className="text-base-content/70 text-sm max-sm:text-base">
           Close this window and start again from the app.
         </p>
       </CentredShell>
@@ -225,7 +231,10 @@ function FederationPrompt({
         {name === null ? " another identity provider" : ` ${name}`}.
       </InfoAlert>
       <div>
-        <a className="btn btn-primary" href={target}>
+        <a
+          className="btn btn-primary max-sm:min-h-11 max-sm:w-full"
+          href={target}
+        >
           {name === null ? "Continue to sign in" : `Continue with ${name}`}
         </a>
       </div>
@@ -306,8 +315,10 @@ export function LoginPage() {
           }}
         >
           <div className="border-base-300 border-t pt-3">
-            <p className="mb-1 text-sm font-medium">Or continue as</p>
-            <p className="text-base-content/60 mb-2 text-xs">
+            <p className="mb-1 text-sm font-medium max-sm:text-base">
+              Or continue as
+            </p>
+            <p className="text-base-content/60 mb-2 text-xs max-sm:text-base">
               These are demonstration accounts. This endpoint is not marked
               production, so they need no password.
             </p>
@@ -433,9 +444,9 @@ export function ConsentPage() {
       )}
 
       {patient === undefined ? null : (
-        <p className="text-base-content/70 text-sm">
+        <p className="text-base-content/70 text-sm break-words max-sm:text-base">
           For the record{" "}
-          <code className="bg-base-200 rounded-field px-1 font-mono text-xs">
+          <code className="bg-base-200 rounded-field px-1 font-mono text-xs break-words">
             {patient}
           </code>
           .
@@ -444,11 +455,25 @@ export function ConsentPage() {
 
       <ul className="flex flex-col gap-2">
         {scopes.map((described) => (
-          <li key={described.scope} className="flex items-start gap-2 text-sm">
-            <ScopeMarker writes={described.writes} className="mt-0.5" />
-            <span>
+          <li
+            key={described.scope}
+            className="flex items-start gap-2 text-sm max-sm:text-base"
+          >
+            {/* The marker centres on the first line of the description, so it
+                moves down with the taller text below `sm`. */}
+            <ScopeMarker
+              writes={described.writes}
+              className="mt-0.5 max-sm:mt-1.5"
+            />
+            <span className="min-w-0">
               {described.description}
-              <code className="text-base-content/50 ml-2 font-mono text-xs">
+              {/*
+                The technical scope sits beside the sentence on a desktop and on
+                its own line below `sm`, as the wireframe has it. Breaking it
+                mid-word instead would split `launch/patient` across two lines,
+                which is harder to read than the line it costs.
+              */}
+              <code className="text-base-content/50 ml-2 font-mono text-xs break-words max-sm:ml-0 max-sm:block">
                 {described.scope}
               </code>
             </span>
@@ -463,10 +488,16 @@ export function ConsentPage() {
         </InfoAlert>
       ) : null}
 
-      <div className="flex gap-2">
+      {/*
+        The two decisions stack full-width below `sm`. Side by side they are 71px
+        and 69px wide on a 360px viewport - under the 44px minimum in height and
+        small enough that a thumb aimed at "Allow" can land on "Deny", which is
+        the one misfire on this screen that matters.
+      */}
+      <div className="flex gap-2 max-sm:flex-col">
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn-primary max-sm:min-h-11 max-sm:w-full"
           disabled={advance.isPending}
           onClick={() => {
             advance.mutate({ kind: "consent", approve: true });
@@ -476,7 +507,7 @@ export function ConsentPage() {
         </button>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="btn btn-ghost max-sm:min-h-11 max-sm:w-full"
           disabled={advance.isPending}
           onClick={() => {
             advance.mutate({ kind: "consent", approve: false });
@@ -493,7 +524,7 @@ export function ConsentPage() {
 function MissingSession() {
   return (
     <CentredShell title="Nothing to authorize">
-      <p className="text-base-content/70 text-sm">
+      <p className="text-base-content/70 text-sm max-sm:text-base">
         This page is opened by an app as part of signing in. Start from the app
         rather than from here.
       </p>

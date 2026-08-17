@@ -73,7 +73,17 @@ export function PasskeyDialog({ open, onClose }: Readonly<PasskeyDialogProps>) {
 
   return (
     <div className="modal modal-open" role="dialog" aria-modal="true">
-      <div className="modal-box max-w-2xl">
+      {/* The dialog is its own container, so the panel-wide button sizing does
+          not reach into it: below `sm` its own controls are bumped to 44px
+          here, and its padding narrowed so the box fits a 360px viewport.
+
+          Both dimensions, not only the height. Two of the dialog's controls are
+          an icon and nothing else - the close button below and the remove button
+          on each row of the list - and a button with no text is as wide as its
+          padding: `btn-sm` comes out 42px and `btn-xs` 32px, both under the 44px
+          FR-003 asks for however tall they are made. That is the same pair
+          `appShell.tsx` and `layout.tsx` carry on their own icon-only buttons. */}
+      <div className="modal-box max-w-2xl max-sm:p-4 max-sm:[&_.btn]:min-h-11 max-sm:[&_.btn]:min-w-11">
         <div className="mb-1 flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold">Passkeys</h2>
           <button
@@ -88,7 +98,7 @@ export function PasskeyDialog({ open, onClose }: Readonly<PasskeyDialogProps>) {
             <XIcon />
           </button>
         </div>
-        <p className="text-base-content/70 mb-4 text-sm">
+        <p className="text-base-content/70 mb-4 text-sm max-sm:text-base">
           Sign in to the console without typing your password. Passkeys belong
           to your account and work across all of your tenants.
         </p>
@@ -242,7 +252,9 @@ function PasskeyList({
         </span>
       </div>
       {blocked === undefined ? null : (
-        <p className="text-base-content/70 mt-2 text-xs">{blocked}</p>
+        <p className="text-base-content/70 mt-2 text-xs max-sm:text-base">
+          {blocked}
+        </p>
       )}
     </>
   );
@@ -314,7 +326,7 @@ function RegisterForm({
       }}
     >
       <h3 className="font-medium">Register a passkey</h3>
-      <p className="text-base-content/70 text-sm">
+      <p className="text-base-content/70 text-sm max-sm:text-base">
         Confirm your password, then your browser will ask you to create the
         passkey.
       </p>
@@ -393,7 +405,7 @@ function RemoveForm({
       }}
     >
       <h3 className="font-medium">Remove &ldquo;{passkey.name}&rdquo;</h3>
-      <p className="text-base-content/70 text-sm">
+      <p className="text-base-content/70 text-sm max-sm:text-base">
         It stops working immediately. Your password still signs you in, so
         removing your last passkey cannot lock you out.
       </p>

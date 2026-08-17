@@ -85,7 +85,6 @@ export function ClientsPage() {
     {
       key: "grants",
       header: "Grants",
-      secondary: true,
       cell: (client) => <Chips values={client.grantTypes} />,
     },
     {
@@ -239,7 +238,7 @@ function ClientForm({
     return (
       <Panel title="Register client">
         <ErrorAlert message="This endpoint allows no client types">
-          <p className="text-sm">
+          <p className="text-sm max-sm:text-base">
             Enable at least one client type under the endpoint&apos;s
             capabilities first.
           </p>
@@ -346,7 +345,9 @@ function ClientForm({
         />
 
         <fieldset className="border-base-300 rounded-box border p-3">
-          <legend className="px-1 text-sm font-medium">Grants</legend>
+          <legend className="px-1 text-sm max-sm:text-base font-medium">
+            Grants
+          </legend>
           <CheckboxField
             label="Authorization code"
             checked={grantCode}

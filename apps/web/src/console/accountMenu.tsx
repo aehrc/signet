@@ -10,6 +10,10 @@
  * A personal access token has no account menu to open - it is not a person, holds no
  * password and cannot manage passkeys - so it gets the sign-out button on its own.
  *
+ * The trigger is `btn-sm`, which is 32px tall: fine beside a mouse pointer, under
+ * the 44px a thumb needs. It is bumped below `sm` rather than everywhere, so the
+ * navbar keeps its desktop density.
+ *
  * Author: John Grimes
  */
 
@@ -46,7 +50,7 @@ export function AccountMenu({
         </span>
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-sm max-sm:min-h-11 max-sm:text-base"
           disabled={signingOut}
           onClick={onSignOut}
         >
@@ -63,13 +67,13 @@ export function AccountMenu({
         // daisyUI's dropdown opens on focus, so the trigger has to be focusable
         // and has to say what it does - "alex@example.org" alone tells a screen
         // reader nothing about what pressing it will reveal.
-        className="btn btn-ghost btn-sm max-w-48"
+        className="btn btn-ghost btn-sm max-w-48 max-sm:min-h-11 max-sm:text-base"
         aria-label={`Account menu for ${label}`}
       >
         <span className="truncate">{label}</span>
         <ChevronDownIcon size={12} />
       </button>
-      <ul className="dropdown-content menu bg-base-100 rounded-box border-base-300 z-10 mt-1 w-52 border p-2 shadow">
+      <ul className="dropdown-content menu bg-base-100 rounded-box border-base-300 z-10 mt-1 w-52 border p-2 shadow max-sm:[&_button]:min-h-11 max-sm:[&_button]:text-base">
         <li>
           <button type="button" onClick={onManagePasskeys}>
             <PasskeyFillIcon />

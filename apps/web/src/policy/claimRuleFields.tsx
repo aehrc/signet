@@ -11,6 +11,12 @@
  * string. A value that is already a non-string is shown read-only, with a note, rather
  * than being stringified into something different.
  *
+ * The value input and the inserter beside it are the two smallest controls in the
+ * console - `input-sm` at 12px, and a `select-sm` capped at 128px - which makes them the
+ * two most in need of the responsive sizing every other control gets from `fields.tsx`.
+ * They are raw elements rather than a `TextField` because the pair shares one row and a
+ * caret position, so the sizing is repeated here rather than inherited.
+ *
  * Author: John Grimes
  */
 
@@ -77,7 +83,7 @@ export function ClaimRuleFields({
     <>
       {withCondition ? (
         kind === undefined ? (
-          <p className="text-warning text-xs">
+          <p className="text-warning text-xs max-sm:text-base">
             This rule&apos;s condition combines fields the builder does not
             offer. Edit it in the code view; nothing here will change it.
           </p>
@@ -177,10 +183,10 @@ function EmitRows({ emit, disabled, onChange }: Readonly<EmitRowsProps>) {
 
   return (
     <div>
-      <span className="label-text text-sm">Emits</span>
+      <span className="label-text text-sm max-sm:text-base">Emits</span>
 
       {entries.length === 0 ? (
-        <p className="text-base-content/60 mt-1 text-xs">
+        <p className="text-base-content/60 mt-1 text-xs max-sm:text-base">
           Nothing yet. A rule that emits nothing has no effect.
         </p>
       ) : (
@@ -201,7 +207,7 @@ function EmitRows({ emit, disabled, onChange }: Readonly<EmitRowsProps>) {
                     }}
                   />
                 ) : (
-                  <p className="text-base-content/70 font-mono text-xs">
+                  <p className="text-base-content/70 font-mono text-xs break-all">
                     {JSON.stringify(value)}{" "}
                     <span className="text-warning">
                       - not a string; edit in the code view
@@ -275,7 +281,7 @@ function ValueField({
         <span className="sr-only">{`Value for ${name}`}</span>
         <input
           type="text"
-          className="input input-bordered input-sm w-full font-mono text-xs"
+          className="input input-bordered input-sm w-full font-mono text-xs max-sm:min-h-11 max-sm:text-base"
           value={value}
           disabled={disabled}
           aria-label={`Value for ${name}`}
@@ -290,7 +296,7 @@ function ValueField({
       </label>
       {disabled ? null : (
         <select
-          className="select select-bordered select-sm max-w-32"
+          className="select select-bordered select-sm max-w-32 max-sm:min-h-11 max-sm:text-base"
           aria-label={`Insert a variable into ${name}`}
           value=""
           onChange={(event) => {

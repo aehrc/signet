@@ -24,6 +24,7 @@
 
 import { expect, test } from "@playwright/test";
 
+import { openPasskeyDialog } from "../support/console.js";
 import { SEED, SIGNET } from "../support/stack.js";
 
 import type { CDPSession, Page } from "@playwright/test";
@@ -79,17 +80,6 @@ async function signInWithPassword(page: Page): Promise<void> {
   await page.getByLabel("Password").fill(SEED.passkeyPassword);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("link", { name: "pathling" })).toBeVisible();
-}
-
-/** Opens the passkey dialog from the account menu in the header. */
-async function openPasskeyDialog(page: Page): Promise<void> {
-  await page
-    .getByRole("button", { name: new RegExp(`Account menu`, "i") })
-    .click();
-  await page.getByRole("button", { name: "Passkeys", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Passkeys", exact: true }),
-  ).toBeVisible();
 }
 
 /** Removes a passkey through the dialog, confirming the password. */

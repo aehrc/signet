@@ -91,7 +91,7 @@ export function EndpointOverviewPage() {
             >
               Download interceptor
             </a>
-            <p className="text-base-content/60 mt-1 text-xs">
+            <p className="text-base-content/60 mt-1 text-xs max-sm:text-base">
               HAPI reads no token by itself - its authorization interceptor is
               Java you write. This generates that file for this endpoint, so the
               two sides of the handshake cannot disagree.

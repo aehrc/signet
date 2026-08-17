@@ -253,7 +253,34 @@ await ensure("the pathling endpoint", "POST", `/tenants/${TENANT}/endpoints`, {
   supportsBackendServices: true,
   supportsStyling: true,
   supportsStandaloneEncounterContext: true,
+  supportsDynamicRegistration: true,
 });
+
+/**
+ * Turns the developer portal on, for a stack that already had the endpoint.
+ *
+ * `ensure` above tolerates a 409 and changes nothing, which is what makes the seed
+ * idempotent - and also what means a flag added to its body never reaches a stack
+ * seeded before the flag existed. The capability is what the registration-request
+ * fixtures below depend on, so it is restated rather than assumed.
+ *
+ * It changes no discovery document: `registration_endpoint` follows the endpoint's
+ * trust anchor rule, not this flag, which `packages/core/src/discovery/build.test.ts`
+ * pins and `e2e/tests/trust.spec.ts` measures.
+ */
+async function acceptSelfServeRegistration() {
+  const response = await api("PATCH", endpointPath, {
+    supportsDynamicRegistration: true,
+  });
+  if (!response.ok) {
+    throw new Error(
+      `could not turn the developer portal on: ${response.status} ${await response.text()}`,
+    );
+  }
+  console.log("the endpoint accepts self-serve registration requests");
+}
+
+await acceptSelfServeRegistration();
 
 /**
  * Pathling verifies tokens with Spring Security's default JWT decoder, which
@@ -433,6 +460,167 @@ await ensure("an asymmetric client", "POST", `${endpointPath}/clients`, {
     ],
   },
 });
+
+/**
+ * The registration requests the console's queue is measured against.
+ *
+ * The queue was the one console route whose only reachable state was empty: the
+ * endpoint accepted no self-serve requests, so no request could exist, and a page
+ * measured empty proves nothing about the page an administrator actually reads. So
+ * the stack files two - one waiting for a decision, one already refused - and the
+ * mobile sweep meets a populated queue rather than a placeholder.
+ *
+ * Their values are long and every one of them is legal. The schema in
+ * `packages/contracts/src/admin/clients.ts` permits a 320-character contact address,
+ * a 2048-character launch URI, a 2048-character redirect URI and a 2000-character
+ * note, and a layout that only holds for short values is a layout that breaks on the
+ * first real submission rather than on a contrived one. Each value below states the
+ * limit it sits under.
+ *
+ * The refused one carries a long decision note, which is the only way the portal's
+ * "Note from the reviewer" and the console's decided row can be seen at all.
+ */
+const LONG_REQUEST_NAME =
+  "Regional Immunisation Registry Synchronisation Connector";
+
+/** The refused request, named so the decided row is identifiable in a test. */
+const REFUSED_REQUEST_NAME = "Population Analytics Extract Scheduler";
+
+/** A contact address of 246 characters, under the schema's limit of 320. */
+const LONG_CONTACT_EMAIL =
+  "registration.requests.and.integration.enquiries.for.the.regional.immunisation.registry@" +
+  "digital-health-integration-services.population-health-programmes.regional-immunisation-registry." +
+  "health-informatics-and-interoperability-directorate.example.org";
+
+/** A launch URI of 493 characters, under the schema's limit of 2048. */
+const LONG_LAUNCH_URI =
+  `${APP_ORIGIN}/launch/immunisation-registry-synchronisation-connector` +
+  "?deployment=regional-immunisation-registry-production-a" +
+  "&workflow=scheduled-bidirectional-record-synchronisation" +
+  "&profile=au-core-immunisation-record-exchange-profile-v2" +
+  "&correlation=8f1c2b0e-4a6d-4f2c-9b3e-7d5a1c0e6f48-9a2b3c4d5e6f7081" +
+  "&audience=" +
+  encodeURIComponent(`${BASE}/t/${TENANT}/e/pathling`) +
+  "&notes=" +
+  encodeURIComponent(
+    "opened by the electronic medical record when a clinician reviews an immunisation history",
+  );
+
+/** A redirect URI of 157 characters, under the schema's limit of 2048. */
+const LONG_REDIRECT_URI =
+  `${APP_ORIGIN}/oauth2/callback/immunisation-registry-synchronisation-connector` +
+  "/regional-immunisation-registry-production-a/authorization-code-response";
+
+/** A scope of 127 characters, under the schema's limit of 256. */
+const LONG_SCOPE =
+  "patient/Immunization.rs?category=" +
+  "http://terminology.hl7.org/CodeSystem/observation-category|laboratory-and-immunisation-records";
+
+/** A note of 1027 characters, under the schema's limit of 2000. */
+const LONG_NOTE =
+  "The connector reconciles immunisation records between the regional registry and " +
+  "the practices that submit to it, so that a clinician reviewing a patient's history " +
+  "sees the same doses whichever system they are looking at. It reads immunisation " +
+  "records and the patient demographics needed to match them, and it writes nothing. " +
+  "Each synchronisation run is initiated by the practice's own scheduler, and the " +
+  "software statement issued to that deployment is " +
+  "eyJhbGciOiJFUzM4NCIsImtpZCI6InJlZ2lvbmFsLWltbXVuaXNhdGlvbi1yZWdpc3RyeS0yMDI2LTA4In0" +
+  ".eyJzb2Z0d2FyZV9pZCI6ImltbXVuaXNhdGlvbi1yZWdpc3RyeS1zeW5jaHJvbmlzYXRpb24tY29ubmVjdG9yIn0" +
+  ", which the registry's operators can verify against the published keys. The " +
+  "deployment identifier the request should be recorded against is " +
+  "regional-immunisation-registry-production-a-0f3d9c81b47e5a26. We are asking for the " +
+  "narrowest set of scopes the reconciliation needs, and we are happy for the launch " +
+  "URI to be narrowed further before approval if the endpoint's operators would prefer " +
+  "a shorter one.";
+
+/** A decision note of 536 characters, under the schema's limit of 2000. */
+const LONG_DECISION_NOTE =
+  "Refused for now, and the reason is the extract rather than the requester: a " +
+  "scheduled population-level extract is a different permission from the " +
+  "record-by-record access this endpoint's policy grants, and it needs the data " +
+  "custodian's agreement before an administrator can hand it out. The reference to " +
+  "quote when that agreement is in place is " +
+  "population-analytics-extract-scheduler-0b7f4e29d5c81a63-review-2026-08, and the " +
+  "request can then be filed again against the same contact address. Nothing about the " +
+  "submission itself was wrong.";
+
+/**
+ * Files a registration request through the developer portal, once.
+ *
+ * Idempotent by name, because the portal mints an identifier per submission and has
+ * no notion of the same request twice: a seed that simply posted would add a row to
+ * the queue on every run, and the queue is a thing a test reads.
+ *
+ * @param name - The request's app name, which is also its identity for this seed.
+ * @param payload - The rest of the submission.
+ * @returns The request as the console sees it, or `undefined` if it was already
+ *   there - the tracking token is minted once and cannot be recovered on a later run.
+ */
+async function fileRequest(name, payload) {
+  const listed = await api("GET", `${endpointPath}/client-requests`);
+  if (!listed.ok) {
+    throw new Error(
+      `could not read the registration requests: ${listed.status} ${await listed.text()}`,
+    );
+  }
+  const { requests } = await listed.json();
+  const existing = requests.find((request) => request.payload.name === name);
+  if (existing !== undefined) {
+    console.log(`the "${name}" registration request already exists`);
+    return existing;
+  }
+
+  const response = await fetch(`${BASE}/t/${TENANT}/e/pathling/apps/requests`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name, ...payload }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `could not file the "${name}" registration request: ${response.status} ${await response.text()}`,
+    );
+  }
+  console.log(`filed the "${name}" registration request`);
+  const { request } = await response.json();
+  return request;
+}
+
+await fileRequest(LONG_REQUEST_NAME, {
+  clientType: "public",
+  redirectUris: [`${APP_ORIGIN}/`, LONG_REDIRECT_URI],
+  launchUri: LONG_LAUNCH_URI,
+  requestedScopes: [
+    "openid",
+    "fhirUser",
+    "launch/patient",
+    "patient/Immunization.rs",
+    LONG_SCOPE,
+  ],
+  contactEmail: LONG_CONTACT_EMAIL,
+  note: LONG_NOTE,
+});
+
+const refused = await fileRequest(REFUSED_REQUEST_NAME, {
+  clientType: "confidential-symmetric",
+  redirectUris: [`${APP_ORIGIN}/`],
+  requestedScopes: ["system/Observation.rs", "system/Patient.rs"],
+  contactEmail: LONG_CONTACT_EMAIL,
+  note: "A nightly extract of immunisation coverage by postcode, for the regional programme's reporting.",
+});
+
+if (refused !== undefined && refused.status === "pending") {
+  const rejected = await api(
+    "POST",
+    `${endpointPath}/client-requests/${refused.id}/reject`,
+    { decisionNote: LONG_DECISION_NOTE },
+  );
+  if (!rejected.ok) {
+    throw new Error(
+      `could not refuse the "${REFUSED_REQUEST_NAME}" request: ${rejected.status} ${await rejected.text()}`,
+    );
+  }
+  console.log(`refused the "${REFUSED_REQUEST_NAME}" registration request`);
+}
 
 await ensure("the clinician account", "POST", `${endpointPath}/users`, {
   username: SEED_USER.username,

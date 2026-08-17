@@ -39,7 +39,7 @@ export function PolicyDiff({ before, after }: Readonly<PolicyDiffProps>) {
 
   return (
     <div>
-      <p className="text-base-content/70 mb-2 text-sm">
+      <p className="text-base-content/70 mb-2 text-sm max-sm:text-base">
         {countOf(summary.added, "line")} added,{" "}
         {countOf(summary.removed, "line")} removed, against the published
         version.

@@ -263,7 +263,7 @@ export function FederationPage() {
             disabled={!mayEdit}
           />
           {mayEdit ? (
-            <p className="text-base-content/60 text-xs">
+            <p className="text-base-content/60 text-xs max-sm:text-base">
               Saved with the provider above.
             </p>
           ) : null}
@@ -282,7 +282,7 @@ export function FederationPage() {
         ) : (
           <div className="flex flex-col gap-3">
             <CopyableValue label="Redirect URI" value={current.redirectUri} />
-            <p className="text-base-content/60 text-xs">
+            <p className="text-base-content/60 text-xs max-sm:text-base">
               Last checked{" "}
               {current.discoveryCachedAt === null
                 ? "never"

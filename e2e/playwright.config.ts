@@ -72,6 +72,23 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
       dependencies: ["setup"],
+      // The responsive spec belongs to `mobile` alone. Without this it would run
+      // here too, at a desktop viewport, where its assertions say nothing.
+      testIgnore: /responsive\.spec\.ts/,
+    },
+    {
+      name: "mobile",
+      use: {
+        ...devices["Pixel 7"],
+        // Narrower than the stock profile's 412px: 360 is the width the feature
+        // is specified against, and the one an assertion has to hold at.
+        viewport: { width: 360, height: 780 },
+      },
+      dependencies: ["setup"],
+      // One spec, not the whole suite at a second viewport. Re-running every
+      // journey on a phone would spend sign-ins the rate limit does not have,
+      // and would prove the same authorization behaviour twice.
+      testMatch: /responsive\.spec\.ts/,
     },
   ],
 });

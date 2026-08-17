@@ -149,15 +149,17 @@ export function RequestsPage() {
                 <StatusBadge tone={toneForStatus(request.status)}>
                   {request.status}
                 </StatusBadge>
-                <span className="font-medium">{request.payload.name}</span>
-                <span className="text-base-content/60 text-xs">
+                <span className="min-w-0 font-medium break-words">
+                  {request.payload.name}
+                </span>
+                <span className="text-base-content/60 min-w-0 text-xs break-words">
                   {request.requestedByEmail}
                 </span>
                 <span className="text-base-content/60 ml-auto text-xs">
                   {formatInstant(request.decidedAt)}
                 </span>
                 {request.decisionNote === null ? null : (
-                  <p className="text-base-content/70 w-full text-xs">
+                  <p className="text-base-content/70 w-full text-xs break-words max-sm:text-base">
                     {request.decisionNote}
                   </p>
                 )}
@@ -215,7 +217,15 @@ function RequestCard({
         ) : undefined
       }
     >
-      <dl className="grid gap-2 text-sm sm:grid-cols-2">
+      {/* Every value here is a developer's own text, and the schema behind the
+          portal admits a 320-character contact address, a 2048-character launch
+          URI and a 2000-character note - none of which has a space in it to break
+          at. So the pair the product uses everywhere else is applied to the grid
+          once rather than to six items by hand: `break-words` gives the word
+          somewhere to break, and `min-w-0` removes the automatic minimum that
+          would otherwise stop the grid item shrinking far enough to reach it. See
+          the header comment in `../components/layout.tsx`. */}
+      <dl className="grid gap-2 text-sm *:min-w-0 [&_dd]:break-words sm:grid-cols-2">
         <div>
           <dt className="text-base-content/70 text-xs">Authentication</dt>
           <dd>{clientTypeLabel(request.payload.clientType)}</dd>
@@ -239,7 +249,12 @@ function RequestCard({
         {request.payload.launchUri === undefined ? null : (
           <div className="sm:col-span-2">
             <dt className="text-base-content/70 text-xs">Launch URI</dt>
-            <dd className="font-mono text-xs">{request.payload.launchUri}</dd>
+            {/* `break-all` rather than the grid's `break-words`: this is a URL in
+                a monospace face, where breaking between any two characters fills
+                the line better than breaking only where a word will not fit. */}
+            <dd className="font-mono text-xs break-all">
+              {request.payload.launchUri}
+            </dd>
           </div>
         )}
         {request.payload.note === undefined ? null : (

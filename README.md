@@ -154,7 +154,7 @@ ignoring what it does not recognise.
 
 ```sh
 bun run stack:up      # build and start; waits for health
-bun run stack:seed    # create the endpoint, policy, clients and accounts
+bun run stack:seed    # endpoint, policy, clients, accounts and two requests
 bun run test:e2e      # drive a launch through a browser
 bun run stack:down
 ```
@@ -191,6 +191,70 @@ files: direnv exports what it declares, so every command sees it.
 
 CI runs the whole end-to-end job on `3100`, `8180` and `4100`, so a URL that goes
 back to being hard-coded fails there rather than on the machine that needed it.
+
+## Narrow viewports
+
+**360 CSS pixels is the narrowest supported width**, and it applies to all three
+surfaces: the console, the end-user authorization pages and the developer portal.
+Below 360px nothing is promised. "Mobile" here means a narrow viewport and not a
+user agent - a desktop window dragged to 500px gets the same rendering a phone
+does, and no code anywhere sniffs a user agent to decide.
+
+What changes below Tailwind's `sm` breakpoint (640px):
+
+- **Lists become cards.** Every console list rendered by the shared table
+  component - endpoints, clients, users, keys, registration requests, audit,
+  policy versions - renders as one card per row instead of a table: the first
+  column becomes the card's title, every other column a labelled value, and the
+  row's actions stay with it. Nothing is dropped. A table at 360px would put its
+  last columns off the edge of the screen, which is what this replaces. At 640px
+  and above the table is what renders, unchanged.
+- **Side-by-side becomes stacked.** Forms are one column, and the policy editor's
+  rule list, rule builder and simulator sit one above the other. No capability is
+  removed on a narrow viewport: every field, control and output present on a
+  desktop is present here.
+- **Controls grow.** Every interactive element offers at least a 44x44 pixel
+  target, and every form control renders its text at no less than 16px, which is
+  the size below which a mobile browser zooms a focused field and does not zoom
+  back out.
+- **Wide content scrolls inside itself.** A token, a JWKS URL, a JSON claim set
+  or a policy diff scrolls or wraps within its own container. The page body never
+  scrolls sideways.
+
+The 16px floor covers form controls, the body text a panel inherits, and running
+prose - descriptions, hints, validation and status messages. It does not cover
+the annotation layer: the labels inside a card, badges, timestamps, monospace
+identifiers, code and diffs, which stay denser by design. The reading, and why,
+is written down at the top of `apps/web/src/components/layout.tsx`.
+
+### Proving it
+
+None of the above is asserted by hand. `e2e/tests/responsive.spec.ts` runs under
+a second Playwright project, `mobile`, at a 360x780 viewport:
+
+```sh
+bun run stack:up
+cd e2e
+bunx playwright test responsive --project=mobile
+```
+
+It carries a full SMART launch through sign-in, patient selection and consent at
+that viewport, sweeps every console, end-user and portal route asserting no
+horizontal page overflow with the navigation drawer both closed and open, drives
+the policy editor, the token simulator and the launch simulator, and measures
+every visible control's box and font size. The card rendering is asserted at the
+mobile viewport and the table rendering at 640px, so both directions of the
+switch are covered. The desktop suite is a separate project and shares no
+assertions with it:
+
+```sh
+bunx playwright test --project=chromium
+```
+
+**One run of the suite per minute.** End-user sign-ins are rate limited to ten a
+minute per address and a full run spends most of that allowance; a second run
+started inside the window is refused, which shows up as a sign-in page that will
+not proceed. That is the limiter working, not the layout failing.
 
 ## Container image
 
