@@ -32,18 +32,50 @@ import { describeError } from "../api/errors.js";
 
 import type { ReactNode } from "react";
 
+/** The ids and validity a {@link FieldFrame} hands to its control. */
+interface FieldFrameIds {
+  readonly id: string;
+  readonly labelledBy: string;
+  readonly describedBy: string | undefined;
+  readonly invalid: boolean;
+}
+
 interface FieldFrameProps {
   readonly label: string;
   /** A sentence explaining what the value is for, where it is not obvious. */
   readonly hint?: ReactNode;
   readonly error?: string | undefined;
   /** Receives the ids to attach to the control. */
-  readonly children: (ids: {
-    readonly id: string;
-    readonly labelledBy: string;
-    readonly describedBy: string | undefined;
-    readonly invalid: boolean;
-  }) => ReactNode;
+  readonly children: (ids: FieldFrameIds) => ReactNode;
+}
+
+/**
+ * The wiring shared by every string-valued control: identity, state, ARIA
+ * linkage and the change handler.
+ *
+ * In one place so the text, textarea and select controls cannot drift apart in
+ * how they link themselves to their frame and report validity to a screen
+ * reader.
+ */
+function stringControlProps(
+  frame: FieldFrameIds,
+  value: string,
+  onChange: (value: string) => void,
+  disabled: boolean | undefined,
+) {
+  return {
+    id: frame.id,
+    value,
+    disabled,
+    "aria-invalid": frame.invalid,
+    "aria-labelledby": frame.labelledBy,
+    "aria-describedby": frame.describedBy,
+    onChange: (event: {
+      readonly currentTarget: { readonly value: string };
+    }): void => {
+      onChange(event.currentTarget.value);
+    },
+  };
 }
 
 /** The legend, hint and error around any control. */
@@ -131,22 +163,14 @@ export function TextField({
 }: Readonly<TextFieldProps>) {
   return (
     <FieldFrame label={label} hint={hint} error={error}>
-      {({ id, labelledBy, describedBy, invalid }) => (
+      {(frame) => (
         <input
-          id={id}
+          {...stringControlProps(frame, value, onChange, disabled)}
           type={type}
-          className={`input input-bordered w-full max-sm:min-h-11 max-sm:text-base ${invalid ? "input-error" : ""}`}
-          value={value}
+          className={`input input-bordered w-full max-sm:min-h-11 max-sm:text-base ${frame.invalid ? "input-error" : ""}`}
           placeholder={placeholder}
           required={required}
           autoComplete={autoComplete}
-          disabled={disabled}
-          aria-invalid={invalid}
-          aria-labelledby={labelledBy}
-          aria-describedby={describedBy}
-          onChange={(event) => {
-            onChange(event.currentTarget.value);
-          }}
         />
       )}
     </FieldFrame>
@@ -177,21 +201,13 @@ export function TextAreaField({
 }: Readonly<TextAreaFieldProps>) {
   return (
     <FieldFrame label={label} hint={hint} error={error}>
-      {({ id, labelledBy, describedBy, invalid }) => (
+      {(frame) => (
         <textarea
-          id={id}
+          {...stringControlProps(frame, value, onChange, disabled)}
           rows={rows}
           className={`textarea textarea-bordered w-full max-sm:text-base ${
             monospace === true ? "font-mono text-xs" : ""
-          } ${invalid ? "textarea-error" : ""}`}
-          value={value}
-          disabled={disabled}
-          aria-invalid={invalid}
-          aria-labelledby={labelledBy}
-          aria-describedby={describedBy}
-          onChange={(event) => {
-            onChange(event.currentTarget.value);
-          }}
+          } ${frame.invalid ? "textarea-error" : ""}`}
         />
       )}
     </FieldFrame>
@@ -223,18 +239,10 @@ export function SelectField({
 }: Readonly<SelectFieldProps>) {
   return (
     <FieldFrame label={label} hint={hint} error={error}>
-      {({ id, labelledBy, describedBy, invalid }) => (
+      {(frame) => (
         <select
-          id={id}
-          className={`select select-bordered w-full max-sm:min-h-11 max-sm:text-base ${invalid ? "select-error" : ""}`}
-          value={value}
-          disabled={disabled}
-          aria-invalid={invalid}
-          aria-labelledby={labelledBy}
-          aria-describedby={describedBy}
-          onChange={(event) => {
-            onChange(event.currentTarget.value);
-          }}
+          {...stringControlProps(frame, value, onChange, disabled)}
+          className={`select select-bordered w-full max-sm:min-h-11 max-sm:text-base ${frame.invalid ? "select-error" : ""}`}
         >
           {options.map((option) => (
             <option key={option.value} value={option.value}>
