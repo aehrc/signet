@@ -128,6 +128,47 @@ third-party server is to communicate the patient's identity in a claim on the
 access token, which the script decodes to assign permissions, and that convention
 is what the preset mints.
 
+## Ontoserver
+
+[Ontoserver security
+model](https://ontoserver.csiro.au/docs/6/security-model.html), and [security
+configuration](https://ontoserver.csiro.au/docs/6/config-security.html).
+
+Ontoserver does not read SMART v2 scopes. It merges the token's `scope` and
+`authorities` claims into one set of authorities and matches them, as literal
+strings, against the scopes its documentation names: `system/*.read`,
+`system/*.write`, `system/CodeSystem.x-upload-external`, plus `onto/api.*` and
+`onto/synd.*` for its non-FHIR endpoints. The preset therefore maps every
+granted read scope to `system/*.read` and every granted write scope to
+`system/*.write`, inside the `authorities` claim.
+
+Those documented authorities are server-wide - there is no per-resource-type or
+per-compartment string in the published contract - so a granted
+`user/ValueSet.rs` yields whole-server read. That is why the preset grants no
+`patient/` scopes and drops `launch/patient` and `launch/encounter`: a
+terminology server holds no patient data, and a patient scope would hand the
+app server-wide read under a name that promises less. Finer control is
+Ontoserver's own resource-level mechanism (`ontoserver.security.enabled=fine`,
+security labels, `grouping/` scopes), whose categories are deployment-specific
+and not something a preset can mint. A write does not convey read, and the
+preset preserves that.
+
+Nobody writes by default: a user write grant requires the `ontoserver-admin`
+role, and a backend-service write grant ships disabled. Two more disabled rules
+mint the remaining documented strings - `system/CodeSystem.x-upload-external`
+(the external code system upload endpoint, kept outside `system/*.write` by
+Ontoserver on purpose, emitted only for a create scope that names CodeSystem)
+and `onto/synd.write` (required to overwrite a resource that arrived via
+syndication), which follows from update and delete scopes.
+
+Key configuration is part of the contract. Ontoserver verifies tokens against a
+static key in `ontoserver.security.token.secret` - an RSA public key in PEM
+form or an HMAC secret - and never fetches a JWKS. Its decoder is Spring
+Security's default, which accepts RS256 and nothing else for an RSA key, so the
+Signet endpoint's signing key must use RS256 and its PEM public key goes into
+that property. When `ontoserver.security.audience` is set it must equal the
+endpoint's FHIR base URL, which is what Signet puts in `aud`.
+
 ## HAPI FHIR (open source): no claim contract
 
 `AuthorizationInterceptor` and `SearchNarrowingInterceptor` both require the

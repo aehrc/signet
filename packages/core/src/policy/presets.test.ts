@@ -8,6 +8,7 @@ import { evaluatePolicy } from "./evaluate.js";
 import {
   AIDBOX_PRESET,
   FIRELY_PRESET,
+  ONTOSERVER_PRESET,
   PATHLING_PRESET,
   POLICY_PRESETS,
   SMART_BASELINE_PRESET,
@@ -20,6 +21,7 @@ import type {
   EvaluationUser,
   GrantType,
   PolicyDocument,
+  ScopeGrantRule,
 } from "./types.js";
 import type { LaunchContext } from "../launch/types.js";
 import type { Permission, Scope } from "../scopes/types.js";
@@ -74,6 +76,13 @@ function context(overrides: ContextOverrides = {}): EvaluationContext {
   };
 }
 
+/** Grants that allow everything, for exercising a mapping table in isolation. */
+const ALLOW_ALL_GRANTS: readonly ScopeGrantRule[] = [
+  { match: "*/*.cruds", allow: true },
+  { match: "openid", allow: true },
+  { match: "fhirUser", allow: true },
+];
+
 /**
  * The Pathling preset with its grant rules replaced by an allow-everything rule.
  *
@@ -83,22 +92,42 @@ function context(overrides: ContextOverrides = {}): EvaluationContext {
  */
 const PATHLING_MAPPING_HARNESS: PolicyDocument = {
   ...PATHLING_PRESET,
-  scopeGrants: [
-    { match: "*/*.cruds", allow: true },
-    { match: "openid", allow: true },
-    { match: "fhirUser", allow: true },
-  ],
+  scopeGrants: ALLOW_ALL_GRANTS,
 };
 
-/** The authorities the Pathling mapping produces for a scope string. */
-function authoritiesFor(
+/** A copy of a policy with one disabled grant rule switched on, by id. */
+function withGrantEnabled(
+  policy: PolicyDocument,
+  ruleId: string,
+): PolicyDocument {
+  return {
+    ...policy,
+    scopeGrants: policy.scopeGrants.map((rule) =>
+      rule.id === ruleId ? { ...rule, enabled: true } : rule,
+    ),
+  };
+}
+
+/** A copy of a policy with one disabled mapping rule switched on, by id. */
+function withMappingEnabled(
+  policy: PolicyDocument,
+  ruleId: string,
+): PolicyDocument {
+  return {
+    ...policy,
+    scopeMappings: (policy.scopeMappings ?? []).map((rule) =>
+      rule.id === ruleId ? { ...rule, enabled: true } : rule,
+    ),
+  };
+}
+
+/** The authorities a policy's mapping table produces for a scope string. */
+function mappedAuthorities(
+  policy: PolicyDocument,
   requested: string,
   overrides: ContextOverrides = {},
 ): readonly string[] {
-  const result = evaluatePolicy(
-    PATHLING_MAPPING_HARNESS,
-    context({ ...overrides, requested }),
-  );
+  const result = evaluatePolicy(policy, context({ ...overrides, requested }));
   const authorities = result.claims["authorities"];
   if (authorities === undefined) {
     return [];
@@ -107,6 +136,14 @@ function authoritiesFor(
     throw new TypeError("Expected the authorities claim to be an array");
   }
   return authorities as readonly string[];
+}
+
+/** The authorities the Pathling mapping produces for a scope string. */
+function authoritiesFor(
+  requested: string,
+  overrides: ContextOverrides = {},
+): readonly string[] {
+  return mappedAuthorities(PATHLING_MAPPING_HARNESS, requested, overrides);
 }
 
 // Every authority Pathling understands. Anything outside this grammar would be
@@ -656,12 +693,7 @@ describe("PATHLING_PRESET - as shipped", () => {
     // The other half of the disabled rule. Asserting only that it refuses while
     // off would pass just as well against a rule that is broken when on, and the
     // unattended loader is the whole reason the rule is kept.
-    const enabled: PolicyDocument = {
-      ...PATHLING_PRESET,
-      scopeGrants: PATHLING_PRESET.scopeGrants.map((rule) =>
-        rule.id === "grant-system-write" ? { ...rule, enabled: true } : rule,
-      ),
-    };
+    const enabled = withGrantEnabled(PATHLING_PRESET, "grant-system-write");
     const result = evaluatePolicy(
       enabled,
       context({
@@ -1018,6 +1050,218 @@ describe.each([
   });
 });
 
+/**
+ * The Ontoserver preset with its grant rules replaced by an allow-everything
+ * rule, for the same reason as the Pathling harness above: the mapping table can
+ * only be exercised for scopes that were granted, and keeping the two apart
+ * means a grant change can never quietly silence the mapping assertions.
+ */
+const ONTOSERVER_MAPPING_HARNESS: PolicyDocument = {
+  ...ONTOSERVER_PRESET,
+  scopeGrants: ALLOW_ALL_GRANTS,
+};
+
+/** The role the Ontoserver preset's write grant requires. */
+const ONTOSERVER_ADMIN_ROLE = "ontoserver-admin";
+
+describe("ONTOSERVER_PRESET - authority mapping", () => {
+  // Ontoserver reads no SMART v2 scopes: it authorises off v1-style authority
+  // strings, merged from the token's `scope` and `authorities` claims. The
+  // mapping table below is therefore the whole point of the preset - a granted
+  // scope becomes one of the exact strings Ontoserver's documentation names.
+  // That documented set is server-wide: there is no per-resource-type or
+  // per-compartment string to emit, so every read scope becomes `system/*.read`
+  // and every write scope becomes `system/*.write`, whatever the scope named.
+  it.each([
+    ["user/ValueSet.rs", ["system/*.read"]],
+    // Search alone still yields the read authority: Ontoserver has no separate
+    // search permission, and a search returns the resources it matched.
+    ["user/ValueSet.s", ["system/*.read"]],
+    ["user/*.rs", ["system/*.read"]],
+    ["system/*.rs", ["system/*.read"]],
+    ["user/CodeSystem.cruds", ["system/*.read", "system/*.write"]],
+    // Ontoserver documents that a write permission does not convey read, and
+    // the mapping preserves that: no read authority follows from `cud`.
+    ["user/ValueSet.cud", ["system/*.write"]],
+    ["system/*.cud", ["system/*.write"]],
+    // A v1 scope is normalised before mapping, so it behaves as its v2 form.
+    ["user/ConceptMap.read", ["system/*.read"]],
+  ])("maps %s to %j", (requested, expected) => {
+    expect(
+      mappedAuthorities(ONTOSERVER_MAPPING_HARNESS, requested, {
+        grantType: "client_credentials",
+      }),
+    ).toEqual(expected);
+  });
+
+  it("deduplicates the wildcard authorities across several scopes", () => {
+    expect(
+      mappedAuthorities(
+        ONTOSERVER_MAPPING_HARNESS,
+        "user/ValueSet.rs user/CodeSystem.rs user/CodeSystem.cud",
+      ),
+    ).toEqual(["system/*.read", "system/*.write"]);
+  });
+
+  it("emits no authorities claim for scopes with no resource access", () => {
+    expect(
+      mappedAuthorities(ONTOSERVER_MAPPING_HARNESS, "openid fhirUser"),
+    ).toEqual([]);
+  });
+});
+
+describe("ONTOSERVER_PRESET - optional rules", () => {
+  it("emits the external upload authority only for a create scope naming CodeSystem, once enabled", () => {
+    const harness = withMappingEnabled(
+      ONTOSERVER_MAPPING_HARNESS,
+      "ontoserver-upload-external",
+    );
+    // The upload gate is deliberately outside `system/*.write` on Ontoserver's
+    // side, so the preset keeps it a separate, disabled rule.
+    expect(mappedAuthorities(harness, "user/CodeSystem.c")).toEqual([
+      "system/*.write",
+      "system/CodeSystem.x-upload-external",
+    ]);
+    // A wildcard scope asks for more than the pattern names, so the upload
+    // authority follows only from a scope naming CodeSystem itself. This is
+    // Ontoserver's own fence: upload sits outside system/*.write on purpose.
+    expect(mappedAuthorities(harness, "user/*.c")).toEqual(["system/*.write"]);
+    expect(mappedAuthorities(harness, "user/ValueSet.c")).toEqual([
+      "system/*.write",
+    ]);
+  });
+
+  it("emits the syndication write authority for update and delete scopes, once enabled", () => {
+    const harness = withMappingEnabled(
+      ONTOSERVER_MAPPING_HARNESS,
+      "ontoserver-synd-write",
+    );
+    expect(mappedAuthorities(harness, "user/ValueSet.u")).toEqual([
+      "system/*.write",
+      "onto/synd.write",
+    ]);
+    expect(mappedAuthorities(harness, "user/ValueSet.d")).toEqual([
+      "system/*.write",
+      "onto/synd.write",
+    ]);
+    // A create cannot overwrite syndicated content, so a create-only scope
+    // does not carry the authority.
+    expect(mappedAuthorities(harness, "user/ValueSet.c")).toEqual([
+      "system/*.write",
+    ]);
+  });
+
+  it("emits neither optional authority while the rules ship disabled", () => {
+    const authorities = mappedAuthorities(
+      ONTOSERVER_MAPPING_HARNESS,
+      "user/CodeSystem.cruds",
+    );
+    expect(authorities).not.toContain("system/CodeSystem.x-upload-external");
+    expect(authorities).not.toContain("onto/synd.write");
+  });
+});
+
+describe("ONTOSERVER_PRESET - as shipped", () => {
+  it("refuses patient scopes even when a patient is in context", () => {
+    // A terminology server holds no patient data, and an emitted authority
+    // carries no compartment - so granting a patient scope would hand the app
+    // server-wide read under a name that promises less.
+    const result = evaluatePolicy(
+      ONTOSERVER_PRESET,
+      context({
+        requested: "patient/ValueSet.rs",
+        context: { patient: "Patient/123" },
+      }),
+    );
+    expect(result.grantedScopes).toEqual([]);
+    expect(result.deniedScopes[0]?.reason).toContain("default is to deny");
+  });
+
+  it("refuses the patient and encounter launch-context scopes", () => {
+    // Dropped for the same reason as the patient grants: there is no patient
+    // context for a terminology server to resolve.
+    const result = evaluatePolicy(
+      ONTOSERVER_PRESET,
+      context({ requested: "launch launch/patient launch/encounter" }),
+    );
+    expect(result.grantedScopes.map(formatScope)).toEqual(["launch"]);
+  });
+
+  it("narrows an ordinary user's full request down to reads", () => {
+    const result = evaluatePolicy(
+      ONTOSERVER_PRESET,
+      context({ requested: "user/ValueSet.cruds" }),
+    );
+    expect(result.grantedScopes.map(formatScope)).toEqual(["user/ValueSet.rs"]);
+    expect(result.claims["authorities"]).toEqual(["system/*.read"]);
+    expect(result.claims["fhirUser"]).toBe("Practitioner/abc");
+  });
+
+  it("grants writes to a user holding the admin role", () => {
+    const result = evaluatePolicy(
+      ONTOSERVER_PRESET,
+      context({
+        requested: "user/CodeSystem.cruds",
+        user: { ...USER, roles: [ONTOSERVER_ADMIN_ROLE] },
+      }),
+    );
+    expect(result.grantedScopes.map(formatScope)).toEqual([
+      "user/CodeSystem.cruds",
+    ]);
+    expect(result.claims["authorities"]).toEqual([
+      "system/*.read",
+      "system/*.write",
+    ]);
+  });
+
+  it("grants system reads only to a client credentials grant", () => {
+    expect(
+      evaluatePolicy(ONTOSERVER_PRESET, context({ requested: "system/*.rs" }))
+        .grantedScopes,
+    ).toEqual([]);
+    const backend = evaluatePolicy(
+      ONTOSERVER_PRESET,
+      context({
+        requested: "system/*.rs",
+        grantType: "client_credentials",
+        user: null,
+      }),
+    );
+    expect(backend.grantedScopes.map(formatScope)).toEqual(["system/*.rs"]);
+    expect(backend.claims["authorities"]).toEqual(["system/*.read"]);
+  });
+
+  it("denies a backend write until the disabled grant is enabled", () => {
+    // Both halves, because a rule that refuses while off would pass just as
+    // well if it were broken while on.
+    const backendWrite = {
+      requested: "system/CodeSystem.cud",
+      grantType: "client_credentials" as const,
+      user: null,
+    };
+    const denied = evaluatePolicy(ONTOSERVER_PRESET, context(backendWrite));
+    expect(denied.grantedScopes).toEqual([]);
+    expect(denied.claims["authorities"]).toBeUndefined();
+    const granted = evaluatePolicy(
+      withGrantEnabled(ONTOSERVER_PRESET, "grant-system-write"),
+      context(backendWrite),
+    );
+    expect(granted.grantedScopes.map(formatScope)).toEqual([
+      "system/CodeSystem.cud",
+    ]);
+    expect(granted.claims["authorities"]).toEqual(["system/*.write"]);
+  });
+
+  it("keeps the baseline's context rules and token lifetimes", () => {
+    expect(ONTOSERVER_PRESET.contextRules).toBe(
+      SMART_BASELINE_PRESET.contextRules,
+    );
+    const result = evaluatePolicy(ONTOSERVER_PRESET, context());
+    expect(result.accessTokenTtl).toBe(3600);
+    expect(result.refreshTokenTtl).toBe(2_592_000);
+  });
+});
+
 describe("POLICY_PRESETS", () => {
   it("lists every preset with unique ids and non-empty descriptions", () => {
     expect(POLICY_PRESETS.map((preset) => preset.id)).toEqual([
@@ -1026,6 +1270,7 @@ describe("POLICY_PRESETS", () => {
       "aidbox",
       "firely",
       "smile-cdr",
+      "ontoserver",
     ]);
     expect(new Set(POLICY_PRESETS.map((preset) => preset.id)).size).toBe(
       POLICY_PRESETS.length,
@@ -1043,6 +1288,7 @@ describe("POLICY_PRESETS", () => {
     expect(POLICY_PRESETS[2]?.policy).toBe(AIDBOX_PRESET);
     expect(POLICY_PRESETS[3]?.policy).toBe(FIRELY_PRESET);
     expect(POLICY_PRESETS[4]?.policy).toBe(SMILE_CDR_PRESET);
+    expect(POLICY_PRESETS[5]?.policy).toBe(ONTOSERVER_PRESET);
   });
 
   it("cites documentation for every preset", () => {
