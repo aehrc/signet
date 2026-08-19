@@ -1252,10 +1252,32 @@ describe("ONTOSERVER_PRESET - as shipped", () => {
     expect(granted.claims["authorities"]).toEqual(["system/*.write"]);
   });
 
-  it("keeps the baseline's context rules and token lifetimes", () => {
-    expect(ONTOSERVER_PRESET.contextRules).toBe(
-      SMART_BASELINE_PRESET.contextRules,
+  it("passes no patient context to the app, even when the launch carried one", () => {
+    // The grants refuse every patient-facing scope, and the context parameters
+    // follow: a terminology server launch has no patient to pass and no banner
+    // to show. The parameters that stay meaningful still flow.
+    const result = evaluatePolicy(
+      ONTOSERVER_PRESET,
+      context({
+        requested: "openid",
+        context: {
+          patient: "Patient/123",
+          encounter: "Encounter/456",
+          needPatientBanner: true,
+          smartStyleUrl: "https://ehr.example.org/style.json",
+          intent: "browse-terminology",
+          tenant: "demo",
+        },
+      }),
     );
+    expect(result.contextParams).toEqual({
+      smart_style_url: "https://ehr.example.org/style.json",
+      intent: "browse-terminology",
+      tenant: "demo",
+    });
+  });
+
+  it("returns the configured token lifetimes", () => {
     const result = evaluatePolicy(ONTOSERVER_PRESET, context());
     expect(result.accessTokenTtl).toBe(3600);
     expect(result.refreshTokenTtl).toBe(2_592_000);

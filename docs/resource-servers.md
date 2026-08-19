@@ -145,9 +145,10 @@ granted read scope to `system/*.read` and every granted write scope to
 Those documented authorities are server-wide - there is no per-resource-type or
 per-compartment string in the published contract - so a granted
 `user/ValueSet.rs` yields whole-server read. That is why the preset grants no
-`patient/` scopes and drops `launch/patient` and `launch/encounter`: a
-terminology server holds no patient data, and a patient scope would hand the
-app server-wide read under a name that promises less. Finer control is
+`patient/` scopes, drops `launch/patient` and `launch/encounter`, and passes no
+patient, encounter or banner context parameters to the app: a terminology
+server holds no patient data, and a patient scope would hand the app
+server-wide read under a name that promises less. Finer control is
 Ontoserver's own resource-level mechanism (`ontoserver.security.enabled=fine`,
 security labels, `grouping/` scopes), whose categories are deployment-specific
 and not something a preset can mint. A write does not convey read, and the

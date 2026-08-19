@@ -521,9 +521,11 @@ const ONTOSERVER_ADMIN_ROLE = "ontoserver-admin";
  * published contract, so a granted read scope of any shape yields
  * `system/*.read` and a granted write scope yields `system/*.write` - whole
  * server, whatever the scope named. That is why this preset grants no
- * `patient/` scopes and drops the `launch/patient` and `launch/encounter`
- * session scopes: a patient scope would hand the app server-wide read under a
- * name that promises less. An operator who needs finer write control uses
+ * `patient/` scopes, drops the `launch/patient` and `launch/encounter` session
+ * scopes, and passes no patient, encounter or banner context parameters to the
+ * app: a patient scope would hand the app server-wide read under a name that
+ * promises less, and there is no patient for a launch to resolve. An operator
+ * who needs finer write control uses
  * Ontoserver's own resource-level mechanism (`ontoserver.security.enabled=fine`
  * with security labels and `grouping/` scopes), whose categories are
  * deployment-specific and therefore not something a preset can mint.
@@ -630,7 +632,15 @@ export const ONTOSERVER_PRESET: PolicyDocument = {
       enabled: false,
     },
   ],
-  contextRules: SMART_CONTEXT_RULES,
+  // The patient-facing context parameters go with the patient grants: a
+  // terminology server launch has no patient to pass and no banner to show.
+  contextRules: SMART_CONTEXT_RULES.filter(
+    (rule) =>
+      rule.id !== "context-patient" &&
+      rule.id !== "context-encounter" &&
+      rule.id !== "context-need-patient-banner-default" &&
+      rule.id !== "context-need-patient-banner",
+  ),
   defaults: {
     accessTokenTtl: ACCESS_TOKEN_TTL,
     refreshTokenTtl: REFRESH_TOKEN_TTL,
