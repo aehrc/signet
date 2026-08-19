@@ -190,8 +190,9 @@ describe("SubmitButton", () => {
   );
 
   it("offers a 44px touch target below sm", () => {
-    // daisyUI's button is 40px tall.
-    expect(markup).toContain("btn btn-primary max-sm:min-h-11");
+    // daisyUI's small button is 32px tall, so the responsive minimum is what
+    // keeps the thumb target at 44px on a phone.
+    expect(markup).toContain("btn btn-sm btn-primary max-sm:min-h-11");
   });
 
   it("reads its label at 16px below sm", () => {
