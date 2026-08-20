@@ -16,7 +16,7 @@ concurrency:
 jobs:
   check:
     name: Static analysis and tests
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     services:
       # The data layer's integration tests skip themselves when
       # SIGNET_TEST_DATABASE_URL is unset, so without this service they would
@@ -72,7 +72,7 @@ jobs:
 
   docker:
     name: Docker image
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -167,7 +167,7 @@ jobs:
 
   helm:
     name: Helm chart
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -214,7 +214,7 @@ jobs:
 
   e2e:
     name: End to end
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     # Twenty minutes: the stack builds Signet's image and waits for Pathling to
     # start a Spark session. A run that takes longer than this has hung rather
     # than been slow.
