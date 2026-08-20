@@ -1,3 +1,6 @@
+-- Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
+-- (CSIRO) ABN 41 687 119 230. Licensed under the Apache License, Version 2.0.
+
 -- The privileged routines the serving role executes before a tenant is known.
 --
 -- A correction first. The header of 0006_tenant_row_level_security.sql says the

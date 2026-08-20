@@ -1,3 +1,6 @@
+-- Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
+-- (CSIRO) ABN 41 687 119 230. Licensed under the Apache License, Version 2.0.
+
 CREATE TYPE "public"."audit_actor_type" AS ENUM('admin_user', 'api_token', 'end_user', 'client', 'system');--> statement-breakpoint
 CREATE TYPE "public"."client_request_status" AS ENUM('pending', 'approved', 'rejected');--> statement-breakpoint
 CREATE TYPE "public"."client_status" AS ENUM('pending', 'active', 'suspended', 'rejected');--> statement-breakpoint

@@ -1,3 +1,6 @@
+-- Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
+-- (CSIRO) ABN 41 687 119 230. Licensed under the Apache License, Version 2.0.
+
 CREATE TABLE "endpoint_ticket_issuers" (
 	"endpoint_id" uuid PRIMARY KEY NOT NULL,
 	"issuer" text NOT NULL,
