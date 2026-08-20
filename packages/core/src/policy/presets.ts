@@ -495,6 +495,158 @@ export const SMILE_CDR_PRESET: PolicyDocument = tokenPatientPreset(
   "Smile CDR's inbound-security login script reads this claim to assign patient permissions.",
 );
 
+/**
+ * The role a user must hold before this preset will grant a write scope.
+ *
+ * Namespaced like {@link PATHLING_ADMIN_ROLE}, and for the same reason: a
+ * deployment running several resource servers behind one identity provider can
+ * hold a distinct administrator role per server.
+ */
+const ONTOSERVER_ADMIN_ROLE = "ontoserver-admin";
+
+/**
+ * Translates SMART scopes into the authority strings Ontoserver enforces.
+ *
+ * Written against the Ontoserver 6 security model. Ontoserver does not read
+ * SMART v2 scopes: it merges the token's `scope` and `authorities` claims into
+ * one set and matches it, as literal strings, against the scopes its
+ * documentation names - `system/*.read`, `system/*.write`,
+ * `system/CodeSystem.x-upload-external`, and the `onto/api.*` and
+ * `onto/synd.*` pairs for its non-FHIR endpoints. A granted `user/ValueSet.rs`
+ * therefore has to become the exact string `system/*.read` inside the
+ * `authorities` claim, which is what the mapping table here does.
+ *
+ * **The documented authorities are server-wide, and the mapping says so.**
+ * There is no per-resource-type or per-compartment string in Ontoserver's
+ * published contract, so a granted read scope of any shape yields
+ * `system/*.read` and a granted write scope yields `system/*.write` - whole
+ * server, whatever the scope named. That is why this preset grants no
+ * `patient/` scopes, drops the `launch/patient` and `launch/encounter` session
+ * scopes, and passes no patient, encounter or banner context parameters to the
+ * app: a patient scope would hand the app server-wide read under a name that
+ * promises less, and there is no patient for a launch to resolve. An operator
+ * who needs finer write control uses
+ * Ontoserver's own resource-level mechanism (`ontoserver.security.enabled=fine`
+ * with security labels and `grouping/` scopes), whose categories are
+ * deployment-specific and therefore not something a preset can mint.
+ *
+ * **What follows from a read.** `r` and `s` both yield `system/*.read`:
+ * Ontoserver has no separate search permission, and a search returns the
+ * resources it matched. The read authority also covers `$validate`, `$convert`,
+ * `$expand` and `$closure`, so this preset mints nothing operation-specific for
+ * them.
+ *
+ * **What follows from a write.** `c`, `u` and `d` yield `system/*.write`, and
+ * nothing else: Ontoserver documents that a write permission does not convey
+ * read.
+ *
+ * **Two authorities ship as disabled rules.**
+ * `system/CodeSystem.x-upload-external` guards the endpoint that ingests an
+ * external code system release (a SNOMED CT RF2 archive, for instance) and is
+ * deliberately outside `system/*.write` on Ontoserver's side, so it is a
+ * separate rule here, emitted only for a create scope that names CodeSystem -
+ * an app must ask for CodeSystem creation by name to carry it.
+ * `onto/synd.write` is required before Ontoserver will overwrite a resource
+ * that arrived via syndication, and follows from update and delete scopes once
+ * enabled.
+ *
+ * **Who can write at all.** Nobody, by default - the same posture as {@link
+ * PATHLING_PRESET}, expressed by the same pair of rules: a user write grant
+ * requiring {@link ONTOSERVER_ADMIN_ROLE}, and a disabled backend-service grant
+ * for an unattended loader.
+ *
+ * **Key configuration is part of the contract.** Ontoserver verifies tokens
+ * against a static key in `ontoserver.security.token.secret` - an RSA public
+ * key in PEM form, or an HMAC secret - and never fetches a JWKS. Its decoder is
+ * Spring Security's default, which accepts RS256 and nothing else for an RSA
+ * key, so the endpoint's signing key must use RS256 and the operator pastes its
+ * PEM public key into that property. When `ontoserver.security.audience` is set
+ * it must equal the endpoint's FHIR base URL, which is what Signet puts in
+ * `aud`.
+ */
+export const ONTOSERVER_PRESET: PolicyDocument = {
+  version: 1,
+  scopeGrants: [
+    {
+      id: "grant-admin-write",
+      description: `Full access for a user holding the ${ONTOSERVER_ADMIN_ROLE} role. The only enabled rule here that names a write.`,
+      match: "user/*.cruds",
+      allow: true,
+      narrow: true,
+      requireUserRole: [ONTOSERVER_ADMIN_ROLE],
+    },
+    // No patient grant: a terminology server has no patient compartment, and an
+    // Ontoserver authority could not express one anyway.
+    ...SMART_READ_GRANTS.filter((rule) => rule.id !== "grant-patient-read"),
+    {
+      id: "grant-system-write",
+      description:
+        "Enable this to let an unattended backend service load terminology. Separate from the admin rule because a client credentials grant has no user, and so no role to check.",
+      match: "system/*.cud",
+      allow: true,
+      enabled: false,
+      grantTypes: ["client_credentials"],
+    },
+    // The patient and encounter launch-context scopes are dropped along with
+    // the patient grant: there is nothing for them to resolve.
+    ...SMART_SESSION_GRANTS.filter(
+      (rule) =>
+        rule.id !== "grant-launch-patient" &&
+        rule.id !== "grant-launch-encounter",
+    ),
+  ],
+  claimRules: FHIR_USER_CLAIM_RULES,
+  scopeMappings: [
+    {
+      id: "ontoserver-read",
+      description:
+        "The documented read authority, which is server-wide. Search implies read, because Ontoserver has no separate search permission; read also covers $validate, $convert, $expand and $closure.",
+      forEachScope: "*/*.rs",
+      appendTo: "authorities",
+      values: ["system/*.read"],
+    },
+    {
+      id: "ontoserver-write",
+      description:
+        "The documented write authority, which is server-wide. Yields no read: Ontoserver documents that a write permission does not convey read.",
+      forEachScope: "*/*.cud",
+      appendTo: "authorities",
+      values: ["system/*.write"],
+    },
+    {
+      id: "ontoserver-upload-external",
+      description:
+        "Enable this to let a create scope naming CodeSystem upload an external code system release, such as a SNOMED CT RF2 archive. Ontoserver keeps this outside system/*.write on purpose, so it is a separate rule here.",
+      forEachScope: "*/CodeSystem.c",
+      appendTo: "authorities",
+      values: ["system/CodeSystem.x-upload-external"],
+      enabled: false,
+    },
+    {
+      id: "ontoserver-synd-write",
+      description:
+        "Enable this to let update and delete scopes overwrite resources that arrived via syndication, which Ontoserver otherwise refuses.",
+      forEachScope: "*/*.ud",
+      appendTo: "authorities",
+      values: ["onto/synd.write"],
+      enabled: false,
+    },
+  ],
+  // The patient-facing context parameters go with the patient grants: a
+  // terminology server launch has no patient to pass and no banner to show.
+  contextRules: SMART_CONTEXT_RULES.filter(
+    (rule) =>
+      rule.id !== "context-patient" &&
+      rule.id !== "context-encounter" &&
+      rule.id !== "context-need-patient-banner-default" &&
+      rule.id !== "context-need-patient-banner",
+  ),
+  defaults: {
+    accessTokenTtl: ACCESS_TOKEN_TTL,
+    refreshTokenTtl: REFRESH_TOKEN_TTL,
+  },
+};
+
 /** Where a preset's claim contract is documented. */
 export interface PresetReference {
   readonly label: string;
@@ -603,6 +755,22 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
       {
         label: "Smile CDR - SMART Inbound Security Module",
         url: "https://smilecdr.com/docs/smart/smart_on_fhir_inbound_security_module.html",
+      },
+    ],
+  },
+  {
+    id: "ontoserver",
+    name: "Ontoserver",
+    description: `Translates SMART scopes into the v1-style authority strings Ontoserver matches inside the authorities claim. Reads are open to signed-in users and backend services; writing requires the ${ONTOSERVER_ADMIN_ROLE} role. The endpoint's signing key must use RS256, because Ontoserver verifies with a static PEM public key rather than a JWKS.`,
+    policy: ONTOSERVER_PRESET,
+    references: [
+      {
+        label: "Ontoserver - Security model",
+        url: "https://ontoserver.csiro.au/docs/6/security-model.html",
+      },
+      {
+        label: "Ontoserver - Security configuration",
+        url: "https://ontoserver.csiro.au/docs/6/config-security.html",
       },
     ],
   },
