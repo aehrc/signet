@@ -1,5 +1,8 @@
 # Signet
 
+[![CI](https://github.com/aehrc/signet/actions/workflows/ci.yml/badge.svg)](https://github.com/aehrc/signet/actions/workflows/ci.yml)
+[![Licence: Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-blue.svg)](LICENSE)
+
 A multi-tenant [SMART App Launch 2.2.0](https://hl7.org/fhir/smart-app-launch/)
 authorization server.
 
@@ -305,10 +308,23 @@ Pathling builds its own `/.well-known/smart-configuration` by merging from the
 issuer's OpenID Connect discovery document, so pointing the issuer at a Signet
 endpoint is the entire integration.
 
-## Copyright
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report a bug, propose a
+resource server preset, and what a change has to satisfy to be merged. The
+project's non-negotiable principles are in [CLAUDE.md](CLAUDE.md).
+
+## Licence
 
 Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
 (CSIRO) ABN 41 687 119 230.
 
-All rights reserved. Signet is not open source and carries no licence to use,
-copy, modify or distribute it.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0).
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the [LICENSE](LICENSE)
+file for the specific language governing permissions and limitations under the
+License.

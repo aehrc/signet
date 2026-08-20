@@ -2,6 +2,7 @@
   "name": "@signet/server",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Signet OAuth endpoints and admin API",
   "main": "./src/index.ts",
