@@ -124,7 +124,49 @@ bun run stack:down
 Narrow-viewport behaviour is asserted by a second Playwright project rather than
 by hand; see "Narrow viewports" in [README.md](README.md).
 
-## Licence
+## Legal
 
-By contributing to Signet you agree that your contributions will be licensed
-under the Apache License 2.0.
+### Developer Certificate of Origin
+
+This project uses the Developer Certificate of Origin (DCO) rather than a
+Contributor Licence Agreement. By signing off a commit you certify that you have
+the right to submit that contribution to this project, and that it may be
+distributed under the project's Apache License 2.0.
+
+Sign off each commit:
+
+```sh
+git commit -s
+```
+
+That adds a line of the form:
+
+```
+Signed-off-by: Jane Smith <jane@example.com>
+```
+
+The full text of the DCO is at <https://developercertificate.org/>.
+
+### Licensing
+
+By contributing to Signet you agree that your contribution is licensed under the
+Apache License 2.0 along with the rest of the project. Contributors retain
+copyright in their own work unless otherwise agreed.
+
+### Third-party code and dependencies
+
+Submit only code that you wrote yourself, or that you are authorised to
+contribute. Where a contribution includes or is derived from third-party code, or
+introduces a new dependency, identify its source and licence in the pull request.
+Material under a licence incompatible with the Apache License 2.0 cannot be
+accepted.
+
+Where a contribution requires changes to attribution or notice files, include
+those changes in the same pull request.
+
+### AI-assisted development
+
+AI-assisted development tools may be used in preparing a contribution. The
+contributor remains responsible for reviewing all generated code, for holding the
+right to contribute it, and for its compliance with this project's licensing and
+quality requirements.
