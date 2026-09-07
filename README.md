@@ -11,11 +11,6 @@ how SMART scopes map to access-token claims, and point your FHIR server's
 authorization issuer at Signet. Your server keeps serving FHIR; Signet does
 SMART App Launch and SMART Backend Services in front of it.
 
-> **Signet is experimental software.** It has not been independently security
-> reviewed and must not be used to protect sensitive data, including real
-> patient records. It is intended for connectathons, demonstrations and
-> development against synthetic data.
-
 Stand up an endpoint in a minute, seed personas, let app developers request a
 client registration, and simulate an EHR launch without an EHR. Each endpoint
 has its own signing keys with rotation, an append-only audit trail, and can
@@ -134,3 +129,10 @@ under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 CONDITIONS OF ANY KIND, either express or implied. See the [LICENSE](LICENSE)
 file for the specific language governing permissions and limitations under the
 License.
+
+## Disclaimer
+
+Signet is experimental software. It has not been independently security reviewed
+and must not be used to protect sensitive data, including real patient records.
+It is intended for connectathons, demonstrations and development against
+synthetic data.
