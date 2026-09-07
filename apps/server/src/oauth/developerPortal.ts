@@ -6,8 +6,8 @@
 /**
  * The developer portal's API: asking for a client, and collecting it.
  *
- * The surface exists because a connectathon or a marketplace has more app developers
- * than administrators, and an administrator's time is better spent approving a request
+ * The surface exists because a connectathon has more app developers than
+ * administrators, and an administrator's time is better spent approving a request
  * than transcribing one. It is also the reason the endpoint has a
  * `supportsDynamicRegistration`-adjacent decision to make: this is *not* dynamic
  * registration. RFC 7591 registration mints a client immediately; this files a request

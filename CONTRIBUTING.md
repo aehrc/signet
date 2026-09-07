@@ -62,10 +62,11 @@ cp packages/db/.env.example packages/db/.env.local
 overmind start                          # server on :3000, console on :5173
 ```
 
-The three `.env.example` files each say which of its variables belongs in which
-file, and why the layout is what it is. [README.md](README.md) covers the same
-ground more briefly, including the Bun behaviour that makes the stack's ports a
-special case.
+The three `.env.example` files each say which of their variables belongs in which
+file, and why. The compose stack's ports (`SIGNET_PORT`, `PATHLING_PORT`,
+`APP_PORT`) are the exception: they must be exported into the shell rather than
+written to a file, because Bun does not pass variables it loaded from a file to
+the processes it launches. The root `.env.example` explains this.
 
 ## Coding standards
 
@@ -112,7 +113,7 @@ seconds with a `skip` count has not exercised the database. Point the variable
 at a throwaway database.
 
 The end-to-end suite drives a real SMART launch in a browser against a
-docker-compose stack of Signet, Pathling and a stub app:
+docker-compose stack of Signet, a FHIR server and a stub app:
 
 ```sh
 bun run stack:up
@@ -121,8 +122,16 @@ bun run test:e2e
 bun run stack:down
 ```
 
-Narrow-viewport behaviour is asserted by a second Playwright project rather than
-by hand; see "Narrow viewports" in [README.md](README.md).
+A second Playwright project, `mobile`, runs `e2e/tests/responsive.spec.ts` at a
+360px viewport and asserts the narrow-viewport rendering rather than leaving it to
+inspection:
+
+```sh
+cd e2e && bunx playwright test responsive --project=mobile
+```
+
+End-user sign-ins are rate limited to ten a minute per address, and a full run
+spends most of that, so leave a minute between runs.
 
 ## Legal
 
