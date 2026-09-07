@@ -22,8 +22,9 @@ Check the existing issues first. A useful report includes:
   stack, the container image, the Helm chart).
 - The relevant server log lines, with credentials removed.
 
-A security vulnerability is not a GitHub issue. Email pathling@csiro.au instead,
-and give us a chance to release a fix before disclosing it.
+A security vulnerability is not a GitHub issue. Report it privately as described
+in [SECURITY.md](SECURITY.md), and give us a chance to release a fix before
+disclosing it.
 
 ## Suggesting enhancements
 
