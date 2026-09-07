@@ -554,11 +554,11 @@ helm install signet deploy/helm/signet \
   --set signet.config.SIGNET_PUBLIC_URL=https://signet.example.org
 ```
 
-That brings up Signet with a bundled PostgreSQL, which is for evaluation. For
-production, point at a managed instance and supply all three secrets from
-outside the chart. Two database URLs, because a deployment runs two database
-identities - see the tenant isolation section above for the statements that
-create the serving role:
+That brings up Signet with a bundled PostgreSQL, a single replica with no
+backups. For a longer-lived deployment, point at a managed instance and supply
+all three secrets from outside the chart. Two database URLs, because a
+deployment runs two database identities - see the tenant isolation section above
+for the statements that create the serving role:
 
 ```sh
 kubectl create secret generic signet-db --from-literal=url='postgres://…'

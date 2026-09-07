@@ -11,11 +11,15 @@ how SMART scopes map to access-token claims, and point your FHIR server's
 authorization issuer at Signet. Your server keeps serving FHIR; Signet does
 SMART App Launch and SMART Backend Services in front of it.
 
-- **Production deployments** - per-endpoint signing keys, key rotation, an
-  append-only audit trail, and federation to an existing identity provider.
-- **Connectathons** - stand up an endpoint in a minute, seed personas, let app
-  developers request a client registration, and simulate an EHR launch without
-  an EHR.
+> **Signet is experimental software.** It has not been independently security
+> reviewed and must not be used to protect sensitive data, including real
+> patient records. It is intended for connectathons, demonstrations and
+> development against synthetic data.
+
+Stand up an endpoint in a minute, seed personas, let app developers request a
+client registration, and simulate an EHR launch without an EHR. Each endpoint
+has its own signing keys with rotation, an append-only audit trail, and can
+federate to an existing identity provider.
 
 ## Claims mapping
 
@@ -68,7 +72,7 @@ integration suites skip themselves when `SIGNET_TEST_DATABASE_URL` is unset, so 
 `bun run test` that finishes in seconds with a `skip` count has not exercised the
 database.
 
-The end-to-end stack builds the production image and runs it alongside Postgres,
+The end-to-end stack builds the container image and runs it alongside Postgres,
 a FHIR server and a stub SMART app:
 
 ```sh

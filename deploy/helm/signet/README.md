@@ -8,6 +8,9 @@ applies database migrations as a Helm hook Job before new pods roll out, sweeps
 expired rows nightly as a CronJob, and optionally brings up a PostgreSQL for
 evaluation.
 
+Signet is experimental software and must not be used to protect sensitive data.
+See the disclaimer in the [project README](../../../README.md).
+
 ## Features
 
 - **Two database identities, kept apart.** Signet connects as a role that owns
@@ -57,10 +60,9 @@ helm install signet deploy/helm/signet \
   --set signet.config.SIGNET_PUBLIC_URL=https://signet.example.org
 ```
 
-Production, against a managed database. Both identities are supplied from
-outside the chart, and the two URLs must name different roles - `migrate`
-refuses two URLs naming the same one, because that deployment could not enforce
-tenant isolation:
+Against a managed database. Both identities are supplied from outside the chart,
+and the two URLs must name different roles - `migrate` refuses two URLs naming
+the same one, because that deployment could not enforce tenant isolation:
 
 ```bash
 kubectl create secret generic signet-db \

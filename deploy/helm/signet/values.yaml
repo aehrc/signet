@@ -145,7 +145,7 @@ signet:
       whenUnsatisfiable: "ScheduleAnyway"
 
   # A bundled PostgreSQL, for evaluation and connectathons. It is a single
-  # replica with no backups; a production deployment should turn this off and
+  # replica with no backups; a longer-lived deployment should turn this off and
   # point `database` at a managed instance.
   #
   # Both identities are created here: `owner` owns the schema the migrations

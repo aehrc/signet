@@ -63,5 +63,7 @@ upstream project. If a dependency vulnerability affects Signet and requires a
 change on our side (for example, a version bump or a configuration change),
 please let us know so that we can address it.
 
-Signet is provided without warranty under the
-[Apache License, version 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+Signet is experimental software, provided without warranty under the
+[Apache License, version 2.0](https://www.apache.org/licenses/LICENSE-2.0). It
+has not been independently security reviewed and must not be used to protect
+sensitive data. See the disclaimer in the [README](README.md).
