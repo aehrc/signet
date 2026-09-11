@@ -159,7 +159,10 @@ jobs:
       - name: Join the architectures into one manifest list
         working-directory: ${{ runner.temp }}/digests
         run: |
-          tags=$(jq -cr '.target."docker-metadata-action".tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          # `DOCKER_METADATA_OUTPUT_JSON` is the action's flat output - tags at the
+          # top level. The nested `.target."docker-metadata-action".tags` shape is
+          # the bake file, which the action writes to a separate path.
+          tags=$(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
           digests=$(printf -- "$IMAGE@sha256:%s " *)
           # Both expand to several words deliberately: one `-t` per tag, and one
           # reference per architecture built above.
