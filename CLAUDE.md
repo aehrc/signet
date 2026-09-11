@@ -146,7 +146,8 @@ document that still advertises the old behaviour.
 - CI MUST be green before merge, and the gates MUST NOT be weakened to make a
   change pass: `format:check`, `lint`, `typecheck`, `lint:duplication` at a
   threshold of 0, `test:coverage` at 80% of lines and functions across the whole
-  suite, `build`, the container image build and smoke test, the Helm chart lint and
+  suite, `build`, the container image build and smoke test, the Trivy security
+  scans of the repository and the container image, the Helm chart lint and
   render, and the end-to-end suite. Coverage thresholds are a floor.
 
   Lines and functions, not branches: `bun test --coverage` produces no branch data,

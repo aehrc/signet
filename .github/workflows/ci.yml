@@ -16,6 +16,9 @@ concurrency:
 jobs:
   check:
     name: Static analysis and tests
+    permissions:
+      contents: read
+      security-events: write
     runs-on: ubuntu-latest
     services:
       # The data layer's integration tests skip themselves when
@@ -57,11 +60,26 @@ jobs:
       - name: Check duplication
         run: bun run lint:duplication
 
+      # The Trivy DB is warmed on the default branch by update-trivy.yml, so the
+      # scan skips downloading it. Fails on MEDIUM severity and above, with the
+      # SARIF report uploaded below for the code scanning view.
+      - name: Run security scan
+        uses: ./.github/actions/trivy-scan
+        with:
+          skip-db-update: "true"
+
       - name: Test with coverage
         run: bun run test:coverage
 
       - name: Build
         run: bun run build
+
+      - name: Upload security scan results to code scanning
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-repo
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -72,6 +90,9 @@ jobs:
 
   docker:
     name: Docker image
+    permissions:
+      contents: read
+      security-events: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -90,6 +111,19 @@ jobs:
           tags: signet:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Unfixed OS-package findings are ignored - the base image carries
+      # vulnerabilities no upstream has fixed yet, and a gate that can never go
+      # green is a gate that gets deleted. Everything with a fix available fails
+      # the job.
+      - name: Run security scan
+        uses: ./.github/actions/trivy-scan
+        with:
+          scan-type: image
+          image-ref: signet:ci
+          ignore-unfixed: "true"
+          skip-db-update: "true"
+          sarif-output: trivy-results-image.sarif
 
       # A real database with the two identities a deployment runs, because the
       # server verifies at startup that its role is bound by the tenant isolation
@@ -164,6 +198,13 @@ jobs:
             exit 1
           }
           cat owner-start.log
+
+      - name: Upload security scan results to code scanning
+        if: always() && hashFiles('trivy-results-image.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results-image.sarif
+          category: trivy-image
 
   helm:
     name: Helm chart

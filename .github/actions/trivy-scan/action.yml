@@ -1,0 +1,93 @@
+# Runs Trivy security scan with SARIF output, re-running with table format on
+# failure for human-readable output.
+#
+# Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
+# (CSIRO) ABN 41 687 119 230. Licensed under the Apache License, Version 2.0.
+#
+# Author: John Grimes
+
+name: Trivy Security Scan
+description: Run Trivy security scan with SARIF output, table on failure.
+
+inputs:
+  scan-type:
+    description: Scan type - repo for the checked-out tree, image for a built image.
+    required: false
+    default: "repo"
+  scan-ref:
+    description: Path to scan (relative to repo root); used by repo and fs scans.
+    required: false
+    default: "."
+  image-ref:
+    description: Reference of the image to scan; used by image scans.
+    required: false
+    default: ""
+  skip-files:
+    description: Files to skip (glob patterns).
+    required: false
+    default: ""
+  skip-dirs:
+    description: Directories to skip (comma-separated).
+    required: false
+    default: ""
+  ignore-unfixed:
+    description: Ignore unfixed vulnerabilities.
+    required: false
+    default: "false"
+  skip-db-update:
+    description: Skip Trivy database updates (use the cached DB).
+    required: false
+    default: "false"
+  trivyignore:
+    description: Path to .trivyignore file (relative to repo root).
+    required: false
+    default: ".trivyignore"
+  sarif-output:
+    description: Path for SARIF output file.
+    required: false
+    default: "trivy-results.sarif"
+
+runs:
+  using: composite
+  steps:
+    - name: Run security scan (SARIF output)
+      id: sarif-scan
+      uses: aquasecurity/trivy-action@0.35.0
+      continue-on-error: true
+      env:
+        # Signet ships no Java, so the Java DB is never needed.
+        TRIVY_SKIP_JAVA_DB_UPDATE: "true"
+        TRIVY_SKIP_DB_UPDATE: ${{ inputs.skip-db-update }}
+        TRIVY_IGNOREFILE: ${{ inputs.trivyignore }}
+      with:
+        scan-type: ${{ inputs.scan-type }}
+        scan-ref: ${{ inputs.scan-ref }}
+        image-ref: ${{ inputs.image-ref }}
+        ignore-unfixed: ${{ inputs.ignore-unfixed }}
+        format: sarif
+        output: ${{ inputs.sarif-output }}
+        skip-files: ${{ inputs.skip-files }}
+        skip-dirs: ${{ inputs.skip-dirs }}
+        exit-code: "1"
+        severity: MEDIUM,HIGH,CRITICAL
+        version: "v0.70.0"
+
+    - name: Run security scan (table output on failure)
+      if: steps.sarif-scan.outcome == 'failure'
+      uses: aquasecurity/trivy-action@0.35.0
+      env:
+        TRIVY_SKIP_JAVA_DB_UPDATE: "true"
+        TRIVY_SKIP_DB_UPDATE: ${{ inputs.skip-db-update }}
+        TRIVY_IGNOREFILE: ${{ inputs.trivyignore }}
+      with:
+        scan-type: ${{ inputs.scan-type }}
+        scan-ref: ${{ inputs.scan-ref }}
+        image-ref: ${{ inputs.image-ref }}
+        ignore-unfixed: ${{ inputs.ignore-unfixed }}
+        format: table
+        skip-files: ${{ inputs.skip-files }}
+        skip-dirs: ${{ inputs.skip-dirs }}
+        skip-setup-trivy: true
+        exit-code: "1"
+        severity: MEDIUM,HIGH,CRITICAL
+        version: "v0.70.0"

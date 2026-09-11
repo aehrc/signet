@@ -1,0 +1,5 @@
+# Vulnerabilities listed here (one advisory ID per line) are excluded from every
+# Trivy scan. Each entry MUST carry a comment naming why it is ignored and the
+# date it was added, so stale suppressions can be pruned. Suppressions live in
+# CI, which means an empty file is the honest default - the scans below pass
+# because nothing is suppressed, not because the file hides findings.
