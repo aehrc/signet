@@ -87,7 +87,7 @@ tenant isolation section of [docs/operations.md](../../../docs/operations.md).
 
 | Parameter                                           | Description                                                                                           | Default                                 |
 | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| `signet.image`                                      | Container image to run.                                                                               | `ghcr.io/aehrc/signet:0.1.0`            |
+| `signet.image`                                      | Container image to run.                                                                               | `ghcr.io/aehrc/signet:1.0.0`            |
 | `signet.imagePullPolicy`                            | Image pull policy for the server and migration Job.                                                   | `Always`                                |
 | `signet.imagePullSecrets`                           | Secrets used to pull the image.                                                                       | `[]`                                    |
 | `signet.replicas`                                   | Server replicas, ignored when autoscaling is on.                                                      | `2`                                     |
@@ -291,5 +291,6 @@ kubectl delete pvc data-signet-postgres-0
 
 | Chart version | App version | Kubernetes |
 | ------------- | ----------- | ---------- |
+| 1.0.0         | 1.0.0       | 1.23+      |
 | 0.2.0         | 0.1.0       | 1.23+      |
 | 0.1.0         | 0.1.0       | 1.23+      |

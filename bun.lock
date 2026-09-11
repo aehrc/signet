@@ -26,7 +26,7 @@
     },
     "apps/server": {
       "name": "@signet/server",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "dependencies": {
         "@hono/node-server": "^2.0.12",
         "@signet/contracts": "workspace:*",
@@ -41,7 +41,7 @@
     },
     "apps/web": {
       "name": "@signet/web",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "dependencies": {
         "@primer/octicons-react": "^19.33.0",
         "@signet/contracts": "workspace:*",
@@ -64,7 +64,7 @@
     },
     "e2e": {
       "name": "signet-e2e",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "devDependencies": {
         "@hono/node-server": "^2.0.12",
         "@playwright/test": "^1.62.1",
@@ -73,7 +73,7 @@
     },
     "packages/contracts": {
       "name": "@signet/contracts",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "dependencies": {
         "@signet/core": "workspace:*",
         "zod": "^4.4.3",
@@ -81,11 +81,11 @@
     },
     "packages/core": {
       "name": "@signet/core",
-      "version": "0.1.0",
+      "version": "1.0.0",
     },
     "packages/db": {
       "name": "@signet/db",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "dependencies": {
         "@signet/core": "workspace:*",
         "drizzle-orm": "^0.45.2",

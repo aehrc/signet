@@ -6,7 +6,7 @@
 # See README.md in this directory for what every value below controls.
 
 signet:
-  image: "ghcr.io/aehrc/signet:0.1.0"
+  image: "ghcr.io/aehrc/signet:1.0.0"
   imagePullPolicy: "Always"
   imagePullSecrets: []
   replicas: 2

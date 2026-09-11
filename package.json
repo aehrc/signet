@@ -1,5 +1,6 @@
 {
   "name": "signet",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Multi-tenant SMART on FHIR authorization server",
