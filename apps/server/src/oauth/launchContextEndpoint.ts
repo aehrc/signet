@@ -104,7 +104,7 @@ function credentialsFromJson(body: LaunchContextBody): FormBody {
 export function launchContextHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     if (!issuerContext.endpoint.supportsEhrLaunch) {
       return c.json(

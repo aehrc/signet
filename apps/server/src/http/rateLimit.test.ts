@@ -14,14 +14,19 @@ import { createRateLimitStore, rateLimit, RATE_LIMITS } from "./rateLimit.js";
 
 import type { RateLimitName } from "./rateLimit.js";
 
-/** An app with one limited route, and a clock the test controls. */
+/**
+ * An app with one limited route, and a clock the test controls.
+ *
+ * The limiter is configured as if one proxy stands in front, which is what the
+ * `x-forwarded-for` headers below simulate.
+ */
 function limitedApp(name: RateLimitName) {
   let now = new Date("2026-01-01T00:00:00Z");
   const store = createRateLimitStore();
   const app = new Hono();
   app.use(
     "/thing",
-    rateLimit(name, () => now, store),
+    rateLimit(name, () => now, store, 1),
   );
   app.get("/thing", (c) => c.json({ ok: true }));
 
@@ -103,11 +108,11 @@ describe("rateLimit", () => {
     const app = new Hono();
     app.use(
       "/sign-in",
-      rateLimit("signIn", () => now, store),
+      rateLimit("signIn", () => now, store, 1),
     );
     app.use(
       "/token",
-      rateLimit("token", () => now, store),
+      rateLimit("token", () => now, store, 1),
     );
     app.get("/sign-in", (c) => c.json({ ok: true }));
     app.get("/token", (c) => c.json({ ok: true }));
@@ -129,7 +134,7 @@ describe("rateLimit", () => {
     const app = new Hono();
     app.use(
       "/thing",
-      rateLimit("signIn", () => now, store),
+      rateLimit("signIn", () => now, store, 1),
     );
     app.get("/thing", (c) => c.json({ ok: true }));
 
@@ -139,6 +144,36 @@ describe("rateLimit", () => {
       await app.request("/thing");
     }
     expect((await app.request("/thing")).status).toBe(429);
+    now = new Date(now);
+  });
+
+  it("ignores X-Forwarded-For when no proxy is trusted", async () => {
+    // The default configuration trusts no proxy, so the header cannot pick a
+    // bucket: every caller collapses into the same one and the header value is
+    // never the key.
+    let now = new Date("2026-01-01T00:00:00Z");
+    const store = createRateLimitStore();
+    const app = new Hono();
+    app.use(
+      "/thing",
+      rateLimit("signIn", () => now, store, 0),
+    );
+    app.get("/thing", (c) => c.json({ ok: true }));
+
+    for (let index = 0; index < RATE_LIMITS.signIn.limit; index += 1) {
+      await app.request("/thing", {
+        headers: { "x-forwarded-for": "203.0.113.7" },
+      });
+    }
+    // A "different" address, distinguished only by the caller's own header,
+    // shares the exhausted bucket.
+    expect(
+      (
+        await app.request("/thing", {
+          headers: { "x-forwarded-for": "198.51.100.4" },
+        })
+      ).status,
+    ).toBe(429);
     now = new Date(now);
   });
 });

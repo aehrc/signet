@@ -167,6 +167,8 @@ export interface TestStackOptions {
   readonly allowPrivateOutboundFetches?: boolean;
   /** Applies the real rate limits, for the suite that asserts on them. */
   readonly rateLimits?: "enforced" | "unlimited";
+  /** How many proxies the stack believes stand in front of it. */
+  readonly trustedProxyCount?: number;
 }
 
 /** Every scope the fixture clients are permitted to request. */
@@ -430,6 +432,7 @@ export async function createTestStack(
       // its stub identity provider is a loopback server and the guard exists to
       // refuse exactly that.
       allowPrivateOutboundFetches: options.allowPrivateOutboundFetches ?? false,
+      trustedProxyCount: options.trustedProxyCount ?? 0,
     },
     db,
     // Audit failures are surfaced rather than swallowed: a suite that silently lost

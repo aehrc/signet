@@ -33,6 +33,7 @@ function contextWith(execute: () => Promise<unknown>): ServerContext {
       logLevel: "error",
       webRoot: undefined,
       allowPrivateOutboundFetches: false,
+      trustedProxyCount: 0,
     },
     rateLimits: createUnlimitedStore(),
     jwksCache: createRemoteJwksCache(),
@@ -76,6 +77,30 @@ describe("createApp", () => {
     const response = await createApp(
       contextWith(() => Promise.resolve()),
     ).request("/nope");
+    expect(response.status).toBe(404);
+  });
+});
+
+describe("the request body limit", () => {
+  const app = createApp(contextWith(() => Promise.resolve()));
+
+  it("refuses a body larger than the cap", async () => {
+    const response = await app.request("/healthz", {
+      method: "POST",
+      body: "x".repeat(300_000),
+    });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ error: "invalid_request" });
+  });
+
+  it("admits a small body", async () => {
+    const response = await app.request("/nope", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ok: true }),
+    });
+    // The route does not exist; what matters is that the body was not the
+    // reason for the refusal.
     expect(response.status).toBe(404);
   });
 });

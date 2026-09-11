@@ -168,7 +168,7 @@ export function registerHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
     const { endpoint, tenant } = issuerContext;
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     /** Records the outcome and produces the response. */
     const audited = async (

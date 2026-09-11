@@ -51,6 +51,7 @@ import {
 } from "@signet/core";
 import {
   consumeFederationState,
+  countPendingFederationStates,
   createFederationState,
   decryptSecret,
   generateOpaqueToken,
@@ -86,6 +87,17 @@ import type { Context } from "hono";
  * enough that an abandoned sign-in is not still redeemable an hour later.
  */
 export const FEDERATION_STATE_TTL_SECONDS = 600;
+
+/**
+ * How many pending round trips one authorization session may accumulate.
+ *
+ * Each start writes a state row and triggers an upstream discovery fetch. A
+ * real sign-in never needs more than a couple - the browser reloads the start
+ * URL, or times out and comes back - so five bounds the growth an anonymous
+ * caller holding a session identifier can cause, without refusing anybody's
+ * genuine second attempt.
+ */
+export const MAX_PENDING_FEDERATION_STATES = 5;
 
 /**
  * The scopes requested upstream when an operator configured none.
@@ -221,7 +233,7 @@ async function loadSetup(
 export function federationStartHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     if (issuerContext.endpoint.authMode !== "oidc") {
       return c.json(
@@ -240,6 +252,15 @@ export function federationStartHandler(context: ServerContext) {
         getLiveAuthorizationSession(bound, c.req.query("session") ?? ""),
     );
     if (session === undefined || session.endUserId !== null) {
+      return refuseSignIn(c);
+    }
+
+    const pending = await withTenantScope(
+      context.db,
+      issuerContext.scope,
+      (bound) => countPendingFederationStates(bound, session, context.clock()),
+    );
+    if (pending >= MAX_PENDING_FEDERATION_STATES) {
       return refuseSignIn(c);
     }
 
@@ -343,11 +364,12 @@ async function pkceChallenge(verifier: string): Promise<string> {
 export function federationCallbackHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
-    const metadata = requestMetadata(c);
 
     if (issuerContext.endpoint.authMode !== "oidc") {
       return refuseSignIn(c);
     }
+
+    const metadata = requestMetadata(context, c);
 
     /** Audits the failure and answers with the one uniform refusal. */
     const fail = async (

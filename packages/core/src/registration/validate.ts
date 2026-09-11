@@ -37,6 +37,7 @@ import {
   readTrustedTokenEnvelope,
   textClaim,
 } from "../trust/claims.js";
+import { isScriptFreeUri } from "../uris.js";
 
 /**
  * How far a statement's `iat` may run ahead of Signet's clock, in seconds.
@@ -291,6 +292,8 @@ export type ClientMetadataRefusal =
   /** An interactive client with nowhere to send the code. */
   | "missing-redirect-uris"
   | "malformed-redirect-uri"
+  /** A scheme the browser executes rather than navigates to. */
+  | "unsafe-redirect-uri"
   | "too-many-redirect-uris"
   /** Absent, empty, or naming a grant Signet does not issue. */
   | "unsupported-grant-type"
@@ -406,11 +409,18 @@ function checkRedirectUris(
     );
   }
   const malformed = redirectUris.find((uri) => !isAbsoluteUri(uri));
-  return malformed === undefined
+  if (malformed !== undefined) {
+    return refuseMetadata(
+      "malformed-redirect-uri",
+      `redirect_uri ${malformed} is not an absolute URL, so it could never be matched`,
+    );
+  }
+  const unsafe = redirectUris.find((uri) => !isScriptFreeUri(uri));
+  return unsafe === undefined
     ? undefined
     : refuseMetadata(
-        "malformed-redirect-uri",
-        `redirect_uri ${malformed} is not an absolute URL, so it could never be matched`,
+        "unsafe-redirect-uri",
+        `redirect_uri ${unsafe} names a scheme the browser executes rather than navigates to`,
       );
 }
 

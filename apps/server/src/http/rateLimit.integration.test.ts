@@ -36,7 +36,10 @@ describe.skipIf(testDatabaseUrl === undefined)("the rate limits", () => {
   let stack: TestStack;
 
   beforeAll(async () => {
-    stack = await createTestStack({ rateLimits: "enforced" });
+    stack = await createTestStack({
+      rateLimits: "enforced",
+      trustedProxyCount: 1,
+    });
   });
 
   afterAll(async () => {
@@ -147,6 +150,67 @@ describe.skipIf(testDatabaseUrl === undefined)("the rate limits", () => {
       last = response.status;
     }
     expect(last).toBe(200);
+  });
+
+  it("limits /introspect, /revoke and /launch-context like the token endpoint", async () => {
+    // All three verify a client secret through the same Argon2id path /token
+    // uses, so secret guessing pays there exactly as it does at /token.
+    for (const route of ["/introspect", "/revoke", "/launch-context"]) {
+      let last = 0;
+      for (let index = 0; index < RATE_LIMITS.token.limit + 1; index += 1) {
+        const response = await postForm(
+          stack,
+          route,
+          { token: "nope", client_id: "nope", client_secret: "nope" },
+          { "x-forwarded-for": `203.0.113.2${route.length}` },
+        );
+        last = response.status;
+      }
+      expect(last).toBe(429);
+    }
+  });
+
+  it("limits anonymous client registration requests", async () => {
+    let last = 0;
+    for (
+      let index = 0;
+      index < RATE_LIMITS.clientRequest.limit + 1;
+      index += 1
+    ) {
+      const response = await stack.app.request(
+        `${issuerPath(stack)}/apps/requests`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-forwarded-for": "203.0.113.21",
+          },
+          body: JSON.stringify({
+            name: "Queue Filler",
+            clientType: "public",
+            redirectUris: ["https://app.example.org/callback"],
+            requestedScopes: ["openid"],
+            contactEmail: "dev@example.org",
+          }),
+        },
+      );
+      last = response.status;
+    }
+    expect(last).toBe(429);
+  });
+
+  it("limits the federation round trip", async () => {
+    // The limiter is attached ahead of the handler, so it fires on an endpoint
+    // that does not even federate - the posture /register already takes.
+    let last = 0;
+    for (let index = 0; index < RATE_LIMITS.federation.limit + 1; index += 1) {
+      const response = await stack.app.request(
+        `${issuerPath(stack)}/federation/start`,
+        { headers: { "x-forwarded-for": "203.0.113.22" } },
+      );
+      last = response.status;
+    }
+    expect(last).toBe(429);
   });
 
   it("does not limit the admin API's reads", async () => {

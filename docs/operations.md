@@ -601,12 +601,15 @@ that is worth knowing:
 
 ### What to put in front of it
 
-Signet expects to be behind something that terminates TLS and sets
-`X-Forwarded-For`. Two consequences:
+Signet expects to be behind something that terminates TLS. Two consequences:
 
-- **Strip inbound `X-Forwarded-For`.** Signet reads it for the audit trail and for
-  rate-limit keys, so an ingress that passes a client-supplied value through lets
-  a caller choose both.
+- **Declare your proxies.** Set `SIGNET_TRUSTED_PROXY_COUNT` to the number of
+  proxies that sit between Signet and the caller, each appending to
+  `X-Forwarded-For`. Signet reads that header for the audit trail and for
+  rate-limit keys, and trusts it only that far back: with the default of zero it
+  is ignored entirely and the socket address is used, so a value a caller wrote
+  never reaches either. Count the proxies that append to the header, not every
+  layer in front.
 - **Rate limiting is per process.** With `n` replicas the effective limit is up to
   `n` times what is configured. It is there to defeat online guessing, which a
   small integer factor does not rescue; a deployment that needs an exact global

@@ -29,17 +29,18 @@
  * usernames to stay under the limit, and keying on a client identifier would let
  * an unauthenticated caller exhaust another client's allowance by naming it.
  *
- * The address comes from `requestMetadata`, which reads `X-Forwarded-For` - so a
- * deployment that does not strip that header at its ingress is one where a caller
- * chooses their own key. That is true of the audit trail too, and is documented
- * where the header is read.
+ * The address comes from `requestMetadata`, which reads `X-Forwarded-For` only as
+ * far as the deployment's `SIGNET_TRUSTED_PROXY_COUNT` says it may: with the
+ * default of zero, the header is ignored entirely and the socket address is the
+ * key. A deployment that puts proxies in front declares how many, and the limiter
+ * keys on the address those proxies observed. See `./requestMeta.js`.
  *
  * Author: John Grimes
  */
 
 import { admitRequest, isWindowStale } from "@signet/core";
 
-import { requestMetadata } from "./requestMeta.js";
+import { requestAddress } from "./requestMeta.js";
 
 import type { WindowLimit, WindowState } from "@signet/core";
 import type { Context, MiddlewareHandler } from "hono";
@@ -80,6 +81,23 @@ export const RATE_LIMITS = {
    * unlimited route would offer against the anchor.
    */
   register: { limit: 30, windowMs: 60_000 },
+  /**
+   * The developer portal's self-serve request queue.
+   *
+   * Every call is anonymous and writes a request row and an audit event, so an
+   * unbounded caller is an unbounded write to the database. Ten a minute is more
+   * than a developer submitting one application needs.
+   */
+  clientRequest: { limit: 10, windowMs: 60_000 },
+  /**
+   * The upstream sign-in round trip.
+   *
+   * `start` triggers an outbound discovery fetch and a state row per call, which
+   * is an amplifier pointed at the configured provider; the callback claims a
+   * state and is a browser navigation a real user performs once. Thirty a minute
+   * per address is far above any real user's traffic.
+   */
+  federation: { limit: 30, windowMs: 60_000 },
 } as const satisfies Readonly<Record<string, WindowLimit>>;
 
 /** Which limit a route is under. */
@@ -159,9 +177,9 @@ export function createUnlimitedStore(): RateLimitStore {
  * exempting them.
  *
  * The route is the *matched pattern*, `…/interaction/:sessionId/login`, and never
- * the requested path. A key built from the path would contain the session
- * identifier, and an attacker who can start sessions could then start a new one
- * per guess and never meet the limit at all - the same defeat as putting a
+  const route = c.req.routePath;
+  return `${name}:${route}:${requestAddress(c, trustedProxyCount) ?? "unknown"}`;
+}
  * username in the key, reached by a different route.
  *
  * The route belongs in the key for the reason the limit name alone does not
@@ -172,9 +190,13 @@ export function createUnlimitedStore(): RateLimitStore {
  * and `rateLimit.integration.test.ts` asserts both halves of that - the surfaces
  * do not exhaust one another, and each still runs out on its own.
  */
-function rateLimitKey(c: Context, name: RateLimitName): string {
+function rateLimitKey(
+  c: Context,
+  name: RateLimitName,
+  trustedProxyCount: number,
+): string {
   const route = c.req.routePath;
-  return `${name}:${route}:${requestMetadata(c).ip ?? "unknown"}`;
+  return `${name}:${route}:${requestAddress(c, trustedProxyCount) ?? "unknown"}`;
 }
 
 /** How a refusal is worded on an OAuth endpoint. */
@@ -197,16 +219,23 @@ const REFUSAL = {
  * @param name - Which limit to apply.
  * @param clock - Reads the current time. Injected so tests need no real one.
  * @param store - The counters to use. One per application; see `ServerContext`.
+ * @param trustedProxyCount - How many proxies append to `X-Forwarded-For`, which
+ *   is what the limiter keys addresses by. See `./requestMeta.js`.
  */
 export function rateLimit(
   name: RateLimitName,
   clock: () => Date,
   store: RateLimitStore,
+  trustedProxyCount: number,
 ): MiddlewareHandler {
   const limit = RATE_LIMITS[name];
   return async (c, next) => {
     const now = clock().getTime();
-    const decision = store.check(rateLimitKey(c, name), now, limit);
+    const decision = store.check(
+      rateLimitKey(c, name, trustedProxyCount),
+      now,
+      limit,
+    );
 
     c.header("RateLimit-Limit", String(limit.limit));
     c.header("RateLimit-Remaining", String(decision.remaining));

@@ -51,7 +51,7 @@ export function tokenHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
     const { endpoint, tenant } = issuerContext;
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     const body = await c.req.parseBody();
     const clientId = formField(body, "client_id");

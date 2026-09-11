@@ -54,7 +54,7 @@ import type { Context } from "hono";
 export function revokeHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     const request = await readTokenRequest(c, context);
     if (request instanceof Response) {

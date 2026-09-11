@@ -53,7 +53,11 @@ import {
 import { recordAdminEvent } from "./auditTrail.js";
 import { requireRole } from "./authentication.js";
 import { generateClientId, generateClientSecret } from "./credentials.js";
-import { adminErrorBody, statusForAdminError } from "./errors.js";
+import {
+  adminErrorBody,
+  issuesFromZodError,
+  statusForAdminError,
+} from "./errors.js";
 import { ENDPOINT_PATH } from "./paths.js";
 import { principalAdminUserId } from "./principal.js";
 import { definedFields, parseBody } from "./requestBody.js";
@@ -527,17 +531,32 @@ export function registerClientRoutes(
       };
       const desired = body.client ?? asRequested;
 
-      if (!endpointAllowsClientType(endpoint, desired.clientType)) {
+      // A payload stored before the contract refused script-executing schemes
+      // reaches its last gate here: approval is what turns it into a client, and
+      // the redirect URIs it carries are followed by the user's browser.
+      const checked = clientCreateSchema.safeParse(desired);
+      if (!checked.success) {
         return c.json(
           adminErrorBody(
             "invalid_request",
-            `This endpoint does not allow ${desired.clientType} clients`,
+            "The registration request is not valid",
+            issuesFromZodError(checked.error),
           ),
           statusForAdminError("invalid_request"),
         );
       }
 
-      const prepared = await prepareClient(desired);
+      if (!endpointAllowsClientType(endpoint, checked.data.clientType)) {
+        return c.json(
+          adminErrorBody(
+            "invalid_request",
+            `This endpoint does not allow ${checked.data.clientType} clients`,
+          ),
+          statusForAdminError("invalid_request"),
+        );
+      }
+
+      const prepared = await prepareClient(checked.data);
       const decision = await withTenantScope(context.db, scope, (bound) =>
         approveClientRequest(
           bound,

@@ -166,7 +166,7 @@ export function manageSignInHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
     const { endpoint } = issuerContext;
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     const body = await readEndUserCredentials(c);
 
@@ -379,7 +379,7 @@ function issuedTokenView(token: {
 export function manageRevokeHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
     const authenticated = await authenticate(c, context, issuerContext);
     if (authenticated instanceof Response) {
       return authenticated;

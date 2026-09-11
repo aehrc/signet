@@ -31,22 +31,23 @@
  *    document.
  *
  * **The residual risk.** Between resolving the name and connecting, the DNS
- * answer can change - DNS rebinding. Closing that window entirely requires
- * pinning the connection to the address that was checked, which means replacing
- * the HTTP agent's socket factory rather than using `fetch`. Signet accepts the
- * window, and the reasons are worth stating: the responses fetched here are
- * verified independently of where they came from (a JWKS is only useful if it
- * verifies a signature the client also produced), the attacker must already
- * control a registered `jwks_uri`, and the response body is never reflected to
- * the requester. A deployment that needs the stronger guarantee should place an
- * egress proxy in front of Signet, which is the control that actually holds.
+ * answer could change - DNS rebinding. The window is closed rather than accepted:
+ * the transport the request goes over resolves through {@link pinnedLookup},
+ * which hands the socket exactly the addresses the guard validated, so the
+ * connection is made to an address that was checked and never to a fresh answer
+ * from a rebinding server. The redirect refusal and the address classifier above
+ * are what make the pinned set safe to trust.
  *
  * Author: John Grimes
  */
 
 import { lookup } from "node:dns/promises";
+import { Agent, fetch as undiciFetch } from "undici";
 
 import { isFetchableAddress } from "./addresses.js";
+
+import type { LookupAddress } from "node:dns";
+import type { LookupFunction } from "node:net";
 
 /** Why an outbound request was refused. */
 export type OutboundRefusal =
@@ -82,7 +83,6 @@ export type OutboundResult<T> =
 /** Resolves a hostname to every address it names. Injected so tests need no DNS. */
 export type AddressResolver = (hostname: string) => Promise<readonly string[]>;
 
-/** How a guarded fetch should behave. */
 export interface OutboundFetchOptions {
   /**
    * Permits plain HTTP and private addresses.
@@ -99,13 +99,24 @@ export interface OutboundFetchOptions {
   readonly maxBytes?: number;
   readonly resolve?: AddressResolver;
   /**
+   * Overrides how the transport is bound to the addresses the guard validated.
+   *
+   * For the tests: the default factory builds a transport whose connections can
+   * only be made to the validated addresses, which cannot be observed without a
+   * public host to bind. A test injects this to capture the set it is given.
+   */
+  readonly pinnedTransport?: (
+    addresses: readonly string[],
+  ) => OutboundTransport;
+  /**
    * The transport, for the tests.
    *
    * The one call this module makes, rather than `typeof fetch`: the global carries
    * runtime-specific extras - `preconnect` under Bun's types, absent under Node's -
    * and a stub would have to grow them for no reason but to satisfy a signature.
+   * Takes precedence over pinning, which is why no production caller passes it.
    */
-  readonly fetchImpl?: (input: URL, init: RequestInit) => Promise<Response>;
+  readonly fetchImpl?: OutboundTransport;
   /**
    * Sends a form-encoded POST instead of a GET.
    *
@@ -124,6 +135,12 @@ export interface OutboundFetchOptions {
    */
   readonly headers?: Readonly<Record<string, string>>;
 }
+
+/** A transport a guarded request is made over. */
+export type OutboundTransport = (
+  input: URL,
+  init: RequestInit,
+) => Promise<Response>;
 
 /** Ten seconds: long enough for a slow JWKS host, short enough not to pile up. */
 export const DEFAULT_OUTBOUND_TIMEOUT_MS = 10_000;
@@ -222,6 +239,62 @@ async function systemResolve(hostname: string): Promise<readonly string[]> {
 }
 
 /**
+ * The lookup a pinned connection resolves through: it hands the socket exactly
+ * the addresses the guard validated, and nothing else.
+ *
+ * `fetch` resolves a hostname again when it opens its connection, which is the
+ * gap a rebinding DNS server walks through - validated once, connected elsewhere.
+ * Giving the connection this lookup closes it: the question "what does the name
+ * point at now" is never asked, because the socket is told where to go.
+ *
+ * @param addresses - The addresses {@link fetchGuardedJson} validated.
+ * @returns A `node:dns` lookup function, as the transport's connector expects.
+ */
+export function pinnedLookup(addresses: readonly string[]): LookupFunction {
+  return (_hostname: string, _options, callback): void => {
+    if (addresses.length === 0) {
+      callback(new Error("no validated addresses"), "");
+      return;
+    }
+    callback(
+      null,
+      addresses.map((address): LookupAddress => ({
+        address,
+        family: address.includes(":") ? 6 : 4,
+      })),
+    );
+  };
+}
+
+/**
+ * The default pinned transport: an HTTP client whose connections resolve through
+ * {@link pinnedLookup} over the validated addresses.
+ *
+ * The dispatcher is built per request rather than shared, because the validated
+ * addresses belong to this request's hostname. Idle pooled connections are
+ * reclaimed by the client's keep-alive timeout.
+ *
+ * @param addresses - The addresses the guard validated.
+ */
+export function pinnedTransport(
+  addresses: readonly string[],
+): OutboundTransport {
+  const agent = new Agent({ connect: { lookup: pinnedLookup(addresses) } });
+  return async (input, init) => {
+    // undici's `Response` and the DOM one are structurally the same object in
+    // every way this module reads - `ok`, `status`, and a streaming `body`.
+    const requestInit = { ...init, dispatcher: agent } as Parameters<
+      typeof undiciFetch
+    >[1];
+    const response = (await undiciFetch(
+      input,
+      requestInit,
+    )) as unknown as Response;
+    return response;
+  };
+}
+
+/**
  * Reads a response body, refusing one that exceeds the byte limit.
  *
  * Streamed rather than buffered through `response.text()`, so an oversized body
@@ -283,7 +356,10 @@ export async function fetchGuardedJson<T = unknown>(
 
   const resolver = options.resolve ?? systemResolve;
   const maxBytes = options.maxBytes ?? DEFAULT_OUTBOUND_MAX_BYTES;
-  const doFetch = options.fetchImpl ?? fetch;
+
+  // The addresses the request may be connected to. Undefined means no
+  // validated set exists - the guard is off, and the plain transport is right.
+  let validated: readonly string[] | undefined;
 
   if (!allowPrivate) {
     let addresses: readonly string[];
@@ -311,8 +387,15 @@ export async function fetchGuardedJson<T = unknown>(
         `${check.url.hostname} resolves to ${blocked}, which is not publicly routable`,
       );
     }
+    validated = addresses;
   }
 
+  const doFetch =
+    validated === undefined
+      ? (options.fetchImpl ?? fetch)
+      : (options.pinnedTransport?.(validated) ??
+        options.fetchImpl ??
+        pinnedTransport(validated));
   let response: Response;
   try {
     response = await doFetch(check.url, {

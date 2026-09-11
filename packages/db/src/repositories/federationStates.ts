@@ -84,6 +84,36 @@ export async function createFederationState(
   return requireRow(rows, "insert into federation_states");
 }
 
+/**
+ * Counts a session's unconsumed, unexpired round trips.
+ *
+ * Starting a round trip writes a row and, where the endpoint federates, costs an
+ * outbound discovery fetch. The caller caps these per session, because the start
+ * URL is reachable by anyone and the rows would otherwise grow without bound
+ * until the session itself expires.
+ *
+ * @param scope - The endpoint the session belongs to.
+ * @param session - The authorization the sign-in is part of.
+ * @param now - The instant expiry is judged against.
+ */
+export async function countPendingFederationStates(
+  scope: BoundEndpointScope,
+  session: AuthorizationSession,
+  now: Date,
+): Promise<number> {
+  const rows = await executorFor(scope)
+    .select({ id: federationStates.id })
+    .from(federationStates)
+    .where(
+      and(
+        eq(federationStates.sessionId, session.id),
+        isNull(federationStates.consumedAt),
+        gt(federationStates.expiresAt, now),
+      ),
+    );
+  return rows.length;
+}
+
 /** A claimed round trip and the authorization it belongs to. */
 export interface ClaimedFederationState {
   readonly state: FederationState;

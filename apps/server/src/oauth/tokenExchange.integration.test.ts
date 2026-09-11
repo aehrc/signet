@@ -322,6 +322,21 @@ describeWithDatabase("permission ticket exchange", () => {
       expect(claims["client_id"]).toBe(stack.symmetricClient.clientId);
     });
 
+    it("exchanges a ticket once and refuses the second attempt", async () => {
+      // A ticket is a bearer credential naming a patient: whoever holds one
+      // could re-exchange it for a fresh token until it expired unless the
+      // ledger refused the second presentation, as the client assertion
+      // ledger already refuses a replayed statement.
+      const subjectToken = await mintTicket();
+      const first = await exchangeTicket({ subjectToken });
+      expect(first.status).toBe(200);
+
+      const replayed = await exchangeTicket({ subjectToken });
+      expect(replayed.status).toBe(400);
+      expect(replayed.body.error).toBe("invalid_grant");
+      expect(replayed.body.access_token).toBeUndefined();
+    });
+
     it("resolves the ticket's subject to the patient in the token's context", async () => {
       const exchanged = await exchangeTicket();
 

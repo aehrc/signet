@@ -330,7 +330,7 @@ export function adminPasskeyRegisterHandler(context: ServerContext) {
 
     await recordAuthenticationEvent(
       context,
-      requestMetadata(c),
+      requestMetadata(context, c),
       principal.user,
       "admin.passkey-registered",
       { passkeyId: stored.passkey.id, name: stored.passkey.name },
@@ -368,7 +368,7 @@ export function adminPasskeyRemoveHandler(context: ServerContext) {
 
     await recordAuthenticationEvent(
       context,
-      requestMetadata(c),
+      requestMetadata(context, c),
       principal.user,
       "admin.passkey-removed",
       { passkeyId },
@@ -423,7 +423,7 @@ export function adminPasskeySignInOptionsHandler(context: ServerContext) {
  */
 export function adminPasskeySignInHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
     const body = await parseBody(c, passkeyAuthenticationSchema);
     if (body instanceof Response) {
       return body;

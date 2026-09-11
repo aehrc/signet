@@ -63,6 +63,7 @@ import {
 } from "@signet/core";
 import {
   getEndpointTicketIssuer,
+  recordJti,
   toEvaluationClient,
   withTenantScope,
 } from "@signet/db";
@@ -204,6 +205,21 @@ export async function tokenExchangeGrant(
     ticketId: ticket.ticketId,
     ticketType: ticket.ticketType,
   };
+
+  // The ticket is a bearer credential naming a patient, so its identifier is
+  // spent like a client assertion's: booked in the ledger against the client
+  // presenting it, until the ticket itself expires. A second presentation
+  // finds the row and is refused, whatever the caller's clock says.
+  const booked = await withTenantScope(context.db, scope, (bound) =>
+    recordJti(bound, ticket.ticketId, ticket.expiresAt),
+  );
+  if (booked.status === "already-seen") {
+    return await refuse(
+      "invalid_grant",
+      "The permission ticket has already been exchanged",
+      identity,
+    );
+  }
 
   const resolved = await resolveTicketSubject(context, {
     issuerContext,

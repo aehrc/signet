@@ -18,7 +18,7 @@
 
 import { z } from "zod";
 
-import { redirectUriSchema } from "../primitives.js";
+import { redirectUriSchema, webUriSchema } from "../primitives.js";
 
 /** How a client authenticates, or that it cannot. */
 export const clientTypeSchema = z.enum([
@@ -51,9 +51,9 @@ export const jwksSchema = z.object({
 const clientFieldsSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).nullish(),
-  logoUrl: z.string().url().max(2048).nullish(),
+  logoUrl: webUriSchema.nullish(),
   redirectUris: z.array(redirectUriSchema).max(20).optional(),
-  launchUri: z.string().url().max(2048).nullish(),
+  launchUri: webUriSchema.nullish(),
   grantTypes: z.array(grantTypeSchema).min(1).max(3).optional(),
   allowedScopes: z.array(z.string().max(256)).max(200).optional(),
   contactEmail: z.string().max(320).nullish(),
@@ -165,10 +165,10 @@ export const clientSecretRotationSchema = z.object({
 export const clientRequestSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
-  logoUrl: z.string().url().max(2048).optional(),
+  logoUrl: webUriSchema.optional(),
   clientType: clientTypeSchema,
   redirectUris: z.array(redirectUriSchema).max(20),
-  launchUri: z.string().url().max(2048).optional(),
+  launchUri: webUriSchema.optional(),
   requestedScopes: z.array(z.string().max(256)).max(200),
   contactEmail: z.string().min(3).max(320),
   note: z.string().max(2000).optional(),

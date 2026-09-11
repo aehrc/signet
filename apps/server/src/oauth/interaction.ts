@@ -458,7 +458,7 @@ async function loadSessionForUser(
 export function interactionStateHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
     const loaded = await loadSessionForRead(
       c,
       context,
@@ -529,7 +529,7 @@ export function interactionLoginHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
     const { endpoint } = issuerContext;
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     const loaded = await loadSessionForRead(
       c,
@@ -592,7 +592,7 @@ export function interactionLoginHandler(context: ServerContext) {
 export function interactionContextHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     const loaded = await loadSessionForUser(
       c,
@@ -678,7 +678,7 @@ export function interactionConsentHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
     const { endpoint } = issuerContext;
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     const loaded = await loadSessionForUser(
       c,

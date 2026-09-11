@@ -43,6 +43,18 @@ export interface SignetConfig {
    * the guard is off. Never set it in production.
    */
   readonly allowPrivateOutboundFetches: boolean;
+  /**
+   * How many proxies stand between Signet and the caller, each appending to
+   * `X-Forwarded-For`.
+   *
+   * The header is how the audit trail and the rate limiter learn an address, and
+   * every entry a caller can write is one they choose. Only the entries appended
+   * by the trusted proxies carry provenance, so the address is read from exactly
+   * that far back - and when the chain is shorter than the count, or the count is
+   * zero, the socket address is used instead. Default zero: a deployment that
+   * says nothing gets the socket address, not whatever the caller wrote.
+   */
+  readonly trustedProxyCount: number;
 }
 
 /** Thrown when the environment cannot produce a usable configuration. */
@@ -433,5 +445,33 @@ export function loadConfig(env: Environment): SignetConfig {
       env,
       "SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES",
     ),
+    trustedProxyCount: readNonNegativeInteger(
+      env,
+      "SIGNET_TRUSTED_PROXY_COUNT",
+    ),
   };
+}
+
+/**
+ * Reads a non-negative integer, refusing anything else rather than defaulting.
+ *
+ * @param env - The environment to read.
+ * @param name - The variable's name, for the error message.
+ * @returns The value, or zero when the variable is absent.
+ * @throws {ConfigError} When the variable is present but not a non-negative
+ *   integer. A typo that silently read as zero would leave the limiter keying on
+ *   the socket address of a proxy that forwards client-chosen addresses, which is
+ *   the failure mode to avoid.
+ */
+function readNonNegativeInteger(env: Environment, name: string): number {
+  const value = read(env, name);
+  if (value === undefined) {
+    return 0;
+  }
+  if (!/^\d+$/.test(value)) {
+    throw new ConfigError(
+      `${name} must be a non-negative integer, got "${value}"`,
+    );
+  }
+  return Number(value);
 }

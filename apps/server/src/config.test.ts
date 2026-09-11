@@ -36,6 +36,7 @@ describe("loadConfig - defaults", () => {
       publicUrl: "https://signet.example.org",
       databaseUrl: "postgres://u:p@db:5432/signet",
       masterKey: MASTER_KEY,
+      trustedProxyCount: 0,
       logLevel: "info",
       webRoot: undefined,
       allowPrivateOutboundFetches: false,
@@ -517,5 +518,29 @@ describe("loadConfig - log level", () => {
     expect(() => loadConfig(env({ SIGNET_LOG_LEVEL: "verbose" }))).toThrow(
       /must be one of/,
     );
+  });
+});
+
+describe("loadConfig - trusted proxy count", () => {
+  it("trusts no proxy by default", () => {
+    expect(loadConfig(env()).trustedProxyCount).toBe(0);
+  });
+
+  it("reads the count of proxies in front", () => {
+    expect(
+      loadConfig(env({ SIGNET_TRUSTED_PROXY_COUNT: "2" })).trustedProxyCount,
+    ).toBe(2);
+  });
+
+  it("rejects a value that is not a non-negative integer", () => {
+    expect(() => loadConfig(env({ SIGNET_TRUSTED_PROXY_COUNT: "-1" }))).toThrow(
+      ConfigError,
+    );
+    expect(() =>
+      loadConfig(env({ SIGNET_TRUSTED_PROXY_COUNT: "one" })),
+    ).toThrow(ConfigError);
+    expect(() =>
+      loadConfig(env({ SIGNET_TRUSTED_PROXY_COUNT: "1.5" })),
+    ).toThrow(ConfigError);
   });
 });

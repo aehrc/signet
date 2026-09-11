@@ -92,6 +92,26 @@ describe("matchRedirectUri", () => {
     });
   });
 
+  it("refuses a script-executing scheme even when it is registered", () => {
+    // A registration recorded before the contract refused these schemes must not
+    // be revived by the exact-string match.
+    const registered = ["javascript:alert(document.cookie)"];
+    expect(
+      matchRedirectUri(
+        "javascript:alert(document.cookie)",
+        registered,
+        "public",
+      ).ok,
+    ).toBe(false);
+    expect(
+      matchRedirectUri(
+        "data:text/html,<script>alert(1)</script>",
+        ["data:text/html,<script>alert(1)</script>"],
+        "public",
+      ).ok,
+    ).toBe(false);
+  });
+
   it("matches a custom scheme exactly", () => {
     const registered = ["org.example.app:/oauth"];
     expect(

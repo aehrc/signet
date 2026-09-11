@@ -83,7 +83,7 @@ export function submitClientRequestHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
     const { endpoint } = issuerContext;
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     if (!endpoint.supportsDynamicRegistration) {
       return notAccepted(c);

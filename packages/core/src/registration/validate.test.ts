@@ -284,6 +284,21 @@ describe("extractVouchedClientMetadata", () => {
     ).toBe("malformed-redirect-uri");
   });
 
+  it("refuses a redirect URI whose scheme the browser executes", () => {
+    // The anchor vouches for the metadata's origin, not for its safety: a
+    // statement naming a `javascript:` redirect would put attacker script on the
+    // Signet origin the moment a user authorized the app it registers.
+    expect(
+      refusalOf(
+        extractVouchedClientMetadata(
+          metadataClaims({
+            redirect_uris: ["javascript:alert(document.cookie)"],
+          }),
+        ),
+      ),
+    ).toBe("unsafe-redirect-uri");
+  });
+
   it("refuses more redirect URIs than a registration may carry", () => {
     const many = Array.from(
       { length: 21 },

@@ -30,6 +30,8 @@
  * Author: John Grimes
  */
 
+import { isScriptFreeUri } from "@signet/core";
+
 import type { ClientType } from "@signet/core";
 
 /** Hostnames RFC 8252 designates for a native app's loopback listener. */
@@ -138,6 +140,12 @@ export function matchRedirectUri(
   // match here: normalising first would reintroduce the ambiguity this check
   // exists to remove.
   if (registered.includes(presented)) {
+    // A registration recorded before the contract refused script-executing
+    // schemes must not be revived by the exact-string match: following it would
+    // run attacker script on Signet's own origin, where the user's session is.
+    if (!isScriptFreeUri(presented)) {
+      return { ok: false, reason: "no-match" };
+    }
     return { ok: true, redirectUri: presented, loopback: false };
   }
 

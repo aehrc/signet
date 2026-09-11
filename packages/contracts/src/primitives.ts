@@ -7,6 +7,7 @@
  * Author: John Grimes
  */
 
+import { isRegisterableRedirectUri, isWebUri } from "@signet/core";
 import { z } from "zod";
 
 /**
@@ -48,8 +49,31 @@ export const fhirIdSchema = z.string().regex(/^[A-Za-z0-9\-.]{1,64}$/);
 /** A space-delimited OAuth scope parameter value. */
 export const scopeStringSchema = z.string().max(8192);
 
-/** An OAuth redirect URI. Matched exactly at the authorize endpoint. */
-export const redirectUriSchema = z.string().url().max(2048);
+/**
+ * An OAuth redirect URI. Matched exactly at the authorize endpoint.
+ *
+ * `https`, plain `http` on an RFC 8252 loopback address, and private-use schemes
+ * - what a native app registers - are accepted; the judgement itself lives in
+ * `@signet/core`, which the redirect match at `/authorize` shares.
+ */
+export const redirectUriSchema = z
+  .string()
+  .url()
+  .max(2048)
+  .refine(isRegisterableRedirectUri, {
+    message:
+      "Must be https, http on a loopback address, or a private-use scheme",
+  });
+
+/**
+ * A URL a browser is sent to or renders, such as an app's launch URI or logo.
+ *
+ * Unlike a redirect URI this names a page or resource elsewhere, so plain `http`
+ * is accepted; script-executing schemes are not.
+ */
+export const webUriSchema = z.string().url().max(2048).refine(isWebUri, {
+  message: "Must be an http or https URL",
+});
 
 export type Slug = z.infer<typeof slugSchema>;
 export type FhirUserReference = z.infer<typeof fhirUserReferenceSchema>;

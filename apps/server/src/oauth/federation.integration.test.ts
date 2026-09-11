@@ -35,6 +35,7 @@ import {
   it,
 } from "bun:test";
 
+import { MAX_PENDING_FEDERATION_STATES } from "./federation.js";
 import { adminRequest, endpointPath, tenantPath } from "../test/adminApi.js";
 import { issuerPath, pkcePair, startAuthorization } from "../test/flows.js";
 import { createTestStack, testDatabaseUrl } from "../test/harness.js";
@@ -368,6 +369,27 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
       `${issuerPath(stack)}/federation/start?session=${started.session}`,
     );
     expect(again.status).toBe(400);
+  });
+
+  it("caps the pending round trips one session may accumulate", async () => {
+    // Each start writes a state row and, when it reaches the provider, costs a
+    // discovery fetch. Without a cap, an anonymous caller holding a session id
+    // grows the table and hammers the provider until the session expires.
+    const session = await startAuthorization(stack, {
+      clientId: stack.publicClient.clientId,
+      scope: "openid fhirUser",
+      challenge: (await pkcePair()).challenge,
+    });
+    for (let index = 0; index < MAX_PENDING_FEDERATION_STATES; index += 1) {
+      const response = await stack.app.request(
+        `${issuerPath(stack)}/federation/start?session=${session}`,
+      );
+      expect(response.status).toBe(302);
+    }
+    const extra = await stack.app.request(
+      `${issuerPath(stack)}/federation/start?session=${session}`,
+    );
+    expect(extra.status).toBe(400);
   });
 
   it("tells the login page which provider to send people to", async () => {

@@ -12,6 +12,7 @@ import { describe, expect, it, mock } from "bun:test";
 import {
   checkOutboundUrl,
   fetchGuardedJson,
+  pinnedLookup,
   DEFAULT_OUTBOUND_MAX_BYTES,
 } from "./outboundFetch.js";
 
@@ -224,5 +225,46 @@ describe("fetchGuardedJson", () => {
         )) as unknown as typeof fetch,
     });
     expect(result).toMatchObject({ reason: "not-json" });
+  });
+});
+
+describe("the pinned transport", () => {
+  it("is handed exactly the addresses the guard validated", async () => {
+    let pinned: readonly string[] = [];
+    const result = await fetchGuardedJson("https://app.example.org/jwks", {
+      resolve: () => Promise.resolve(["93.184.216.34", "104.16.132.229"]),
+      pinnedTransport: (addresses) => {
+        pinned = [...addresses];
+        return jsonFetch({ keys: [] });
+      },
+    });
+    expect(result).toEqual({ ok: true, value: { keys: [] } });
+    expect(pinned).toEqual(["93.184.216.34", "104.16.132.229"]);
+  });
+
+  it("pins the socket to the validated address", () => {
+    // The lookup the socket connects through hands over the validated
+    // addresses and nothing else: a rebinding answer that arrives after the
+    // validation never reaches the connection.
+    const lookup = pinnedLookup(["93.184.216.34", "2606:2800:220:1::1"]);
+    lookup("app.example.org", {}, (error, addresses) => {
+      expect(error).toBeNull();
+      expect(addresses).toEqual([
+        { address: "93.184.216.34", family: 4 },
+        { address: "2606:2800:220:1::1", family: 6 },
+      ]);
+    });
+  });
+
+  it("is not used when private addresses are allowed", async () => {
+    let used = false;
+    await fetchGuardedJson("http://keycloak:8080/jwks", {
+      allowPrivateAddresses: true,
+      pinnedTransport: () => {
+        used = true;
+        return jsonFetch({ ok: 1 });
+      },
+    });
+    expect(used).toBe(false);
   });
 });

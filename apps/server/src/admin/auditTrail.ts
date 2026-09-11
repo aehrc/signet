@@ -72,6 +72,6 @@ export async function recordAdminEvent(
     action: event.action,
     target: event.target,
     detail: event.detail ?? {},
-    ...requestMetadata(c),
+    ...requestMetadata(context, c),
   });
 }

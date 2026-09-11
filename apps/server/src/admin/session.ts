@@ -218,7 +218,7 @@ async function secondFactorAccepted(
  */
 export function adminLoginHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
     const body = await parseBody(c, adminLoginSchema);
     if (body instanceof Response) {
       return body;
@@ -337,7 +337,7 @@ export async function establishAdminSession(
 export function adminLogoutHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const principal: AdminPrincipal = c.get("principal");
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     if (principal.kind === "admin-user") {
       const revoked = await revokeAdminSession(

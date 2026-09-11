@@ -151,7 +151,7 @@ export function authorizeHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const issuerContext = c.get("issuer");
     const { endpoint, scope, tenant } = issuerContext;
-    const metadata = requestMetadata(c);
+    const metadata = requestMetadata(context, c);
 
     if (c.req.method === "POST" && !endpoint.supportsAuthorizePost) {
       return c.json(
