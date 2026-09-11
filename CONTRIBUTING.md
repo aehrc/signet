@@ -134,6 +134,28 @@ cd e2e && bunx playwright test responsive --project=mobile
 End-user sign-ins are rate limited to ten a minute per address, and a full run
 spends most of that, so leave a minute between runs.
 
+## Releases
+
+Images are published to `ghcr.io/aehrc/signet` by
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which runs when
+a GitHub release is published. Pushing a tag publishes nothing, and neither does
+drafting a release.
+
+The workflow runs the whole of CI first - it calls `ci.yml` rather than repeating
+it - and only then builds `linux/amd64` and `linux/arm64` on native runners and
+pushes them as one manifest list. It tags the version and the `major.minor`
+series, and moves `latest` only when the release is not a prerelease.
+
+Before publishing a release, bump the chart to the version being released:
+`appVersion` in `deploy/helm/signet/Chart.yaml`, `signet.image` in
+`deploy/helm/signet/values.yaml`, and the default documented in
+`deploy/helm/signet/README.md`. The first job checks this and fails the release
+in seconds if the chart would install some other image:
+
+```sh
+node scripts/checkReleaseVersion.mjs 0.1.0 ghcr.io/aehrc/signet
+```
+
 ## Legal
 
 ### Developer Certificate of Origin

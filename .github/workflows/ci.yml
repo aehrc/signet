@@ -8,10 +8,18 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Called by release.yml, so a release runs the same gates rather than a copy of
+  # them that can drift.
+  workflow_call:
 
 concurrency:
+  # A called workflow reports its caller's name in `github.workflow`, so a run of
+  # these jobs under Release is grouped separately from a run under CI.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Only a superseded pull request run is worth cancelling. A release's gate run
+  # must not be cancellable, and neither caller may share a group with
+  # cancellation on, or one would cancel the other.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:

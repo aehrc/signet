@@ -1,0 +1,186 @@
+# Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
+# (CSIRO) ABN 41 687 119 230. Licensed under the Apache License, Version 2.0.
+
+name: Release
+
+# Publishing a release is the trigger, not pushing a tag: a tag can be moved or
+# pushed by accident, and the release is the deliberate act. Drafting a release
+# publishes nothing.
+on:
+  release:
+    types: [published]
+
+# No workflow-level concurrency. The gates below are CI called as a reusable
+# workflow, and a called workflow reports its caller's name in `github.workflow` -
+# a group here computed the same way as the one in ci.yml would have this run
+# cancel itself.
+
+env:
+  # `github.repository` is `aehrc/signet`, which is both the GHCR namespace and
+  # what the chart installs.
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  # Seconds, and it runs before the gates: a release whose chart still installs
+  # the previous image fails here rather than twenty minutes later.
+  version:
+    name: Version consistency
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the chart installs the version being released
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: node scripts/checkReleaseVersion.mjs "$TAG" "$IMAGE"
+
+  # The whole of CI: formatting, lint, typecheck, duplication, the repository and
+  # image security scans, coverage, the build, the image smoke test against a real
+  # database, the chart checks and the end-to-end suite. Called rather than copied,
+  # so a gate added to CI is a gate a release has to pass.
+  gates:
+    name: Quality gates
+    needs: version
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/ci.yml
+
+  # One job per architecture on a native runner. Emulating arm64 through QEMU is
+  # both slow and unreliable for the toolchain this image builds with, so each
+  # architecture is built where it runs and the two are joined below.
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: gates
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+
+      # Pushed by digest and tagged in the merge below, so the tags only ever
+      # point at a manifest list. Tagging here would publish a single-architecture
+      # image under the release's tag for as long as the other build takes.
+      #
+      # Provenance and SBOM attestations are off because they are attached to the
+      # per-architecture push and `imagetools create` does not carry them onto the
+      # manifest list; left on, they appear in the registry as `unknown/unknown`
+      # entries that describe nothing.
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      # The digest is the only thing the merge job needs, so it travels as an
+      # empty file named after itself rather than as an output the matrix would
+      # otherwise overwrite.
+      - name: Export the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          touch "${{ runner.temp }}/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish to GHCR
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `latest` moves only for a full release. A prerelease publishes its own
+      # version and nothing else, so a `docker pull` with no tag cannot land on a
+      # release candidate.
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          flavor: |
+            latest=${{ !github.event.release.prerelease }}
+
+      - name: Join the architectures into one manifest list
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          tags=$(jq -cr '.target."docker-metadata-action".tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          digests=$(printf -- "$IMAGE@sha256:%s " *)
+          # Both expand to several words deliberately: one `-t` per tag, and one
+          # reference per architecture built above.
+          # shellcheck disable=SC2086
+          docker buildx imagetools create $tags $digests
+
+      # The published tag is a promise that both architectures are there. Read
+      # back from the registry rather than assumed from the jobs that ran.
+      - name: Verify the published image
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          docker buildx imagetools inspect "${IMAGE}:${VERSION}" --raw > manifest.json
+          cat manifest.json
+          for platform in linux/amd64 linux/arm64; do
+            os="${platform%/*}"
+            architecture="${platform#*/}"
+            jq -e --arg os "$os" --arg architecture "$architecture" \
+              '.manifests | map(.platform) | any(.os == $os and .architecture == $architecture)' \
+              manifest.json > /dev/null || {
+                echo "The published manifest list has no $platform image"
+                exit 1
+              }
+          done

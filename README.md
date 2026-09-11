@@ -82,6 +82,10 @@ Open `http://localhost:3000/console` to look at the seeded endpoint. See
 
 ## Deployment
 
+Released images are published to `ghcr.io/aehrc/signet` for `linux/amd64` and
+`linux/arm64`, and the chart installs one of them by default. To build the image
+yourself:
+
 ```sh
 docker build -t signet:dev .
 ```
