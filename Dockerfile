@@ -41,6 +41,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
+# The runtime needs only the `node` binary: the server is a single bundled file
+# and the image ships no node_modules, so the package managers the base image
+# vendors are dead weight that drags their own bundled dependencies - and those
+# dependencies' advisories - into every image scan.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+    /opt/yarn-v* /usr/local/bin/yarn /usr/local/bin/yarnpkg
+
 COPY --from=build /app/apps/server/dist ./dist
 COPY --from=build /app/apps/web/dist ./web
 COPY --from=build /app/packages/db/drizzle ./drizzle
