@@ -40,8 +40,12 @@ jobs:
           POSTGRES_DB: signet
         ports:
           - 5432:5432
+        # `-h 127.0.0.1` matters: the server the entrypoint runs while it is
+        # still initialising listens on the socket only, so a socket probe
+        # reports ready before the database exists and before anything is
+        # listening on the port the steps connect to.
         options: >-
-          --health-cmd "pg_isready -U signet"
+          --health-cmd "pg_isready -U signet -d signet -h 127.0.0.1"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -145,8 +149,17 @@ jobs:
             -e POSTGRES_PASSWORD=signet \
             -e POSTGRES_DB=signet \
             postgres:18-alpine
+          # `-h 127.0.0.1` matters: the server the entrypoint runs while it is
+          # still initialising listens on the socket only, so a socket probe
+          # reports ready before POSTGRES_DB has been created. That is what the
+          # `create role` below used to race, and lose.
           for i in $(seq 1 30); do
-            if docker exec postgres pg_isready -U signet -d signet; then break; fi
+            if docker exec postgres pg_isready -U signet -d signet -h 127.0.0.1; then break; fi
+            if [ "$i" = "30" ]; then
+              echo "PostgreSQL did not become ready"
+              docker logs postgres
+              exit 1
+            fi
             sleep 1
           done
           docker exec postgres psql -U signet -d signet \
