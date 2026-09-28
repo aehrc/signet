@@ -24,9 +24,10 @@ import { resolveStackUrls } from "./src/stackUrls.js";
  * is idempotent, so a suite against an already-running stack cannot fail for want
  * of a fixture.
  *
- * `SIGNET_PORT`, `PATHLING_PORT` and `APP_PORT` move the stack, issuer identifiers
- * included, for a machine where one of the default ports is taken. **Export them
- * into the shell**, so that this suite and `docker compose` read the same values:
+ * `SIGNET_PORT`, `PATHLING_PORT`, `APP_PORT` and `MAILPIT_PORT` move the stack,
+ * issuer identifiers included, for a machine where one of the default ports is
+ * taken. **Export them into the shell**, so that this suite and `docker compose`
+ * read the same values:
  * Bun does not pass a variable it loaded from a `.env` file to the processes it
  * spawns, and neither `docker compose` nor Playwright is Bun.
  *

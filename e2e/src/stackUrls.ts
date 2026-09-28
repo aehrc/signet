@@ -20,7 +20,7 @@
  * Author: John Grimes
  */
 
-/** The three URLs the suite addresses the stack by. */
+/** The URLs the suite addresses the stack by. */
 export interface StackUrls {
   /** Signet's origin. */
   signet: string;
@@ -28,6 +28,8 @@ export interface StackUrls {
   fhir: string;
   /** The stub SMART app's origin. */
   app: string;
+  /** Mailpit's origin, whose API is how the suite reads what Signet sent. */
+  mail: string;
 }
 
 /**
@@ -58,7 +60,7 @@ function setting(
  * host, another scheme, a path prefix - is not expressible as a port.
  *
  * @param env - the environment to read, normally `process.env`.
- * @returns the URLs of the three services the suite drives.
+ * @returns the URLs of the services the suite drives.
  * @example
  * ```ts
  * resolveStackUrls({ PATHLING_PORT: "8180" }).fhir;
@@ -71,11 +73,13 @@ export function resolveStackUrls(
   const signetPort = setting(env, "SIGNET_PORT") ?? "3000";
   const pathlingPort = setting(env, "PATHLING_PORT") ?? "8080";
   const appPort = setting(env, "APP_PORT") ?? "4000";
+  const mailPort = setting(env, "MAILPIT_PORT") ?? "8025";
   return {
     signet: setting(env, "SIGNET_BASE_URL") ?? `http://localhost:${signetPort}`,
     fhir:
       setting(env, "PATHLING_BASE_URL") ??
       `http://localhost:${pathlingPort}/fhir`,
     app: setting(env, "APP_BASE_URL") ?? `http://localhost:${appPort}`,
+    mail: setting(env, "MAILPIT_BASE_URL") ?? `http://localhost:${mailPort}`,
   };
 }

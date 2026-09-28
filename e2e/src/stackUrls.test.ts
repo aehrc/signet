@@ -20,6 +20,7 @@ describe("resolveStackUrls", () => {
       signet: "http://localhost:3000",
       fhir: "http://localhost:8080/fhir",
       app: "http://localhost:4000",
+      mail: "http://localhost:8025",
     });
   });
 
@@ -32,11 +33,13 @@ describe("resolveStackUrls", () => {
         SIGNET_PORT: "3100",
         PATHLING_PORT: "8180",
         APP_PORT: "4100",
+        MAILPIT_PORT: "8125",
       }),
     ).toEqual({
       signet: "http://localhost:3100",
       fhir: "http://localhost:8180/fhir",
       app: "http://localhost:4100",
+      mail: "http://localhost:8125",
     });
   });
 
@@ -47,6 +50,7 @@ describe("resolveStackUrls", () => {
       signet: "http://localhost:3000",
       fhir: "http://localhost:8180/fhir",
       app: "http://localhost:4000",
+      mail: "http://localhost:8025",
     });
   });
 
@@ -62,11 +66,13 @@ describe("resolveStackUrls", () => {
         SIGNET_BASE_URL: "https://signet.example.org",
         PATHLING_BASE_URL: "https://fhir.example.org/fhir",
         APP_BASE_URL: "https://app.example.org",
+        MAILPIT_BASE_URL: "https://mail.example.org",
       }),
     ).toEqual({
       signet: "https://signet.example.org",
       fhir: "https://fhir.example.org/fhir",
       app: "https://app.example.org",
+      mail: "https://mail.example.org",
     });
   });
 
@@ -82,6 +88,7 @@ describe("resolveStackUrls", () => {
       signet: "https://signet.example.org",
       fhir: "http://localhost:8180/fhir",
       app: "http://localhost:4000",
+      mail: "http://localhost:8025",
     });
   });
 
@@ -93,11 +100,13 @@ describe("resolveStackUrls", () => {
         SIGNET_PORT: "",
         PATHLING_BASE_URL: "",
         APP_PORT: "",
+        MAILPIT_PORT: "",
       }),
     ).toEqual({
       signet: "http://localhost:3000",
       fhir: "http://localhost:8080/fhir",
       app: "http://localhost:4000",
+      mail: "http://localhost:8025",
     });
   });
 });
