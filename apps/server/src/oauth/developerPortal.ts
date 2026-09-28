@@ -42,6 +42,7 @@ import {
 
 import { bearerToken } from "../http/bearer.js";
 import { requestMetadata } from "../http/requestMeta.js";
+import { notifyClientRequestReviewers } from "../notifications/clientRequestNotifications.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { ClientRequest } from "@signet/db";
@@ -154,6 +155,16 @@ export function submitClientRequestHandler(context: ServerContext) {
         requestedScopes: parsed.data.requestedScopes,
       },
       ...metadata,
+    });
+
+    // Started after the submission's own event, and not awaited: the developer is
+    // answered whether or not the relay is. See `../notifications/` for how an
+    // outcome is recorded instead.
+    void notifyClientRequestReviewers(context, {
+      tenant: issuerContext.tenant,
+      endpoint,
+      scope: issuerContext.scope,
+      request,
     });
 
     c.header("Cache-Control", "no-store");

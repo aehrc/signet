@@ -22,7 +22,12 @@
     "@simplewebauthn/server": "^13.3.2",
     "hono": "^4.13.7",
     "jose": "^6.2.7",
+    "nodemailer": "^10.0.11",
     "undici": "^8.10.2",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/smtp-server": "^3.5.13",
+    "smtp-server": "^3.19.14"
   }
 }

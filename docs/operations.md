@@ -17,6 +17,7 @@ something is wrong.
 | `SIGNET_LOG_LEVEL`                      | no                 | `debug`, `info`, `warn` or `error`. Defaults to `info`.                                                                                                                                                                                                     |
 | `SIGNET_WEB_ROOT`                       | no                 | Directory of the built console. Set in the image; unset in development, where Vite serves it.                                                                                                                                                               |
 | `SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES` | no                 | Turns off the SSRF guard on outbound fetches. For a development or connectathon stack whose identity provider is on a private address. **Never set this in production** - see `apps/server/src/security/outboundFetch.ts` for exactly what it disables.     |
+| `SIGNET_SMTP_*`                         | no                 | The SMTP relay registration request notifications are sent through. Off unless `SIGNET_SMTP_HOST` is set. See [registration request notifications](#registration-request-notifications).                                                                    |
 
 Commands, all on the same image:
 
@@ -546,6 +547,100 @@ secret.
 assertions above; `bun run stack:up && bun run test:e2e` runs the browser-level
 proof against Signet, Pathling and a stub app in containers, including a client
 that no human approved completing a SMART launch.
+
+## Registration request notifications
+
+When a developer files a registration request in the portal (`{iss}/apps`),
+Signet emails every owner and admin of the endpoint's tenant - the members who
+can approve or reject it. Developers, viewers and disabled accounts are not
+emailed. Each reviewer gets a message of their own, so nobody sees who else
+administers the tenant.
+
+The message is plain text. Its subject names only the endpoint and tenant, for
+example `New client registration request for Pathling (Demo Hospital)`, and its
+body carries what was asked for and a link to the endpoint's requests page:
+
+```text
+A client registration request has been filed on Pathling (Demo Hospital).
+
+Review it in the Signet console:
+https://signet.example.org/console/t/demo/e/pathling/requests
+
+The details below were supplied by the requester and have not been verified.
+
+App name: Growth Chart
+Contact email: dev@example.org
+Client type: public
+...
+Note:
+  > Plots a child's growth against reference curves.
+```
+
+Everything after the warning was typed by an anonymous requester, so it is kept
+visibly theirs: it never reaches a header, a single-line field is flattened onto
+its line, every line of a free-text field is quoted, and control and
+bidirectional override characters are removed. The only link Signet vouches for
+is the console link, built from `SIGNET_PUBLIC_URL`. There is no `Reply-To`.
+
+### Configuring a relay
+
+Notifications are off until `SIGNET_SMTP_HOST` is set. Any other SMTP variable
+set without it, a missing sender, a username without a password or an
+unreadable port refuses startup rather than running half-configured.
+
+| Variable                     | Required                 | What it does                                                                                                       |
+| ---------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `SIGNET_SMTP_HOST`           | to turn notifications on | The relay's host name.                                                                                             |
+| `SIGNET_SMTP_PORT`           | no                       | Defaults to 587, where STARTTLS is required. 465 is TLS from the first byte.                                       |
+| `SIGNET_SMTP_USERNAME`       | with the password        | Set both or neither.                                                                                               |
+| `SIGNET_SMTP_PASSWORD`       | with the username        | A secret: put it in `secretConfig` in the Helm chart.                                                              |
+| `SIGNET_SMTP_FROM`           | with the host            | The `From` header, such as `Signet <signet@example.org>`. The relay has to accept it as a sender.                  |
+| `SIGNET_SMTP_ALLOW_INSECURE` | no                       | `true` permits plaintext when the relay offers no STARTTLS. For a local mail catcher only; never for a real relay. |
+
+For Amazon SES, use the regional SMTP endpoint and the SMTP credentials SES
+generates, which are not the account's access keys, and a sender on a verified
+identity:
+
+```sh
+SIGNET_SMTP_HOST=email-smtp.ap-southeast-2.amazonaws.com
+SIGNET_SMTP_PORT=587
+SIGNET_SMTP_USERNAME=AKIA...
+SIGNET_SMTP_PASSWORD=...
+SIGNET_SMTP_FROM="Signet <signet@example.org>"
+```
+
+The server logs which relay it will use, or that notifications are off, once at
+startup.
+
+### What happens when mail cannot be sent
+
+Nothing the developer sees. The submission is stored and answered first, and
+the notification is sent in the background, so a slow, refusing or unreachable
+relay cannot delay or fail it. Nothing is retried or queued: the request is in
+the console's queue either way.
+
+What is recorded is the outcome. With a relay configured, each submission ends
+in one audit event against the request:
+
+- `client-request.notified` - every reviewer's message was accepted by the
+  relay. The detail carries `recipients`, the count.
+- `client-request.notification-failed` - at least one was not. The detail
+  carries `reason` (`delivery-failed`, or `no-recipients` when the tenant has no
+  active owner or admin), `recipients`, `delivered` and `errors`, the distinct
+  error codes such as `EAUTH`, `ECONNECTION` or `EENVELOPE`.
+
+Neither carries an email address. The relay's own reply, which is what
+diagnoses the fault, is logged at `warn` as `signet.notification.send-failed`; a
+failure to read the reviewers or write the outcome is logged at `error` as
+`signet.notification.failed`.
+
+**Reproducing it.** `bun run stack:up` includes Mailpit, which catches everything
+the stack sends; its inbox is at `http://localhost:8025` (`MAILPIT_PORT`). File a
+request at `http://localhost:3000/t/demo/e/pathling/apps` and it appears there.
+`bun run test:e2e` does the same in a browser and follows the link in the
+message, and `bun run test` covers the recipients, the content and the failure
+paths against a real SMTP server
+(`apps/server/src/notifications/clientRequestNotifications.integration.test.ts`).
 
 ## Deploying on Kubernetes
 
