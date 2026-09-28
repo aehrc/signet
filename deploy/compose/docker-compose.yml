@@ -3,7 +3,7 @@
 
 # The stack the end-to-end suite runs against.
 #
-# Four services, and each is here because the suite asserts something that only
+# Five services, and each is here because the suite asserts something that only
 # holds when it is real:
 #
 #   - Postgres, because the migrations install the tenant isolation policies and
@@ -22,14 +22,18 @@
 #   - A stub SMART app, because the launch is a browser flow. A test that drove
 #     the endpoints with `fetch` would prove the endpoints work and say nothing
 #     about whether an app can complete a launch.
+#   - Mailpit, a mail catcher, because a registration request notification is
+#     only delivered if an SMTP relay accepts it. Signet sends to it over the
+#     compose network, and its inbox is readable in a browser and over its API.
 #
 # Bring it up with `bun run stack:up`; `bun run stack:down` tears it down.
 #
 # **Ports.** Signet is published on `SIGNET_PORT` (3000 by default), Pathling on
-# `PATHLING_PORT` (8080) and the stub app on `APP_PORT` (4000). They are variables
-# because an issuer identifier contains its port: a developer whose 3000 is taken
-# sets `SIGNET_PORT=3100` and every URL - the public URL, the issuer Pathling
-# validates against, the audience, the seed and the suite - follows from it.
+# `PATHLING_PORT` (8080), the stub app on `APP_PORT` (4000) and Mailpit's inbox on
+# `MAILPIT_PORT` (8025). They are variables because an issuer identifier contains
+# its port: a developer whose 3000 is taken sets `SIGNET_PORT=3100` and every URL
+# - the public URL, the issuer Pathling validates against, the audience, the seed
+# and the suite - follows from it.
 # Hard-coding the port would mean editing five places and getting one of them wrong.
 #
 # **They must be exported into the shell**, not written to the repository's
@@ -188,6 +192,13 @@ services:
       # for exactly what this turns off, and why it must never be set in
       # production.
       SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES: "true"
+      # Registration request notifications go to the mail catcher. It offers no
+      # TLS, which is the one situation SIGNET_SMTP_ALLOW_INSECURE is for; a real
+      # relay is reached on 587 with STARTTLS required, or on 465.
+      SIGNET_SMTP_HOST: mailpit
+      SIGNET_SMTP_PORT: "1025"
+      SIGNET_SMTP_FROM: Signet <signet@example.org>
+      SIGNET_SMTP_ALLOW_INSECURE: "true"
     # The stand-in trust anchor runs in the Playwright process, on the host. Signet
     # has to fetch its published keys, and the host's loopback is not an address a
     # container can open - so the anchor binds every address and Signet reaches it
@@ -203,6 +214,21 @@ services:
     depends_on:
       bootstrap-passkey:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+
+  # Catches everything Signet sends and sends none of it on. The inbox is at
+  # http://localhost:${MAILPIT_PORT:-8025}, and the end-to-end suite reads it
+  # through the same port's API.
+  mailpit:
+    image: axllent/mailpit:v1.31.3
+    ports:
+      - "${MAILPIT_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 
   # Creates the endpoint, policy, clients and accounts the suite launches
   # against, then exits.

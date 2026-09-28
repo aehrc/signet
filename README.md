@@ -34,7 +34,9 @@ no registration endpoint is served or advertised. An endpoint that names a
 **trust anchor** registers a client for a software statement signed by that
 anchor, and refuses statements from anybody else. Otherwise a developer submits a
 request at `{iss}/apps`, an administrator approves it in the console, and the
-developer collects the credentials.
+developer collects the credentials. With an SMTP relay configured, the tenant's
+owners and admins are emailed when a request arrives - see
+[docs/operations.md](docs/operations.md#registration-request-notifications).
 
 ## Layout
 

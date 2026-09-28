@@ -55,7 +55,7 @@ import {
   recordAdminPasskeyUse,
   removeAdminPasskey,
 } from "./adminPasskeys.js";
-import { createAdminUser } from "./adminUsers.js";
+import { createAdminUser, setAdminUserDisabled } from "./adminUsers.js";
 import {
   consumeAuthorizationCode,
   createAuthorizationCode,
@@ -83,7 +83,11 @@ import {
   createLaunchContext,
   findLaunchContext,
 } from "./launchContexts.js";
-import { removeTenantMember, setTenantMemberRole } from "./members.js";
+import {
+  listRequestReviewers,
+  removeTenantMember,
+  setTenantMemberRole,
+} from "./members.js";
 import {
   createPolicyVersion,
   getEffectivePolicy,
@@ -1063,6 +1067,52 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         ok: false,
         reason: "not-a-member",
       });
+    });
+
+    // The people told about a registration request are the people who can act on it:
+    // the approve and reject routes require `admin`, so anybody below that would be
+    // notified of something they cannot decide.
+    it("lists the owners and admins who can review requests, and nobody else", async () => {
+      const scope = await newTenant();
+      const other = await newTenant();
+      const ownerEmail = `owner-${unique()}@example.org`;
+      const adminEmail = `admin-${unique()}@example.org`;
+      const email = (label: string) => `${label}-${unique()}@example.org`;
+      const owner = await newAdmin(db, ownerEmail);
+      const admin = await newAdmin(db, adminEmail);
+      const developer = await newAdmin(db, email("developer"));
+      const viewer = await newAdmin(db, email("viewer"));
+      const disabled = await newAdmin(db, email("disabled"));
+      const elsewhere = await newAdmin(db, email("elsewhere"));
+      for (const [id, role] of [
+        [owner, "owner"],
+        [admin, "admin"],
+        [developer, "developer"],
+        [viewer, "viewer"],
+        [disabled, "admin"],
+      ] as const) {
+        await inScope(scope, (bound) => setTenantMemberRole(bound, id, role));
+      }
+      await inScope(other, (bound) =>
+        setTenantMemberRole(bound, elsewhere, "owner"),
+      );
+      // A disabled account cannot sign in to act on a request, so it is not told.
+      await setAdminUserDisabled(db, disabled, true);
+
+      const reviewers = await inScope(scope, (bound) =>
+        listRequestReviewers(bound),
+      );
+
+      expect(
+        reviewers
+          .map((reviewer) => [reviewer.adminUserId, reviewer.email])
+          .toSorted(),
+      ).toEqual(
+        [
+          [owner, ownerEmail],
+          [admin, adminEmail],
+        ].toSorted(),
+      );
     });
   });
 

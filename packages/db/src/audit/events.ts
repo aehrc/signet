@@ -141,6 +141,8 @@ export type AuditAction =
   | "client-request.submitted"
   | "client-request.approved"
   | "client-request.rejected"
+  | "client-request.notified"
+  | "client-request.notification-failed"
   | "end-user.created"
   | "end-user.updated"
   | "end-user.disabled";
@@ -222,6 +224,10 @@ export const AUDIT_ACTION_DESCRIPTIONS: Readonly<Record<AuditAction, string>> =
     "client-request.submitted": "Client registration requested by a developer",
     "client-request.approved": "Client registration request approved",
     "client-request.rejected": "Client registration request rejected",
+    "client-request.notified":
+      "Endpoint reviewers emailed about a client registration request",
+    "client-request.notification-failed":
+      "Endpoint reviewers could not all be emailed about a client registration request",
     "end-user.created": "End user created",
     "end-user.updated": "End user changed",
     "end-user.disabled": "End user disabled",
@@ -290,6 +296,8 @@ export const AUDIT_ACTION_CATEGORIES: Readonly<
   "client-request.submitted": "configuration",
   "client-request.approved": "configuration",
   "client-request.rejected": "configuration",
+  "client-request.notified": "configuration",
+  "client-request.notification-failed": "configuration",
   "end-user.created": "configuration",
   "end-user.updated": "configuration",
   "end-user.disabled": "configuration",

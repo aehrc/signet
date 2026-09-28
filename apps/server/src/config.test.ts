@@ -40,6 +40,7 @@ describe("loadConfig - defaults", () => {
       logLevel: "info",
       webRoot: undefined,
       allowPrivateOutboundFetches: false,
+      smtp: undefined,
     });
   });
 
@@ -226,6 +227,138 @@ describe("loadConfig - master key", () => {
     expect(
       loadConfig(env({ SIGNET_MASTER_KEY: "a".repeat(32) })).masterKey,
     ).toHaveLength(32);
+  });
+});
+
+describe("loadConfig - SMTP", () => {
+  /** The minimum that turns notifications on. */
+  const SMTP = {
+    SIGNET_SMTP_HOST: "email-smtp.ap-southeast-2.amazonaws.com",
+    SIGNET_SMTP_FROM: "Signet <signet@example.org>",
+  } as const;
+
+  it("leaves notifications off when no SMTP variable is set", () => {
+    expect(loadConfig(env()).smtp).toBeUndefined();
+  });
+
+  it("defaults to port 587 with STARTTLS required and no credentials", () => {
+    expect(loadConfig(env(SMTP)).smtp).toEqual({
+      host: "email-smtp.ap-southeast-2.amazonaws.com",
+      port: 587,
+      tls: "starttls",
+      credentials: undefined,
+      from: "Signet <signet@example.org>",
+    });
+  });
+
+  it("uses implicit TLS on port 465", () => {
+    expect(
+      loadConfig(env({ ...SMTP, SIGNET_SMTP_PORT: "465" })).smtp?.tls,
+    ).toBe("implicit");
+  });
+
+  it("keeps implicit TLS on 465 even when plaintext is permitted", () => {
+    expect(
+      loadConfig(
+        env({
+          ...SMTP,
+          SIGNET_SMTP_PORT: "465",
+          SIGNET_SMTP_ALLOW_INSECURE: "true",
+        }),
+      ).smtp?.tls,
+    ).toBe("implicit");
+  });
+
+  it("permits plaintext only when asked to", () => {
+    expect(
+      loadConfig(
+        env({
+          ...SMTP,
+          SIGNET_SMTP_PORT: "1025",
+          SIGNET_SMTP_ALLOW_INSECURE: "true",
+        }),
+      ).smtp,
+    ).toMatchObject({ port: 1025, tls: "optional" });
+    expect(
+      loadConfig(env({ ...SMTP, SIGNET_SMTP_ALLOW_INSECURE: "false" })).smtp
+        ?.tls,
+    ).toBe("starttls");
+  });
+
+  it("reads a username and password together", () => {
+    expect(
+      loadConfig(
+        env({
+          ...SMTP,
+          SIGNET_SMTP_USERNAME: "AKIAEXAMPLE",
+          SIGNET_SMTP_PASSWORD: "smtp-secret",
+        }),
+      ).smtp?.credentials,
+    ).toEqual({ username: "AKIAEXAMPLE", password: "smtp-secret" });
+  });
+
+  it("refuses a username without a password, and the converse", () => {
+    expect(() =>
+      loadConfig(env({ ...SMTP, SIGNET_SMTP_USERNAME: "AKIAEXAMPLE" })),
+    ).toThrow(/SIGNET_SMTP_USERNAME and SIGNET_SMTP_PASSWORD/);
+    expect(() =>
+      loadConfig(env({ ...SMTP, SIGNET_SMTP_PASSWORD: "smtp-secret" })),
+    ).toThrow(/SIGNET_SMTP_USERNAME and SIGNET_SMTP_PASSWORD/);
+  });
+
+  it("requires a sender address once a host is set", () => {
+    expect(() =>
+      loadConfig(env({ SIGNET_SMTP_HOST: "smtp.example.org" })),
+    ).toThrow(/SIGNET_SMTP_FROM is required/);
+    expect(() =>
+      loadConfig(env({ ...SMTP, SIGNET_SMTP_FROM: "not an address" })),
+    ).toThrow(/SIGNET_SMTP_FROM/);
+  });
+
+  // A deployment that set a password and forgot the host would otherwise run
+  // for months believing it was notifying somebody.
+  it("refuses any SMTP variable without a host, naming it", () => {
+    for (const name of [
+      "SIGNET_SMTP_PORT",
+      "SIGNET_SMTP_USERNAME",
+      "SIGNET_SMTP_PASSWORD",
+      "SIGNET_SMTP_FROM",
+      "SIGNET_SMTP_ALLOW_INSECURE",
+    ]) {
+      expect(() => loadConfig(env({ [name]: "true" }))).toThrow(
+        new RegExp(`${name} is set, so SIGNET_SMTP_HOST is also required`),
+      );
+    }
+  });
+
+  it("rejects a port it cannot use", () => {
+    for (const port of ["smtp", "0", "70000", "58.7"]) {
+      expect(() =>
+        loadConfig(env({ ...SMTP, SIGNET_SMTP_PORT: port })),
+      ).toThrow(/SIGNET_SMTP_PORT must be an integer between 1 and 65535/);
+    }
+  });
+
+  it("refuses a plaintext flag it cannot read, rather than defaulting", () => {
+    expect(() =>
+      loadConfig(env({ ...SMTP, SIGNET_SMTP_ALLOW_INSECURE: "yes" })),
+    ).toThrow(ConfigError);
+  });
+
+  // These messages reach a pod's logs, so the refusals that see the password
+  // name the variable and nothing more.
+  it("never quotes the password in a refusal", () => {
+    for (const overrides of [
+      { SIGNET_SMTP_PASSWORD: "smtp-secret" },
+      { ...SMTP, SIGNET_SMTP_PASSWORD: "smtp-secret" },
+    ]) {
+      expect(() => loadConfig(env(overrides))).toThrow(ConfigError);
+      try {
+        loadConfig(env(overrides));
+      } catch (error) {
+        expect(String(error)).not.toContain("smtp-secret");
+      }
+    }
   });
 });
 

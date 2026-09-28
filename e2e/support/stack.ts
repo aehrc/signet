@@ -30,6 +30,9 @@ export const FHIR = urls.fhir;
 /** The stub SMART app. */
 export const APP = urls.app;
 
+/** Mailpit, which catches everything Signet sends. */
+export const MAIL = urls.mail;
+
 /**
  * Where the console's signed-in session is saved.
  *

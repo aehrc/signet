@@ -64,6 +64,7 @@ import { generateEndpointKey } from "../keys/material.js";
 import { createRemoteJwksCache } from "../oauth/remoteJwks.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
+import type { Mailer } from "../notifications/mailer.js";
 import type { PolicyDocument } from "@signet/core";
 import type {
   AdminUser,
@@ -169,6 +170,11 @@ export interface TestStackOptions {
   readonly rateLimits?: "enforced" | "unlimited";
   /** How many proxies the stack believes stand in front of it. */
   readonly trustedProxyCount?: number;
+  /**
+   * Sends notification email, for the suite that reads it back off an SMTP server.
+   * Absent by default, as it is in a deployment with no relay configured.
+   */
+  readonly mailer?: Mailer;
 }
 
 /** Every scope the fixture clients are permitted to request. */
@@ -433,6 +439,8 @@ export async function createTestStack(
       // refuse exactly that.
       allowPrivateOutboundFetches: options.allowPrivateOutboundFetches ?? false,
       trustedProxyCount: options.trustedProxyCount ?? 0,
+      // The mailer below is what sends; this only records that one is configured.
+      smtp: undefined,
     },
     db,
     // Audit failures are surfaced rather than swallowed: a suite that silently lost
@@ -454,6 +462,7 @@ export async function createTestStack(
     // One per stack, so a suite that counts what an anchor served is counting its
     // own requests rather than another stack's cache hits.
     jwksCache: createRemoteJwksCache(),
+    mailer: options.mailer,
   };
 
   const app = createApp(context);

@@ -18,6 +18,7 @@
 import type { AdminPrincipal } from "./admin/principal.js";
 import type { SignetConfig } from "./config.js";
 import type { RateLimitStore } from "./http/rateLimit.js";
+import type { Mailer } from "./notifications/mailer.js";
 import type { RemoteJwksCache } from "./oauth/remoteJwks.js";
 import type { EndpointUrls } from "@signet/core";
 import type {
@@ -68,6 +69,13 @@ export interface ServerContext {
    * that bounds how long a withdrawn key keeps verifying.
    */
   readonly jwksCache: RemoteJwksCache;
+  /**
+   * Sends the notification emails, or undefined when no relay is configured.
+   *
+   * A dependency rather than something built from `config.smtp` where it is used,
+   * so a suite can point the real application at an SMTP server of its own.
+   */
+  readonly mailer: Mailer | undefined;
 }
 
 /**
