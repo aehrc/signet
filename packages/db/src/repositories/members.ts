@@ -23,9 +23,13 @@
  * Author: John Grimes
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
-import { wouldRemoveLastOwner } from "./roles.js";
+import {
+  canAdministerTenant,
+  TENANT_ROLES,
+  wouldRemoveLastOwner,
+} from "./roles.js";
 import { requireRow } from "./rows.js";
 import { executorFor, tenantScopeFromRow, withTenantForSlug } from "./scope.js";
 import { adminUsers, tenantMembers, tenants } from "../schema/tenancy.js";
@@ -123,6 +127,51 @@ export async function listTenantMembers(
     .orderBy(adminUsers.email);
 }
 
+/** A console identity who may decide the scoped tenant's registration requests. */
+export interface RequestReviewer {
+  readonly adminUserId: string;
+  readonly email: string;
+  readonly displayName: string;
+}
+
+/**
+ * The roles that may approve or reject a registration request.
+ *
+ * Derived from the same predicate the admin routes' `requireRole("admin")` check
+ * resolves to, so the people told about a request and the people permitted to
+ * decide it cannot drift apart.
+ */
+const REVIEWER_ROLES = TENANT_ROLES.filter((role) => canAdministerTenant(role));
+
+/**
+ * Lists the scoped tenant's members who can decide registration requests.
+ *
+ * Owners and admins whose accounts are not disabled: a disabled account cannot
+ * sign in to act on a request, so telling it about one would be noise.
+ *
+ * @param scope - The tenant whose reviewers to list.
+ * @returns The reviewers, ordered by email.
+ */
+export async function listRequestReviewers(
+  scope: BoundTenantScope,
+): Promise<readonly RequestReviewer[]> {
+  return await executorFor(scope)
+    .select({
+      adminUserId: adminUsers.id,
+      email: adminUsers.email,
+      displayName: adminUsers.displayName,
+    })
+    .from(tenantMembers)
+    .innerJoin(adminUsers, eq(adminUsers.id, tenantMembers.adminUserId))
+    .where(
+      and(
+        eq(tenantMembers.tenantId, scope.tenantId),
+        inArray(tenantMembers.role, REVIEWER_ROLES),
+        isNull(adminUsers.disabledAt),
+      ),
+    )
+    .orderBy(adminUsers.email);
+}
 /**
  * Reads every membership of the scoped tenant and locks the rows.
  *
