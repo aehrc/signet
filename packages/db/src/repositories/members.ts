@@ -172,6 +172,7 @@ export async function listRequestReviewers(
     )
     .orderBy(adminUsers.email);
 }
+
 /**
  * Reads every membership of the scoped tenant and locks the rows.
  *

@@ -630,9 +630,10 @@ in one audit event against the request:
   error codes such as `EAUTH`, `ECONNECTION` or `EENVELOPE`.
 
 Neither carries an email address. The relay's own reply, which is what
-diagnoses the fault, is logged at `warn` as `signet.notification.send-failed`; a
-failure to read the reviewers or write the outcome is logged at `error` as
-`signet.notification.failed`.
+diagnoses the fault, is logged at `warn` as `signet.notification.send-failed`. A
+request with nobody to tell is logged at `warn` as
+`signet.notification.no-recipients`, and a failure to read the reviewers or
+write the outcome at `error` as `signet.notification.failed`.
 
 **Reproducing it.** `bun run stack:up` includes Mailpit, which catches everything
 the stack sends; its inbox is at `http://localhost:8025` (`MAILPIT_PORT`). File a

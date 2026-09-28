@@ -135,6 +135,16 @@ export async function notifyClientRequestReviewers(
     }
 
     const outcome = summariseNotification(reviewers.length, failures);
+    if (!outcome.ok && outcome.reason === "no-recipients") {
+      // Logged as well as audited, so an operator alerting on the log learns that
+      // a request arrived with nobody able to decide it.
+      logRecord(
+        context.config.logLevel,
+        "warn",
+        "signet.notification.no-recipients",
+        where,
+      );
+    }
     const { ok, ...detail } = outcome;
     await context.audit.record(context.db, {
       tenantId: tenant.id,
