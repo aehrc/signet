@@ -26,6 +26,7 @@
 import { useState } from "react";
 
 import { policiesDiffer } from "./document.js";
+import { scopeText } from "./scopeText.js";
 import { describeError } from "../api/errors.js";
 import { useClients, useEndUsers, useSimulate } from "../api/queries.js";
 import { SelectField, TextField } from "../components/fields.js";
@@ -338,34 +339,4 @@ function ClaimsBlock({
       </pre>
     </div>
   );
-}
-
-/**
- * Renders a scope the evaluator returned as its string form.
- *
- * The API returns parsed scopes rather than strings, because the evaluation works on
- * parsed ones. Reassembling the text here rather than asking the server for both keeps
- * the response one representation.
- */
-function scopeText(scope: unknown): string {
-  if (typeof scope !== "object" || scope === null) {
-    return String(scope);
-  }
-  const record = scope as {
-    kind?: unknown;
-    context?: unknown;
-    resourceType?: unknown;
-    permissions?: unknown;
-    name?: unknown;
-  };
-  if (record.kind === "resource") {
-    const permissions = Array.isArray(record.permissions)
-      ? record.permissions.join("")
-      : "";
-    return `${String(record.context)}/${String(record.resourceType)}.${permissions}`;
-  }
-  if (typeof record.name === "string") {
-    return record.name;
-  }
-  return JSON.stringify(scope);
 }
