@@ -24,6 +24,7 @@ const COUNTS: SweepCounts = {
   jtiReplay: 0,
   adminSessions: 0,
   endUserSessions: 0,
+  endUserInvitations: 0,
   passkeyChallenges: 11,
   lapsedVouchedClients: 0,
 };

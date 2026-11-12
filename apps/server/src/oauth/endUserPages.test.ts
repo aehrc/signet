@@ -23,6 +23,11 @@ describe("isEndUserPagePath", () => {
     // shell for the second would hand a script HTML and a 200.
     expect(isEndUserPagePath("/t/demo/e/fhir/manage/session")).toBe(false);
     expect(isEndUserPagePath("/t/demo/e/fhir/apps/requests")).toBe(false);
+    expect(isEndUserPagePath("/t/demo/e/fhir/invitation/accept")).toBe(false);
+  });
+
+  it("serves the invitation page an invitation link points at", () => {
+    expect(isEndUserPagePath("/t/demo/e/fhir/invitation")).toBe(true);
   });
 
   it("does not match an OAuth endpoint", () => {
