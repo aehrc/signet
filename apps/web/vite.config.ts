@@ -14,12 +14,12 @@ import { defineConfig } from "vite";
 /**
  * The end-user pages served under an endpoint's issuer, exactly as the server's
  * static handler recognises them. Everything else under `/t/` is an OAuth or
- * portal API route and must reach the server; these five paths are pages this
+ * portal API route and must reach the server; these six paths are pages this
  * dev server renders itself. Canonical list:
  * `apps/server/src/oauth/endUserPages.ts`.
  */
 const END_USER_PAGE_PATTERN =
-  /^\/t\/[^/]+\/e\/[^/]+\/(login|picker|consent|manage|apps)$/;
+  /^\/t\/[^/]+\/e\/[^/]+\/(login|picker|consent|manage|apps|invitation)$/;
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
