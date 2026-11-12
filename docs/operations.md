@@ -218,13 +218,14 @@ select slug from endpoints;
 ### The expiry sweep
 
 `node dist/index.js sweep` deletes expired authorization codes, sessions, tokens,
-consents, `jti` records and passkey ceremony challenges. It operates on rows from
-every tenant, which is what a maintenance job is for, and is therefore the one
-path besides `migrate` that **needs the owning identity**. Attempted with the
-serving role it deletes nothing at all rather than partially succeeding - the
-policies hide every row from a connection that has declared no tenant - so its
-existence gives the server no cross-tenant capability. Both directions are
-asserted in `packages/db/src/repositories/repositories.integration.test.ts`.
+consents, `jti` records, unused end user invitations and passkey ceremony
+challenges. It operates on rows from every tenant, which is what a maintenance job
+is for, and is therefore the one path besides `migrate` that **needs the owning
+identity**. Attempted with the serving role it deletes nothing at all rather than
+partially succeeding - the policies hide every row from a connection that has
+declared no tenant - so its existence gives the server no cross-tenant capability.
+Both directions are asserted in
+`packages/db/src/repositories/repositories.integration.test.ts`.
 
 Every row it removes is already expired and refused on the strength of its own
 `expires_at`, so the sweep reclaims storage and can grant or revoke nothing, and
@@ -265,6 +266,31 @@ runtime state: an introspection arriving a moment after a token expired should b
 answered with `active: false` and the token's metadata rather than as an unknown
 token, and a resource server's clock may be behind Signet's. So their cut-off is
 `SIGNET_SWEEP_ACCESS_TOKEN_GRACE` behind the present, defaulting to `24h`.
+
+## Inviting end users
+
+An administrator can create a local account on an endpoint without a password and
+send its holder a link to choose one. Signet sends no mail: the console shows the link
+once, with a button that opens the administrator's own mail client with the message
+filled in and another that copies the link. The email address typed into that dialog
+is used for the message's recipient and is not sent to Signet. The same link resets a
+password that has been forgotten, and the console's user page offers it for any local
+account.
+
+The link is `{iss}/invitation#{token}`. The token is in the fragment, which browsers do
+not send to the server, so it does not appear in access logs; the invitation page
+presents it to `{iss}/invitation/details` and `{iss}/invitation/accept` in a request
+body. Both routes are rate limited as sign-in is. `end_user_invitations` holds a
+SHA-256 digest of the token and at most one row per account, so issuing a new link
+invalidates the previous one.
+
+A link works once and for seven days. It is refused, with one message for every case,
+once it has been used, replaced or cancelled, once it has expired, and when the account
+is a persona or disabled or the endpoint federates authentication. Choosing a password
+through a link ends the account's management-page sessions, since the person who held
+the old password may hold one of those too. Issuing, cancelling and accepting are
+recorded in the audit trail as `end-user.invited`, `end-user.invitation-cancelled` and
+`end-user.invitation-accepted`; the token never is.
 
 ## Passkeys on console accounts
 

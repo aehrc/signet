@@ -54,6 +54,7 @@ const EXPECTED_TABLES = [
   "client_requests",
   "clients",
   "consents",
+  "end_user_invitations",
   "end_user_sessions",
   "end_users",
   "endpoint_keys",
@@ -243,6 +244,11 @@ describe("credential storage", () => {
       forbidden: ["password"],
     },
     { table: "clients", hashColumn: "secret_hash", forbidden: ["secret"] },
+    {
+      table: "end_user_invitations",
+      hashColumn: "token_hash",
+      forbidden: ["token"],
+    },
   ];
 
   it.each([...BEARER_CREDENTIALS])(
@@ -346,6 +352,7 @@ describe("deletion behaviour", () => {
     const cascadesToEndpoint = [
       "clients",
       "client_requests",
+      "end_user_invitations",
       "end_user_sessions",
       "end_users",
       "endpoint_keys",

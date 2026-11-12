@@ -41,17 +41,31 @@ const endUserFieldsSchema = z.object({
 });
 
 /**
+ * The shortest end user password accepted, exported so that a page checking a
+ * password before sending it applies the same bound.
+ */
+export const END_USER_PASSWORD_MIN_LENGTH = 8;
+
+/** An end user's password, wherever one is set. */
+const endUserPasswordField = z
+  .string()
+  .min(END_USER_PASSWORD_MIN_LENGTH)
+  .max(1024);
+
+/**
  * Creating an end user or persona.
  *
- * A password is required unless the account is a persona, and refused when it is.
- * Personas are only *selectable* on a non-production endpoint, which the server
- * enforces at sign-in; creating one on a production endpoint is allowed so that an
- * endpoint can be seeded before it is promoted.
+ * A password is refused for a persona. For a local account it is optional: an account
+ * created without one cannot sign in until a password is set, either by an
+ * administrator or by its holder through an invitation link. A persona can be
+ * selected only on a non-production endpoint, which the server enforces at
+ * sign-in; creating one on a production endpoint is allowed so that an endpoint can
+ * be seeded before it is promoted.
  */
 export const endUserCreateSchema = endUserFieldsSchema
   .extend({
     username: z.string().min(1).max(128),
-    password: z.string().min(8).max(1024).optional(),
+    password: endUserPasswordField.optional(),
     isPersona: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
@@ -61,14 +75,6 @@ export const endUserCreateSchema = endUserFieldsSchema
         path: ["password"],
         message:
           "A persona has no password: it is selected from a picker, not signed into",
-      });
-    }
-    if (value.isPersona !== true && value.password === undefined) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["password"],
-        message:
-          "A local account needs a password, or must be marked a persona",
       });
     }
   });
@@ -86,7 +92,7 @@ export const endUserPatchSchema = endUserFieldsSchema
 
 /** Setting an end user's password. */
 export const endUserPasswordSchema = z.object({
-  password: z.string().min(8).max(1024),
+  password: endUserPasswordField,
 });
 
 export type EndUserCreate = z.infer<typeof endUserCreateSchema>;

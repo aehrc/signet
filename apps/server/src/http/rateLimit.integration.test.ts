@@ -284,4 +284,28 @@ describe.skipIf(testDatabaseUrl === undefined)("the rate limits", () => {
     }
     expect(await adminSignIn("203.0.113.91")).toBe(429);
   });
+
+  it.each(["details", "accept"])(
+    "limits the invitation page's %s route",
+    async (action) => {
+      // Both take a bearer token from an unauthenticated caller, and the second
+      // sets a password with it.
+      let last = 0;
+      for (let index = 0; index < RATE_LIMITS.signIn.limit + 1; index += 1) {
+        const response = await stack.app.request(
+          `${issuerPath(stack)}/invitation/${action}`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-forwarded-for": `203.0.113.${action === "details" ? "100" : "101"}`,
+            },
+            body: JSON.stringify({ token: "guess", password: "a-guess-here" }),
+          },
+        );
+        last = response.status;
+      }
+      expect(last).toBe(429);
+    },
+  );
 });

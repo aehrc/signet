@@ -174,6 +174,17 @@ export interface EndUserView {
   readonly createdAt: string;
 }
 
+/** An outstanding invitation: when it was made and when it stops working. */
+export interface InvitationView {
+  readonly createdAt: string;
+  readonly expiresAt: string;
+}
+
+/** A newly made invitation. The link is in this response and nowhere else. */
+export interface IssuedInvitationView extends InvitationView {
+  readonly url: string;
+}
+
 /** One policy version. */
 export interface PolicyView {
   readonly version: number;

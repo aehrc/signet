@@ -41,6 +41,7 @@ import type {
   Endpoint,
   EndpointKey,
   EndUser,
+  EndUserInvitation,
   Policy,
   TenantMember,
 } from "@signet/db";
@@ -177,6 +178,16 @@ export function endUserView(user: EndUser): Record<string, unknown> {
     hasPassword: user.passwordHash !== null,
     disabledAt: user.disabledAt,
     createdAt: user.createdAt,
+  };
+}
+
+/** An end user's outstanding invitation. Never the token, which is held only hashed. */
+export function invitationView(
+  invitation: EndUserInvitation,
+): Record<string, unknown> {
+  return {
+    createdAt: invitation.createdAt,
+    expiresAt: invitation.expiresAt,
   };
 }
 

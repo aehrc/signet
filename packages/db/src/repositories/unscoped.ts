@@ -109,6 +109,7 @@ export const SWEEP_FUNCTIONS: readonly string[] = [
   "repositories/authorizationSessions.deleteExpiredAuthorizationSessions",
   "repositories/consents.deleteExpiredConsents",
   "repositories/endUserSessions.deleteExpiredEndUserSessions",
+  "repositories/endUserInvitations.deleteExpiredEndUserInvitations",
   "repositories/jtiReplay.deleteExpiredJtis",
   "repositories/launchContexts.deleteExpiredLaunchContexts",
   "repositories/refreshTokens.deleteExpiredRefreshTokens",

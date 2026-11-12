@@ -76,7 +76,23 @@ import {
   promoteNextEndpointKey,
 } from "./endpointKeys.js";
 import { createEndpoint, getEndpoint, listEndpoints } from "./endpoints.js";
-import { createEndUser, listSelectablePersonas } from "./endUsers.js";
+import {
+  cancelEndUserInvitation,
+  findEndUserByInvitation,
+  findOutstandingEndUserInvitation,
+  issueEndUserInvitation,
+  redeemEndUserInvitation,
+} from "./endUserInvitations.js";
+import {
+  createEndUser,
+  getEndUser,
+  listSelectablePersonas,
+  setEndUserDisabled,
+} from "./endUsers.js";
+import {
+  createEndUserSession,
+  findLiveEndUserSession,
+} from "./endUserSessions.js";
 import { hasSeenJti, recordJti } from "./jtiReplay.js";
 import {
   consumeLaunchContext,
@@ -1734,6 +1750,267 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     });
   });
 
+  describe("end user invitations", () => {
+    /** A local account with no password, as an invited account starts out. */
+    async function newInvitee(fixture: Fixture) {
+      return await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createEndUser(bound, {
+          username: `invitee-${unique()}`,
+          displayName: "Invitee",
+        }),
+      );
+    }
+
+    /** Issues an invitation for an account, expiring `inMs` from now. */
+    async function invite(
+      fixture: Fixture,
+      endUserId: string,
+      tokenHash: string,
+      inMs = 600_000,
+    ) {
+      return await withTenantScope(db, fixture.endpointScope, (bound) =>
+        issueEndUserInvitation(bound, {
+          endUserId,
+          tokenHash,
+          expiresAt: new Date(Date.now() + inMs),
+        }),
+      );
+    }
+
+    it("reports an invitation outstanding until it expires", async () => {
+      const fixture = await newFixture();
+      const user = await newInvitee(fixture);
+      const issued = await invite(fixture, user.id, `inv-${unique()}`);
+
+      const outstanding = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) => findOutstandingEndUserInvitation(bound, user.id),
+      );
+      expect(outstanding?.expiresAt).toEqual(issued.expiresAt);
+
+      // Asked about a moment after its expiry, the same row is not outstanding.
+      const later = new Date(issued.expiresAt.getTime() + 1);
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          findOutstandingEndUserInvitation(bound, user.id, later),
+        ),
+      ).toBeUndefined();
+    });
+
+    it("replaces an earlier invitation, so only the newest link works", async () => {
+      const fixture = await newFixture();
+      const user = await newInvitee(fixture);
+      const first = `inv-first-${unique()}`;
+      const second = `inv-second-${unique()}`;
+      await invite(fixture, user.id, first);
+      await invite(fixture, user.id, second);
+
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          findEndUserByInvitation(bound, first),
+        ),
+      ).toBeUndefined();
+      expect(
+        (
+          await withTenantScope(db, fixture.endpointScope, (bound) =>
+            findEndUserByInvitation(bound, second),
+          )
+        )?.user.id,
+      ).toBe(user.id);
+    });
+
+    it("sets the password once, spends the link and ends the account's sessions", async () => {
+      const fixture = await newFixture();
+      const user = await newInvitee(fixture);
+      const tokenHash = `inv-${unique()}`;
+      await invite(fixture, user.id, tokenHash);
+      const sessionHash = `session-${unique()}`;
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createEndUserSession(bound, {
+          endUserId: user.id,
+          tokenHash: sessionHash,
+          expiresAt: new Date(Date.now() + 600_000),
+          ip: null,
+          userAgent: null,
+        }),
+      );
+
+      const redeemed = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) => redeemEndUserInvitation(bound, tokenHash, "$argon2id$new"),
+      );
+      expect(redeemed?.id).toBe(user.id);
+      expect(redeemed?.passwordHash).toBe("$argon2id$new");
+
+      // A reset is the case this matters for: whoever held the old password may
+      // also hold a session.
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          findLiveEndUserSession(bound, sessionHash),
+        ),
+      ).toBeUndefined();
+
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          redeemEndUserInvitation(bound, tokenHash, "$argon2id$again"),
+        ),
+      ).toBeUndefined();
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          findOutstandingEndUserInvitation(bound, user.id),
+        ),
+      ).toBeUndefined();
+    });
+
+    it("lets exactly one of two overlapping redemptions set the password", async () => {
+      const fixture = await newFixture();
+      const user = await newInvitee(fixture);
+      const tokenHash = `inv-race-${unique()}`;
+      await invite(fixture, user.id, tokenHash);
+
+      const [first, second] = await raceOnOneRow((executor) =>
+        withTenantScope(executor, fixture.endpointScope, (bound) =>
+          redeemEndUserInvitation(bound, tokenHash, "$argon2id$race"),
+        ),
+      );
+
+      expect(first?.id).toBe(user.id);
+      expect(second).toBeUndefined();
+    });
+
+    it("refuses an expired link without touching the password", async () => {
+      const fixture = await newFixture();
+      const user = await newInvitee(fixture);
+      const tokenHash = `inv-expired-${unique()}`;
+      await invite(fixture, user.id, tokenHash, -1000);
+
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          findEndUserByInvitation(bound, tokenHash),
+        ),
+      ).toBeUndefined();
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          redeemEndUserInvitation(bound, tokenHash, "$argon2id$late"),
+        ),
+      ).toBeUndefined();
+      expect(
+        (
+          await withTenantScope(db, fixture.endpointScope, (bound) =>
+            getEndUser(bound, user.id),
+          )
+        )?.passwordHash,
+      ).toBeNull();
+    });
+
+    it("refuses a disabled account's link and keeps it for when it is enabled", async () => {
+      const fixture = await newFixture();
+      const user = await newInvitee(fixture);
+      const tokenHash = `inv-disabled-${unique()}`;
+      await invite(fixture, user.id, tokenHash);
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        setEndUserDisabled(bound, user.id, true),
+      );
+
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          findEndUserByInvitation(bound, tokenHash),
+        ),
+      ).toBeUndefined();
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          redeemEndUserInvitation(bound, tokenHash, "$argon2id$disabled"),
+        ),
+      ).toBeUndefined();
+
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        setEndUserDisabled(bound, user.id, false),
+      );
+      expect(
+        (
+          await withTenantScope(db, fixture.endpointScope, (bound) =>
+            redeemEndUserInvitation(bound, tokenHash, "$argon2id$enabled"),
+          )
+        )?.id,
+      ).toBe(user.id);
+    });
+
+    it("refuses a persona's link, since a persona has no password", async () => {
+      const fixture = await newFixture();
+      const persona = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) =>
+          createEndUser(bound, {
+            username: `persona-${unique()}`,
+            displayName: "Persona",
+            isPersona: true,
+          }),
+      );
+      const tokenHash = `inv-persona-${unique()}`;
+      await invite(fixture, persona.id, tokenHash);
+
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          redeemEndUserInvitation(bound, tokenHash, "$argon2id$persona"),
+        ),
+      ).toBeUndefined();
+    });
+
+    it("does not honour a link at another endpoint of the same tenant", async () => {
+      const fixture = await newFixture();
+      const user = await newInvitee(fixture);
+      const tokenHash = `inv-elsewhere-${unique()}`;
+      await invite(fixture, user.id, tokenHash);
+      const other = await withTenantScope(db, fixture.tenantScope, (bound) =>
+        createEndpoint(bound, {
+          slug: `e-${unique()}`,
+          name: "Other endpoint",
+          fhirBaseUrl: "https://fhir.example.org/fhir",
+        }),
+      );
+      const otherScope = endpointScopeFromRow(fixture.tenantScope, other);
+
+      // Separate endpoints hold separate accounts; the tenant policy alone would
+      // let this row be seen, so the endpoint predicate is what is under test.
+      expect(
+        await withTenantScope(db, otherScope, (bound) =>
+          findEndUserByInvitation(bound, tokenHash),
+        ),
+      ).toBeUndefined();
+      expect(
+        await withTenantScope(db, otherScope, (bound) =>
+          redeemEndUserInvitation(bound, tokenHash, "$argon2id$elsewhere"),
+        ),
+      ).toBeUndefined();
+    });
+
+    it("cancels an outstanding invitation once", async () => {
+      const fixture = await newFixture();
+      const user = await newInvitee(fixture);
+      const tokenHash = `inv-cancel-${unique()}`;
+      await invite(fixture, user.id, tokenHash);
+
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          cancelEndUserInvitation(bound, user.id),
+        ),
+      ).toBe(true);
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          cancelEndUserInvitation(bound, user.id),
+        ),
+      ).toBe(false);
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          redeemEndUserInvitation(bound, tokenHash, "$argon2id$cancelled"),
+        ),
+      ).toBeUndefined();
+    });
+  });
+
   describe("the expiry sweep", () => {
     // The sweep is the one thing in this file that needs the owning identity, and
     // `db` is deliberately not it: the suite connects as the serving role, so a
@@ -1798,6 +2075,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         consents: counts.consents,
         jtiReplay: counts.jtiReplay,
         endUserSessions: counts.endUserSessions,
+        endUserInvitations: counts.endUserInvitations,
       }).toEqual({
         launchContexts: 0,
         authorizationCodes: 0,
@@ -1807,6 +2085,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         consents: 0,
         jtiReplay: 0,
         endUserSessions: 0,
+        endUserInvitations: 0,
       });
 
       // And the expired rows it could not see are still there for the owner to
@@ -1846,14 +2125,50 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
           expiresAt: new Date(Date.now() - 1000),
         }),
       );
+      const expiredInvitee = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) =>
+          createEndUser(bound, {
+            username: `sweep-expired-${unique()}`,
+            displayName: "Expired invitee",
+          }),
+      );
+      const liveInvitee = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) =>
+          createEndUser(bound, {
+            username: `sweep-live-${unique()}`,
+            displayName: "Live invitee",
+          }),
+      );
+      for (const [invitee, offset] of [
+        [expiredInvitee, -1000],
+        [liveInvitee, 600_000],
+      ] as const) {
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          issueEndUserInvitation(bound, {
+            endUserId: invitee.id,
+            tokenHash: `sweep-invitation-${unique()}`,
+            expiresAt: new Date(Date.now() + offset),
+          }),
+        );
+      }
 
       const counts = await sweepExpiredRuntimeRows(owner);
       expect(counts.launchContexts).toBeGreaterThanOrEqual(1);
       expect(counts.refreshTokens).toBeGreaterThanOrEqual(1);
+      expect(counts.endUserInvitations).toBeGreaterThanOrEqual(1);
 
       expect(
         await withTenantScope(db, fixture.endpointScope, (bound) =>
           findLaunchContext(bound, liveHandle),
+        ),
+      ).toBeDefined();
+      expect(
+        await withTenantScope(db, fixture.endpointScope, (bound) =>
+          findOutstandingEndUserInvitation(bound, liveInvitee.id),
         ),
       ).toBeDefined();
     });
