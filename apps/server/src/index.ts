@@ -22,6 +22,7 @@ import {
 import { verifyEnforcement } from "./enforcement.js";
 import { createRateLimitStore } from "./http/rateLimit.js";
 import { runMigrateCommand } from "./migrate.js";
+import { createSmtpMailer } from "./notifications/mailer.js";
 import { createRemoteJwksCache } from "./oauth/remoteJwks.js";
 import { runSweepCommand } from "./sweep.js";
 
@@ -157,7 +158,16 @@ const app = createApp({
   clock: () => new Date(),
   rateLimits: createRateLimitStore(),
   jwksCache: createRemoteJwksCache(),
+  mailer: config.smtp === undefined ? undefined : createSmtpMailer(config.smtp),
 });
+
+// Said once at startup either way, so an operator can read from the log whether
+// anybody will be told about a registration request.
+console.log(
+  config.smtp === undefined
+    ? "Signet email notifications are off: SIGNET_SMTP_HOST is not set"
+    : `Signet email notifications are sent through ${config.smtp.host}:${String(config.smtp.port)} (TLS: ${config.smtp.tls})`,
+);
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`Signet listening on http://localhost:${String(info.port)}`);

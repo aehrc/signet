@@ -60,6 +60,8 @@ const REQUIRED_ACTIONS: readonly AuditAction[] = [
   "client-request.submitted",
   "client-request.approved",
   "client-request.rejected",
+  "client-request.notified",
+  "client-request.notification-failed",
   "end-user.created",
   "end-user.updated",
   "end-user.disabled",

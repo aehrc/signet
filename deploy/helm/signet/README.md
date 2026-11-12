@@ -176,6 +176,25 @@ mounted into.
 
 ## Examples
 
+### Email notifications through Amazon SES
+
+Owners and admins are emailed when a developer files a registration request.
+The relay is configured like any other variable, with the password as a secret.
+See "Registration request notifications" in `docs/operations.md` for what is
+sent and what happens when it cannot be.
+
+```yaml
+signet:
+  config:
+    SIGNET_SMTP_HOST: "email-smtp.ap-southeast-2.amazonaws.com"
+    SIGNET_SMTP_PORT: "587"
+    SIGNET_SMTP_FROM: "Signet <signet@example.org>"
+
+  secretConfig:
+    SIGNET_SMTP_USERNAME: "AKIA…"
+    SIGNET_SMTP_PASSWORD: "…"
+```
+
 ### Resource requests and limits
 
 Unset by default, which leaves the pods in the BestEffort QoS class. A cluster

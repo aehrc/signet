@@ -55,6 +55,32 @@ export interface SignetConfig {
    * says nothing gets the socket address, not whatever the caller wrote.
    */
   readonly trustedProxyCount: number;
+  /**
+   * The relay registration request notifications are sent through, or undefined
+   * when `SIGNET_SMTP_HOST` is unset and notifications are off.
+   */
+  readonly smtp: SmtpConfig | undefined;
+}
+
+/** How Signet reaches the SMTP relay it sends notifications through. */
+export interface SmtpConfig {
+  readonly host: string;
+  readonly port: number;
+  /**
+   * How the connection is protected.
+   *
+   * `implicit` is TLS from the first byte, which is what port 465 means. `starttls`
+   * upgrades a plaintext connection and refuses to continue if the relay will not,
+   * so an SMTP password is never sent in the clear. `optional` upgrades when the
+   * relay offers it and carries on in plaintext when it does not - for a local mail
+   * catcher, and only when `SIGNET_SMTP_ALLOW_INSECURE` says so.
+   */
+  readonly tls: "implicit" | "starttls" | "optional";
+  /** Absent for a relay that accepts mail without authentication. */
+  readonly credentials:
+    { readonly username: string; readonly password: string } | undefined;
+  /** The `From` header, as in `Signet <signet@example.org>`. */
+  readonly from: string;
 }
 
 /** Thrown when the environment cannot produce a usable configuration. */
@@ -449,6 +475,93 @@ export function loadConfig(env: Environment): SignetConfig {
       env,
       "SIGNET_TRUSTED_PROXY_COUNT",
     ),
+    smtp: resolveSmtp(env),
+  };
+}
+
+/** Every SMTP setting other than the host, which is what turns the rest on. */
+const SMTP_SETTINGS = [
+  "SIGNET_SMTP_PORT",
+  "SIGNET_SMTP_USERNAME",
+  "SIGNET_SMTP_PASSWORD",
+  "SIGNET_SMTP_FROM",
+  "SIGNET_SMTP_ALLOW_INSECURE",
+] as const;
+
+/** The submission port, where a relay expects STARTTLS. */
+const DEFAULT_SMTP_PORT = "587";
+
+/** The port that means TLS from the first byte (RFC 8314). */
+const IMPLICIT_TLS_PORT = 465;
+
+/**
+ * Resolves the relay notifications are sent through.
+ *
+ * Off unless `SIGNET_SMTP_HOST` is set, and refused rather than half-configured
+ * when anything else is: a deployment that set a password and forgot the host
+ * would otherwise run believing it was telling somebody. No message quotes the
+ * username or the password, because these reach a pod's logs.
+ *
+ * @throws {ConfigError} When a setting is present without the host, the sender is
+ *   missing or not an address, the port is unusable, only one of the username and
+ *   password is set, or the plaintext flag cannot be read.
+ */
+function resolveSmtp(env: Environment): SmtpConfig | undefined {
+  const host = read(env, "SIGNET_SMTP_HOST");
+  if (host === undefined) {
+    const stray = SMTP_SETTINGS.find((name) => read(env, name) !== undefined);
+    if (stray !== undefined) {
+      throw new ConfigError(
+        `${stray} is set, so SIGNET_SMTP_HOST is also required`,
+      );
+    }
+    return undefined;
+  }
+
+  const from = read(env, "SIGNET_SMTP_FROM");
+  if (from === undefined) {
+    throw new ConfigError(
+      "SIGNET_SMTP_FROM is required when SIGNET_SMTP_HOST is set; it is the address notifications are sent from",
+    );
+  }
+  if (!from.includes("@")) {
+    throw new ConfigError(
+      `SIGNET_SMTP_FROM must contain an email address, got "${from}"`,
+    );
+  }
+
+  const portValue = read(env, "SIGNET_SMTP_PORT") ?? DEFAULT_SMTP_PORT;
+  const port = Number(portValue);
+  if (!/^\d+$/.test(portValue) || port < 1 || port > 65_535) {
+    throw new ConfigError(
+      `SIGNET_SMTP_PORT must be an integer between 1 and 65535, got "${portValue}"`,
+    );
+  }
+
+  const username = read(env, "SIGNET_SMTP_USERNAME");
+  const password = read(env, "SIGNET_SMTP_PASSWORD");
+  if ((username === undefined) !== (password === undefined)) {
+    throw new ConfigError(
+      "Set both SIGNET_SMTP_USERNAME and SIGNET_SMTP_PASSWORD, or neither",
+    );
+  }
+
+  // Read even on 465, so a misspelt flag is refused whatever the port.
+  const allowInsecure = readBoolean(env, "SIGNET_SMTP_ALLOW_INSECURE");
+  let tls: SmtpConfig["tls"] = allowInsecure ? "optional" : "starttls";
+  if (port === IMPLICIT_TLS_PORT) {
+    tls = "implicit";
+  }
+
+  return {
+    host,
+    port,
+    tls,
+    credentials:
+      username === undefined || password === undefined
+        ? undefined
+        : { username, password },
+    from,
   };
 }
 
