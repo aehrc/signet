@@ -17,6 +17,7 @@ import {
   ENDPOINT_KIND_OPTIONS,
   endpointKindLabel,
   presetsFor,
+  ruleDescriptionHint,
   visibleCapabilities,
 } from "./endpointKind.js";
 
@@ -195,5 +196,27 @@ describe("presetsFor", () => {
     expect(presetsFor("oauth", presets).map((entry) => entry.id)).toEqual([
       "oauth-baseline",
     ]);
+  });
+});
+
+describe("ruleDescriptionHint", () => {
+  it("warns that an OAuth grant rule's description is shown at consent", () => {
+    // The consent screen phrases an API scope with the description of the rule
+    // that granted it, so an internal note there reaches every end user.
+    expect(ruleDescriptionHint("oauth", "scopeGrants")).toMatch(
+      /^Shown to end users on the consent screen/u,
+    );
+  });
+
+  it("keeps the reasoning hint wherever the description is not shown", () => {
+    for (const [kind, list] of [
+      ["smart", "scopeGrants"],
+      ["oauth", "claimRules"],
+      ["smart", "contextRules"],
+    ] as const) {
+      expect(ruleDescriptionHint(kind, list)).toBe(
+        "Why this rule exists. The code view has no comments, so this is where the reasoning lives.",
+      );
+    }
   });
 });

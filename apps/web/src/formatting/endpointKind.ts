@@ -24,6 +24,7 @@ import { SMART_ONLY_CAPABILITY_FLAGS } from "@signet/core";
 import { capabilityLabel } from "./values.js";
 
 import type { EndpointView, PresetView } from "../api/types.js";
+import type { RuleList } from "../policy/rules.js";
 import type { EndpointKind } from "@signet/core";
 
 /** The SMART-only flags, as a set of the admin API's flag names. */
@@ -215,4 +216,26 @@ export function presetsFor(
   presets: readonly PresetView[],
 ): readonly PresetView[] {
   return presets.filter((preset) => preset.kind === kind);
+}
+
+/**
+ * The hint under a rule's Description field.
+ *
+ * On an OAuth endpoint the consent screen phrases an API scope with the description
+ * of the grant rule that granted it, so there the description is end-user copy and
+ * the hint says so, lest an operator leave an internal note in it. Everywhere else
+ * nobody but an operator reads it.
+ *
+ * @param kind - The endpoint's kind.
+ * @param list - The list the rule belongs to.
+ * @example
+ * ruleDescriptionHint("oauth", "scopeGrants"); // "Shown to end users on the consent screen…"
+ */
+export function ruleDescriptionHint(
+  kind: EndpointKind,
+  list: RuleList,
+): string {
+  return kind === "oauth" && list === "scopeGrants"
+    ? "Shown to end users on the consent screen as what this scope lets an app do. Write it for them, not as an internal note."
+    : "Why this rule exists. The code view has no comments, so this is where the reasoning lives.";
 }

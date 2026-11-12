@@ -19,7 +19,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RuleCard } from "./ruleCard.js";
 
 import type { AnyRule } from "./rules.js";
-import type { PolicyDocument } from "@signet/core";
+import type { EndpointKind, PolicyDocument } from "@signet/core";
 
 const rule: AnyRule = { id: "grant-abc123", match: "patient/*.r", allow: true };
 
@@ -31,11 +31,16 @@ const document: PolicyDocument = {
   defaults: { accessTokenTtl: 300, refreshTokenTtl: 3600 },
 };
 
-/** Renders the card with the given expansion state and edit permission. */
-function render(expanded: boolean, disabled = false): string {
+/** Renders the card with the given expansion state, edit permission and kind. */
+function render(
+  expanded: boolean,
+  disabled = false,
+  kind: EndpointKind = "smart",
+): string {
   return renderToStaticMarkup(
     <RuleCard
       list="scopeGrants"
+      kind={kind}
       document={document}
       rule={rule}
       position={1}
@@ -53,6 +58,15 @@ function render(expanded: boolean, disabled = false): string {
 }
 
 describe("RuleCard", () => {
+  it("tells an OAuth endpoint's operator that the description reaches end users", () => {
+    expect(render(true, false, "oauth")).toContain(
+      "Shown to end users on the consent screen",
+    );
+    expect(render(true, false, "smart")).not.toContain(
+      "Shown to end users on the consent screen",
+    );
+  });
+
   it("draws the reorder buttons with arrow octicons", () => {
     const markup = render(false);
     expect(markup).toContain("octicon-arrow-up");

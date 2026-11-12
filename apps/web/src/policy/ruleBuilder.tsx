@@ -216,6 +216,7 @@ function RuleSection({
             <li key={rule.id ?? String(index)}>
               <RuleCard
                 list={list}
+                kind={kind}
                 document={document}
                 rule={rule}
                 position={index + 1}
