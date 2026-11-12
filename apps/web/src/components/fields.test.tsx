@@ -223,12 +223,20 @@ describe("FormFooter", () => {
     expect(markup).toContain("flex flex-wrap gap-2");
   });
 
+  it("sizes Cancel to match the submit button", () => {
+    // A default-sized ghost button is 8px taller than the small submit button
+    // beside it, which reads as a misaligned pair.
+    expect(markup).toContain("btn btn-sm btn-ghost");
+  });
+
   it("offers a 44px touch target on Cancel below sm", () => {
-    expect(markup).toContain("btn btn-ghost max-sm:min-h-11");
+    expect(markup).toContain("btn btn-sm btn-ghost max-sm:min-h-11");
   });
 
   it("reads Cancel at 16px below sm", () => {
-    expect(markup).toContain("btn btn-ghost max-sm:min-h-11 max-sm:text-base");
+    expect(markup).toContain(
+      "btn btn-sm btn-ghost max-sm:min-h-11 max-sm:text-base",
+    );
   });
 });
 

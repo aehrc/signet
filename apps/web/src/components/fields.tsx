@@ -484,7 +484,7 @@ export function FormFooter({
         {onCancel === undefined ? null : (
           <button
             type="button"
-            className="btn btn-ghost max-sm:min-h-11 max-sm:text-base"
+            className="btn btn-sm btn-ghost max-sm:min-h-11 max-sm:text-base"
             onClick={onCancel}
           >
             Cancel
