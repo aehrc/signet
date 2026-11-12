@@ -22,6 +22,7 @@
  * Author: John Grimes
  */
 
+import { END_USER_PASSWORD_MIN_LENGTH } from "@signet/contracts";
 import { invitationTokenFromFragment } from "@signet/core";
 import { useState } from "react";
 import { useLocation, useParams } from "react-router";
@@ -198,7 +199,7 @@ function ChoosePassword({
           value={password}
           onChange={setPassword}
           error={issues.password}
-          hint="At least 8 characters."
+          hint={`At least ${String(END_USER_PASSWORD_MIN_LENGTH)} characters.`}
           autoComplete="new-password"
           required
         />

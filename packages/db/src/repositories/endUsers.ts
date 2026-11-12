@@ -182,9 +182,9 @@ export async function updateEndUser(
 /**
  * Replaces a user's password hash, or clears it.
  *
- * Clearing it turns the account into a persona, which is only selectable on a
- * non-production endpoint - so this cannot be used to create a password-free
- * login on a production endpoint, only an account that cannot log in at all.
+ * Clearing it leaves an account that cannot sign in with a password: a persona
+ * remains selectable only on a non-production endpoint, and a local account waits
+ * for a password to be set by an administrator or through an invitation link.
  */
 export async function setEndUserPasswordHash(
   scope: BoundEndpointScope,
