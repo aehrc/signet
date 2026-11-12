@@ -55,7 +55,7 @@ import type {
  * publishes: there is one list, and both readers take it from the same place.
  *
  * The booleans are what a capability is, so the non-boolean members of the config
- * (the issuer, the FHIR base URL, the scope list) are filtered out rather than
+ * (the issuer, the kind, the audience, the scope list) are filtered out rather than
  * named - a new flag then appears in the console without an edit, while a new
  * string-valued field does not leak into the capability object.
  *
@@ -82,10 +82,17 @@ export function endpointView(
     slug: endpoint.slug,
     name: endpoint.name,
     description: endpoint.description,
-    fhirBaseUrl: endpoint.fhirBaseUrl,
+    kind: endpoint.kind,
+    audience: endpoint.audience,
     issuer,
-    /** What an operator pastes into their FHIR server's configuration. */
-    smartConfigurationUrl: `${issuer}/.well-known/smart-configuration`,
+    /**
+     * What an operator pastes into their FHIR server's configuration. Null on an
+     * OAuth / OpenID Connect endpoint, which publishes no SMART configuration.
+     */
+    smartConfigurationUrl:
+      endpoint.kind === "smart"
+        ? `${issuer}/.well-known/smart-configuration`
+        : null,
     status: endpoint.status,
     authMode: endpoint.authMode,
     consentMode: endpoint.consentMode,
@@ -170,6 +177,8 @@ export function endUserView(user: EndUser): Record<string, unknown> {
     username: user.username,
     displayName: user.displayName,
     fhirUser: user.fhirUserReference,
+    email: user.email,
+    emailVerified: user.emailVerified,
     roles: user.roles,
     attributes: user.attributes,
     defaultContext: user.defaultContext,

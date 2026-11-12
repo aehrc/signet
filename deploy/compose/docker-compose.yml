@@ -3,7 +3,7 @@
 
 # The stack the end-to-end suite runs against.
 #
-# Four services, and each is here because the suite asserts something that only
+# Six services, and each is here because the suite asserts something that only
 # holds when it is real:
 #
 #   - Postgres, because the migrations install the tenant isolation policies and
@@ -22,15 +22,21 @@
 #   - A stub SMART app, because the launch is a browser flow. A test that drove
 #     the endpoints with `fetch` would prove the endpoints work and say nothing
 #     about whether an app can complete a launch.
+#   - oauth2-proxy in front of a static "regular app", because an OAuth / OpenID
+#     Connect endpoint is for software that knows nothing about SMART. An
+#     off-the-shelf relying party that signs a person in through Signet and
+#     validates Signet's access tokens is the evidence that the endpoint speaks
+#     plain OpenID Connect, which no test written against Signet alone can give.
 #
 # Bring it up with `bun run stack:up`; `bun run stack:down` tears it down.
 #
 # **Ports.** Signet is published on `SIGNET_PORT` (3000 by default), Pathling on
-# `PATHLING_PORT` (8080) and the stub app on `APP_PORT` (4000). They are variables
-# because an issuer identifier contains its port: a developer whose 3000 is taken
-# sets `SIGNET_PORT=3100` and every URL - the public URL, the issuer Pathling
-# validates against, the audience, the seed and the suite - follows from it.
-# Hard-coding the port would mean editing five places and getting one of them wrong.
+# `PATHLING_PORT` (8080), the stub app on `APP_PORT` (4000) and oauth2-proxy on
+# `PROXY_PORT` (4180). They are variables because an issuer identifier contains its
+# port: a developer whose 3000 is taken sets `SIGNET_PORT=3100` and every URL - the
+# public URL, the issuer Pathling and oauth2-proxy validate against, the audiences,
+# the seed and the suite - follows from it. Hard-coding the port would mean editing
+# several places and getting one of them wrong.
 #
 # **They must be exported into the shell**, not written to the repository's
 # `.env.local`. `bun run stack:up` launches `docker compose` as a child process, and
@@ -46,10 +52,13 @@
 # `localhost` mean the same thing in both places, which is the smallest change that
 # makes one issuer identifier work from inside and outside the network.
 #
+# oauth2-proxy shares the namespace for the same reason: it discovers the issuer at
+# startup and verifies the `iss` of every token against it.
+#
 # One consequence, worth knowing before it puzzles somebody: recreating the Signet
-# container destroys the namespace Pathling is sharing, so Pathling stops with it.
-# Bring the stack up as a whole - `bun run stack:up` - rather than one service at a
-# time, and compose restarts both together.
+# container destroys the namespace Pathling and oauth2-proxy are sharing, so they
+# stop with it. Bring the stack up as a whole - `bun run stack:up` - rather than one
+# service at a time, and compose restarts them together.
 
 name: signet-e2e
 
@@ -188,6 +197,11 @@ services:
       # for exactly what this turns off, and why it must never be set in
       # production.
       SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES: "true"
+      # Thirty sign-ins a minute per address rather than the default ten. The
+      # whole suite signs in from one address, and one run spends eleven end-user
+      # sign-ins across the SMART and OAuth endpoints. See
+      # `e2e/playwright.config.ts` for the budget.
+      SIGNET_SIGN_IN_RATE_LIMIT: "30"
     # The stand-in trust anchor runs in the Playwright process, on the host. Signet
     # has to fetch its published keys, and the host's loopback is not an address a
     # container can open - so the anchor binds every address and Signet reaches it
@@ -200,6 +214,8 @@ services:
       # Pathling's port, published here because it shares this container's
       # network namespace. See the header.
       - "${PATHLING_PORT:-8080}:${PATHLING_PORT:-8080}"
+      # oauth2-proxy's, for the same reason.
+      - "${PROXY_PORT:-4180}:${PROXY_PORT:-4180}"
     depends_on:
       bootstrap-passkey:
         condition: service_completed_successfully
@@ -212,7 +228,8 @@ services:
   # eagerly while it starts, and exits 1 if the endpoint behind that URL does not
   # answer - so the endpoint has to exist *before* Pathling starts. Seeding from
   # the host after `stack:up` cannot satisfy that: `--wait` would already be
-  # blocked waiting for the Pathling that is waiting for the seed.
+  # blocked waiting for the Pathling that is waiting for the seed. oauth2-proxy
+  # discovers its issuer at startup in the same way, and waits for the seed too.
   #
   # It runs the same script as `bun run stack:seed`, and that script is
   # idempotent, so running it both ways over one stack is harmless.
@@ -224,11 +241,12 @@ services:
     environment:
       # Compose DNS, not the published URL: this container talks to Signet
       # directly. What it *stores* is still expressed in browser-reachable terms,
-      # which is what the two seed URLs below are for.
+      # which is what the seed URLs below are for.
       SIGNET_BASE_URL: http://signet:${SIGNET_PORT:-3000}
       SIGNET_SEED_TENANT: demo
       SIGNET_SEED_FHIR_BASE: http://localhost:${PATHLING_PORT:-8080}/fhir
       SIGNET_SEED_APP_ORIGIN: http://localhost:${APP_PORT:-4000}
+      SIGNET_SEED_PROXY_ORIGIN: http://localhost:${PROXY_PORT:-4180}
       SIGNET_BOOTSTRAP_EMAIL: ops@example.org
       SIGNET_BOOTSTRAP_PASSWORD: correct horse battery staple
     depends_on:
@@ -298,3 +316,61 @@ services:
     depends_on:
       signet:
         condition: service_healthy
+
+  # A regular web app and API: a static page and a JSON document, served by nginx
+  # with nothing in it that knows about OAuth. Not published; oauth2-proxy is the
+  # only way in, which is the arrangement the proxy exists for.
+  regular-app:
+    image: nginx:1-alpine
+    volumes:
+      - ./regular-app:/usr/share/nginx/html:ro
+      - ./regular-app.conf:/etc/nginx/conf.d/default.conf:ro
+
+  # oauth2-proxy, unmodified, in front of the regular app and pointed at the
+  # `notes` endpoint the seed creates - an OAuth / OpenID Connect endpoint, not a
+  # SMART one. A browser visiting it is signed in through Signet with the
+  # authorization code flow and PKCE. A request under `/api/` carrying a bearer
+  # token is let through when the token's signature, issuer and audience check
+  # out, and refused otherwise.
+  #
+  # Configured on the command line rather than in a file, so every setting the
+  # integration needs is in one place. See docs/oauth-endpoints.md.
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
+    # Shares Signet's network stack, so the issuer it discovers is the
+    # `http://localhost:...` one the browser and the tokens use. See the header.
+    network_mode: "service:signet"
+    command:
+      - --http-address=0.0.0.0:${PROXY_PORT:-4180}
+      - --provider=oidc
+      - --oidc-issuer-url=http://localhost:${SIGNET_PORT:-3000}/t/demo/e/notes
+      - --client-id=notes-proxy
+      # Development only, like every credential in this stack.
+      - --client-secret=notes-proxy-secret-value-00000
+      - --redirect-url=http://localhost:${PROXY_PORT:-4180}/oauth2/callback
+      - --scope=openid profile email
+      - --code-challenge-method=S256
+      - --cookie-secret=compose-cookie-secret-not-prod00
+      # The stack is served over plain HTTP on localhost.
+      - --cookie-secure=false
+      - --email-domain=*
+      # Straight to Signet rather than to oauth2-proxy's own sign-in button.
+      - --skip-provider-button=true
+      # Bearer tokens are validated in place of a session cookie: signature
+      # against the endpoint's JWKS, `iss` against the issuer and `aud` against
+      # the endpoint's audience. A token that fails is refused rather than sent
+      # to sign in.
+      - --skip-jwt-bearer-tokens=true
+      - --extra-jwt-issuers=http://localhost:${SIGNET_PORT:-3000}/t/demo/e/notes=http://localhost:${PROXY_PORT:-4180}/api
+      - --bearer-token-login-fallback=false
+      # The API answers an unauthenticated request with 401 rather than a
+      # redirect to a sign-in page it cannot follow.
+      - --api-route=^/api/
+      - --upstream=http://regular-app:80/
+    # The seed creates the endpoint and the client, and oauth2-proxy exits at
+    # startup if discovery against the issuer fails.
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      regular-app:
+        condition: service_started

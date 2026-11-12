@@ -27,6 +27,7 @@ import {
   CheckboxField,
   FormFooter,
   ListField,
+  RadioField,
   SaveRow,
   SelectField,
   SubmitButton,
@@ -228,5 +229,41 @@ describe("FormFooter", () => {
 
   it("reads Cancel at 16px below sm", () => {
     expect(markup).toContain("btn btn-ghost max-sm:min-h-11 max-sm:text-base");
+  });
+});
+
+describe("RadioField", () => {
+  const markup = renderToStaticMarkup(
+    <RadioField
+      label="Kind"
+      name="kind"
+      value=""
+      onChange={() => undefined}
+      hint="Cannot be changed afterwards."
+      required
+      options={[
+        { value: "smart", label: "SMART on FHIR", description: "For FHIR." },
+        { value: "oauth", label: "OAuth", description: "For anything else." },
+      ]}
+    />,
+  );
+
+  it("renders one required radio per option, none chosen", () => {
+    expect(markup.match(/type="radio"/g)?.length).toBe(2);
+    expect(markup.match(/required=""/g)?.length).toBe(2);
+    expect(markup).not.toContain("checked");
+  });
+
+  it("describes each option beside its label", () => {
+    expect(markup).toContain("SMART on FHIR");
+    expect(markup).toContain("For anything else.");
+  });
+
+  it("gives each option a whole-row tap target below sm", () => {
+    expect(markup).toContain("max-sm:min-h-11");
+  });
+
+  it("shows the hint", () => {
+    expect(markup).toContain("Cannot be changed afterwards.");
   });
 });

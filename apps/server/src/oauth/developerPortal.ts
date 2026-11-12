@@ -75,6 +75,21 @@ function notAccepted(c: Context<SignetEnvironment>) {
 }
 
 /**
+ * Handles `GET {iss}/apps/endpoint`: what the portal needs to know before a request.
+ *
+ * Only the endpoint's kind, which decides the scopes a request form starts with.
+ * Refused like the rest of the portal when the endpoint takes no requests, so the
+ * page can tell a developer so before they fill anything in.
+ */
+export function portalEndpointHandler(c: Context<SignetEnvironment>) {
+  const { endpoint } = c.get("issuer");
+  if (!endpoint.supportsDynamicRegistration) {
+    return notAccepted(c);
+  }
+  return c.json({ endpointKind: endpoint.kind });
+}
+
+/**
  * Handles `POST {iss}/apps/requests`: files a registration request.
  *
  * @param context - The server's dependencies.

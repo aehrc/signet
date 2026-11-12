@@ -37,6 +37,7 @@ describe("loadConfig - defaults", () => {
       databaseUrl: "postgres://u:p@db:5432/signet",
       masterKey: MASTER_KEY,
       trustedProxyCount: 0,
+      signInRateLimit: 10,
       logLevel: "info",
       webRoot: undefined,
       allowPrivateOutboundFetches: false,
@@ -77,6 +78,41 @@ describe("loadConfig - defaults", () => {
     expect(() => loadConfig(env({ PORT: "http" }))).toThrow(ConfigError);
     expect(() => loadConfig(env({ PORT: "0" }))).toThrow(ConfigError);
     expect(() => loadConfig(env({ PORT: "70000" }))).toThrow(ConfigError);
+  });
+});
+
+describe("loadConfig - sign-in rate limit", () => {
+  it("defaults to ten sign-ins per address per minute", () => {
+    expect(loadConfig(env()).signInRateLimit).toBe(10);
+  });
+
+  it("treats a blank value as absent", () => {
+    expect(
+      loadConfig(env({ SIGNET_SIGN_IN_RATE_LIMIT: "" })).signInRateLimit,
+    ).toBe(10);
+  });
+
+  it("reads a positive integer", () => {
+    expect(
+      loadConfig(env({ SIGNET_SIGN_IN_RATE_LIMIT: "30" })).signInRateLimit,
+    ).toBe(30);
+  });
+
+  it("refuses zero, which would lock every sign-in surface", () => {
+    expect(() => loadConfig(env({ SIGNET_SIGN_IN_RATE_LIMIT: "0" }))).toThrow(
+      /SIGNET_SIGN_IN_RATE_LIMIT/,
+    );
+  });
+
+  it("refuses a negative, fractional or unparseable value, naming it", () => {
+    for (const value of ["-5", "2.5", "ten", "10 ", "1e2"]) {
+      expect(() =>
+        loadConfig(env({ SIGNET_SIGN_IN_RATE_LIMIT: value })),
+      ).toThrow(ConfigError);
+      expect(() =>
+        loadConfig(env({ SIGNET_SIGN_IN_RATE_LIMIT: value })),
+      ).toThrow(/SIGNET_SIGN_IN_RATE_LIMIT/);
+    }
   });
 });
 

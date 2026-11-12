@@ -35,6 +35,7 @@ import {
   endpointConsentModeEnum,
   endpointKeyAlgorithmEnum,
   endpointKeyStatusEnum,
+  endpointKindEnum,
   endpointStatusEnum,
 } from "./enums.js";
 import { tenants } from "./tenancy.js";
@@ -53,11 +54,19 @@ export interface IdpClaimMappings {
   /** Claim yielding roles, as either an array or a space-delimited string. */
   readonly roles?: string;
   readonly displayName?: string;
+  /**
+   * Claim yielding the user's email address. The upstream `email_verified`
+   * claim is carried across beside it.
+   */
+  readonly email?: string;
   /** Further claims to copy verbatim into the user's attributes. */
   readonly attributes?: readonly string[];
 }
 
-/** A SMART authorization server issuer fronting one FHIR base URL. */
+/**
+ * An authorization server issuer: SMART on FHIR in front of one FHIR base URL,
+ * or plain OAuth 2.0 / OpenID Connect in front of one API.
+ */
 export const endpoints = pgTable(
   "endpoints",
   {
@@ -69,8 +78,16 @@ export const endpoints = pgTable(
     slug: text("slug").notNull(),
     name: text("name").notNull(),
     description: text("description"),
-    /** The BYO FHIR server's base URL, and the expected token `aud`. */
-    fhirBaseUrl: text("fhir_base_url").notNull(),
+    /**
+     * Fixed at creation, and with no column default: every insert names its
+     * kind, so a forgotten value fails rather than quietly becoming SMART.
+     */
+    kind: endpointKindEnum("kind").notNull(),
+    /**
+     * The `aud` of every access token this endpoint issues. On a SMART on FHIR
+     * endpoint, the FHIR server's base URL.
+     */
+    audience: text("audience").notNull(),
 
     // Launch modes.
     supportsEhrLaunch: boolean("supports_ehr_launch").notNull().default(true),
@@ -282,6 +299,13 @@ export const endUsers = pgTable(
     /** Relative FHIR reference, e.g. `Practitioner/123`. */
     fhirUserReference: text("fhir_user_reference"),
     displayName: text("display_name").notNull(),
+    /** Released as `email` in the ID token and userinfo for the `email` scope. */
+    email: text("email"),
+    /**
+     * Released as `email_verified`. False unless an operator sets it, or an
+     * upstream identity provider asserted `email_verified: true`.
+     */
+    emailVerified: boolean("email_verified").notNull().default(false),
     roles: text("roles").array().notNull().default([]),
     /** Arbitrary attributes a policy may template from. */
     attributes: jsonb("attributes")

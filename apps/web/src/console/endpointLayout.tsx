@@ -15,12 +15,16 @@
 
 import { NavLink, Outlet, useParams } from "react-router";
 
-import { endpointRoute, ENDPOINT_TABS } from "./routes.js";
+import { endpointRoute, endpointTabs } from "./routes.js";
 import { useConsoleContext } from "./useConsole.js";
 import { describeError } from "../api/errors.js";
 import { useEndpoint } from "../api/queries.js";
 import { ErrorAlert, Loading, PageHeader } from "../components/layout.js";
 import { StatusBadge } from "../components/table.js";
+import {
+  audienceWording,
+  endpointKindLabel,
+} from "../formatting/endpointKind.js";
 import { toneForStatus } from "../formatting/status.js";
 
 import type { ConsoleContext } from "./consoleLayout.js";
@@ -59,11 +63,18 @@ export function EndpointLayout() {
           <>
             <span className="font-mono text-xs">{endpoint.data.issuer}</span>
             <span className="mx-2">·</span>
-            <span>fronting {endpoint.data.fhirBaseUrl}</span>
+            <span>
+              {audienceWording(endpoint.data.kind).fronting(
+                endpoint.data.audience,
+              )}
+            </span>
           </>
         }
         actions={
           <>
+            <StatusBadge tone="neutral">
+              {endpointKindLabel(endpoint.data.kind)}
+            </StatusBadge>
             <StatusBadge tone={toneForStatus(endpoint.data.status)}>
               {endpoint.data.status}
             </StatusBadge>
@@ -80,7 +91,7 @@ export function EndpointLayout() {
         role="tablist"
         className="tabs tabs-border mb-6 max-sm:[&_.tab]:min-h-11"
       >
-        {ENDPOINT_TABS.map((tab) => (
+        {endpointTabs(endpoint.data.kind).map((tab) => (
           <NavLink
             key={tab.path}
             role="tab"

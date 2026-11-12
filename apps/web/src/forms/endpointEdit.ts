@@ -40,7 +40,7 @@ import type { CapabilityFlags, EndpointView } from "../api/types.js";
 export interface EndpointSettingsFormValues {
   readonly name: string;
   readonly description: string;
-  readonly fhirBaseUrl: string;
+  readonly audience: string;
   /** Seconds, as typed. */
   readonly accessTokenTtl: string;
   /** Seconds, as typed. */
@@ -65,7 +65,7 @@ export function endpointSettingsFormValues(
   return {
     name: endpoint.name,
     description: endpoint.description ?? "",
-    fhirBaseUrl: endpoint.fhirBaseUrl,
+    audience: endpoint.audience,
     accessTokenTtl: String(endpoint.accessTokenTtl),
     refreshTokenTtl: String(endpoint.refreshTokenTtl),
     authMode: endpoint.authMode,
@@ -136,7 +136,7 @@ export function endpointSettingsPatch(
     {
       name: edited.name,
       description: edited.description.length === 0 ? null : edited.description,
-      fhirBaseUrl: edited.fhirBaseUrl,
+      audience: edited.audience,
       authMode: edited.authMode,
       consentMode: edited.consentMode,
       isProduction: edited.isProduction,
@@ -145,7 +145,7 @@ export function endpointSettingsPatch(
     {
       name: current.name,
       description: current.description,
-      fhirBaseUrl: current.fhirBaseUrl,
+      audience: current.audience,
       authMode: current.authMode,
       consentMode: current.consentMode,
       isProduction: current.isProduction,

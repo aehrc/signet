@@ -13,7 +13,7 @@
  * Author: John Grimes
  */
 
-import { formatScopes } from "../scopes/index.js";
+import { formatScopes, hasIdentityScope } from "../scopes/index.js";
 
 import type {
   AccessTokenClaims,
@@ -23,7 +23,12 @@ import type {
   TokenResponse,
   TokenResponseInput,
 } from "./types.js";
-import type { EvaluationContext, PolicyEvaluation } from "../policy/types.js";
+import type { EndpointKind } from "../endpointKind.js";
+import type {
+  EvaluationContext,
+  EvaluationUser,
+  PolicyEvaluation,
+} from "../policy/types.js";
 import type { Scope } from "../scopes/types.js";
 
 /**
@@ -42,14 +47,54 @@ const RESERVED_RESPONSE_PARAMETERS: ReadonlySet<string> = new Set([
   "refresh_token",
 ]);
 
-/** True when the granted scopes include the given identity scope. */
-function hasIdentityScope(
+/**
+ * The claims about the user that the granted identity scopes release.
+ *
+ * On a SMART endpoint, `fhirUser` releases the user's FHIR reference, and so
+ * does `profile`, which SMART treats as a deprecated synonym for it. On an OAuth
+ * endpoint the OpenID Connect standard claims are released instead: `profile`
+ * gives `name` and `preferred_username`, and `email` gives `email` and
+ * `email_verified` when the user has an email address. A claim with no value is
+ * left out rather than sent empty.
+ *
+ * Shared by the ID token and so, through the claims recorded at issuance, by
+ * UserInfo: the two cannot disagree about who the user is.
+ *
+ * @param kind - The kind of endpoint issuing the token.
+ * @param user - The signed-in user, or null for a client acting for itself.
+ * @param granted - The scopes actually granted.
+ * @returns The identity claims to release, possibly none.
+ * @see https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims
+ */
+export function identityClaims(
+  kind: EndpointKind,
+  user: EvaluationUser | null,
   granted: readonly Scope[],
-  name: "openid" | "fhirUser" | "profile",
-): boolean {
-  return granted.some(
-    (scope) => scope.kind === "identity" && scope.name === name,
-  );
+): Readonly<Record<string, unknown>> {
+  if (user === null) {
+    return {};
+  }
+  if (kind === "smart") {
+    const fhirUser = user.fhirUser;
+    if (fhirUser === null) {
+      return {};
+    }
+    return {
+      ...(hasIdentityScope(granted, "fhirUser") ? { fhirUser } : {}),
+      ...(hasIdentityScope(granted, "profile") ? { profile: fhirUser } : {}),
+    };
+  }
+  return {
+    ...(hasIdentityScope(granted, "profile")
+      ? {
+          ...(user.displayName === null ? {} : { name: user.displayName }),
+          preferred_username: user.username,
+        }
+      : {}),
+    ...(hasIdentityScope(granted, "email") && user.email !== null
+      ? { email: user.email, email_verified: user.emailVerified }
+      : {}),
+  };
 }
 
 /**
@@ -75,7 +120,7 @@ export function assembleAccessTokenClaims(
     iss: context.endpoint.issuer,
     // The resource server, not the client: a SMART access token is presented to
     // the BYO FHIR server, which validates itself as the audience.
-    aud: context.endpoint.fhirBaseUrl,
+    aud: context.endpoint.audience,
     sub: issuance.subject,
     exp: issuance.issuedAt + evaluation.accessTokenTtl,
     iat: issuance.issuedAt,
@@ -119,8 +164,6 @@ export interface IdTokenInput {
 export function assembleIdTokenClaims(input: IdTokenInput): IdTokenClaims {
   const { evaluation, context, issuance } = input;
   const ttl = input.idTokenTtl ?? evaluation.accessTokenTtl;
-  const fhirUser = context.user?.fhirUser ?? null;
-  const granted = evaluation.grantedScopes;
 
   return {
     // Conditional claims are spread first so they can never displace a
@@ -129,14 +172,11 @@ export function assembleIdTokenClaims(input: IdTokenInput): IdTokenClaims {
     ...(issuance.authTime === undefined
       ? {}
       : { auth_time: issuance.authTime }),
-    ...(fhirUser !== null && hasIdentityScope(granted, "fhirUser")
-      ? { fhirUser }
-      : {}),
-    // SMART treats `profile` as a deprecated synonym for `fhirUser`, so it
-    // carries the same relative reference when that scope was granted.
-    ...(fhirUser !== null && hasIdentityScope(granted, "profile")
-      ? { profile: fhirUser }
-      : {}),
+    ...identityClaims(
+      context.endpoint.kind,
+      context.user,
+      evaluation.grantedScopes,
+    ),
     iss: context.endpoint.issuer,
     aud: context.client.clientId,
     sub: issuance.subject,

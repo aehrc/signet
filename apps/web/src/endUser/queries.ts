@@ -27,6 +27,7 @@ import {
   readAuthorizations,
   readInteraction,
   readInvitation,
+  readPortal,
   revokeAuthorization,
   submitConsent,
   submitContext,
@@ -171,5 +172,19 @@ export function useAcceptInvitation(
   return useMutation({
     mutationFn: async (password: string) =>
       await acceptInvitation(tenant, endpoint, token, password),
+  });
+}
+
+/**
+ * Reads what the developer portal needs to know about its endpoint.
+ *
+ * Not retried: the refusal that matters is a 404 for an endpoint that takes no
+ * self-serve requests, and asking again would not change it.
+ */
+export function usePortal(tenant: string, endpoint: string) {
+  return useQuery({
+    queryKey: ["portal", tenant, endpoint],
+    queryFn: async () => await readPortal(tenant, endpoint),
+    retry: false,
   });
 }

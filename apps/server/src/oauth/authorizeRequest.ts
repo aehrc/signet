@@ -27,19 +27,29 @@
  * scope here, so the `capabilities` array cannot be a lie in either direction -
  * which is the property the conformance suite asserts.
  *
+ * An OAuth / OpenID Connect endpoint reads the same request differently in three
+ * places: its scopes are opaque strings rather than SMART grammar, so the SMART
+ * capability checks do not apply to them; it has no launch, so the standalone
+ * launch flag does not gate it; and the client need not name the resource it
+ * wants, but anything it does name must be the endpoint's audience.
+ *
  * @see https://hl7.org/fhir/smart-app-launch/app-launch.html
  *
  * Author: John Grimes
  */
 
-import { parseScopes, areScopesCoveredBy } from "@signet/core";
+import { parseScopes, areScopesCoveredBy, resolveAudience } from "@signet/core";
 
-import { checkAudience } from "./audience.js";
 import { contextRequirements } from "./contextRequirements.js";
 import { matchRedirectUri } from "./redirectUri.js";
 
 import type { AuthorizeErrorCode } from "../http/oauthErrors.js";
-import type { ClientType, Scope } from "@signet/core";
+import type {
+  AudienceRefusal,
+  ClientType,
+  EndpointKind,
+  Scope,
+} from "@signet/core";
 
 /**
  * The `/authorize` request parameters Signet reads.
@@ -57,6 +67,8 @@ export interface AuthorizeParams {
   readonly scope?: string | undefined;
   readonly state?: string | undefined;
   readonly aud?: string | undefined;
+  /** Every RFC 8707 `resource` parameter, in the order sent. */
+  readonly resources?: readonly string[] | undefined;
   /** The single-use handle minted by an EHR. Its presence means an EHR launch. */
   readonly launch?: string | undefined;
   readonly codeChallenge?: string | undefined;
@@ -81,8 +93,9 @@ export interface AuthorizeClient {
 
 /** The endpoint fields the decision depends on. A subset of the row. */
 export interface AuthorizeEndpoint {
+  readonly kind: EndpointKind;
   readonly status: string;
-  readonly fhirBaseUrl: string;
+  readonly audience: string;
   readonly supportsEhrLaunch: boolean;
   readonly supportsStandaloneLaunch: boolean;
   readonly allowsPublicClients: boolean;
@@ -240,7 +253,10 @@ function unsupportedScope(
   raw: readonly string[],
   scopes: readonly Scope[],
 ): string | undefined {
-  for (const value of raw) {
+  // On an OAuth endpoint a SMART-shaped string is an opaque scope like any other,
+  // and the SMART version flags say nothing about it.
+  const smartGrammar = endpoint.kind === "smart";
+  for (const value of smartGrammar ? raw : []) {
     if (isV1ResourceScope(value) && !endpoint.supportsV1Scopes) {
       return `This endpoint does not accept SMART v1 scopes ("${value}")`;
     }
@@ -295,8 +311,38 @@ function unsupportedScope(
  * app is refused a scope it would otherwise have been allowed - which is the safe
  * direction. The console validates the allowlist when it is edited.
  */
-function parseAllowlist(allowed: readonly string[]): readonly Scope[] {
-  return parseScopes(allowed.join(" ")).scopes;
+function parseAllowlist(
+  allowed: readonly string[],
+  kind: EndpointKind,
+): readonly Scope[] {
+  return parseScopes(allowed.join(" "), kind).scopes;
+}
+
+/**
+ * The error and description for a refused audience.
+ *
+ * A SMART endpoint answers `invalid_request`, as it always has, because `aud` is
+ * a required SMART parameter. An OAuth endpoint answers RFC 8707's
+ * `invalid_target`: the request was well formed, and named a resource server
+ * this endpoint does not issue tokens for.
+ */
+function audienceRefusal(
+  kind: EndpointKind,
+  reason: AudienceRefusal,
+): { readonly error: AuthorizeErrorCode; readonly description: string } {
+  if (kind === "oauth") {
+    return {
+      error: "invalid_target",
+      description: "aud and resource must name this endpoint's audience",
+    };
+  }
+  return {
+    error: "invalid_request",
+    description:
+      reason === "missing"
+        ? "aud is required and must be this endpoint's FHIR base URL"
+        : "aud is not this endpoint's FHIR base URL",
+  };
 }
 
 /**
@@ -415,21 +461,22 @@ export function validateAuthorizeRequest(
     );
   }
 
-  const audience = checkAudience(params.aud, endpoint.fhirBaseUrl);
+  const audience = resolveAudience({
+    kind: endpoint.kind,
+    audience: endpoint.audience,
+    aud: params.aud,
+    resources: params.resources ?? [],
+  });
   if (!audience.ok) {
-    return refuse(
-      "invalid_request",
-      audience.reason === "missing"
-        ? "aud is required and must be this endpoint's FHIR base URL"
-        : "aud is not this endpoint's FHIR base URL",
-    );
+    const refusal = audienceRefusal(endpoint.kind, audience.reason);
+    return refuse(refusal.error, refusal.description);
   }
 
   if (params.scope === undefined || params.scope.trim().length === 0) {
     return refuse("invalid_scope", "scope is required");
   }
 
-  const parsed = parseScopes(params.scope);
+  const parsed = parseScopes(params.scope, endpoint.kind);
   const firstRejected = parsed.rejected[0];
   if (firstRejected !== undefined) {
     return refuse(
@@ -455,7 +502,10 @@ export function validateAuthorizeRequest(
   }
 
   if (
-    !areScopesCoveredBy(parsed.scopes, parseAllowlist(client.allowedScopes))
+    !areScopesCoveredBy(
+      parsed.scopes,
+      parseAllowlist(client.allowedScopes, endpoint.kind),
+    )
   ) {
     return refuse(
       "invalid_scope",
@@ -473,13 +523,22 @@ export function validateAuthorizeRequest(
   const hasLaunchHandle =
     params.launch !== undefined && params.launch.length > 0;
 
-  if (hasLaunchHandle && !endpoint.supportsEhrLaunch) {
+  if (
+    hasLaunchHandle &&
+    (endpoint.kind !== "smart" || !endpoint.supportsEhrLaunch)
+  ) {
     return refuse(
       "invalid_request",
       "This endpoint does not support the EHR launch",
     );
   }
-  if (!hasLaunchHandle && !endpoint.supportsStandaloneLaunch) {
+  // An OAuth endpoint has no launch of either kind, so the standalone flag - which
+  // is a SMART capability, stored off there - does not gate its requests.
+  if (
+    !hasLaunchHandle &&
+    endpoint.kind === "smart" &&
+    !endpoint.supportsStandaloneLaunch
+  ) {
     return refuse(
       "invalid_request",
       "This endpoint does not support the standalone launch",

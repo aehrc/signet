@@ -70,6 +70,20 @@ export function formField(body: FormBody, name: string): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+/**
+ * Reads every value of a field a client may repeat.
+ *
+ * Only RFC 8707's `resource` may be: a client asking for a token usable at
+ * several resource servers names each one. The body must have been parsed with
+ * every value kept, or a repetition would already have been reduced to its last.
+ */
+export function formValues(body: FormBody, name: string): readonly string[] {
+  const value = body[name];
+  return (Array.isArray(value) ? value : [value]).filter(
+    (each): each is string => typeof each === "string" && each.length > 0,
+  );
+}
+
 /** Builds a refusal. */
 export function grantRefusal(
   code: TokenErrorCode,

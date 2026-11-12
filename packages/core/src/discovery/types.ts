@@ -11,6 +11,8 @@
  * Author: John Grimes
  */
 
+import type { EndpointKind } from "../endpointKind.js";
+
 /** Every SMART capability string defined by SMART App Launch 2.2.0. */
 export type SmartCapability =
   // Launch modes
@@ -60,7 +62,14 @@ export type TokenEndpointAuthMethod =
  */
 export interface EndpointCapabilityConfig {
   readonly issuer: string;
-  readonly fhirBaseUrl: string;
+  /**
+   * Decides which discovery documents exist. An OAuth / OpenID Connect endpoint
+   * publishes only `openid-configuration`, issues authorization codes without a
+   * SMART launch mode, and advertises the standard OpenID Connect claims.
+   */
+  readonly kind: EndpointKind;
+  /** The access token `aud`; on a SMART endpoint, the FHIR base URL. */
+  readonly audience: string;
 
   readonly supportsEhrLaunch: boolean;
   readonly supportsStandaloneLaunch: boolean;

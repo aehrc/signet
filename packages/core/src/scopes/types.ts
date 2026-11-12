@@ -63,10 +63,15 @@ export interface LaunchScope {
   readonly role?: string;
 }
 
-/** An OpenID Connect identity scope. */
+/**
+ * An OpenID Connect identity scope.
+ *
+ * `fhirUser` exists only on a SMART endpoint, and `email` only on an OAuth /
+ * OpenID Connect endpoint; each is an opaque string on the other kind.
+ */
 export interface IdentityScope {
   readonly kind: "identity";
-  readonly name: "openid" | "fhirUser" | "profile";
+  readonly name: "openid" | "fhirUser" | "profile" | "email";
 }
 
 /** A scope requesting a refresh token. */

@@ -36,6 +36,12 @@ export const idpClaimMappingsSchema = z.object({
   /** Claim yielding roles, as an array or a space-delimited string. */
   roles: z.string().min(1).max(128).optional(),
   displayName: z.string().min(1).max(128).optional(),
+  /**
+   * Claim yielding the user's email address. When it is mapped, the upstream
+   * `email_verified` claim is carried across too, and anything other than
+   * `true` there is recorded as unverified.
+   */
+  email: z.string().min(1).max(128).optional(),
   /** Further claims copied verbatim into the user's attributes. */
   attributes: z.array(z.string().min(1).max(128)).max(50).optional(),
 });

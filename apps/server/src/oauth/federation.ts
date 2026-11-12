@@ -439,7 +439,14 @@ export function federationCallbackHandler(context: ServerContext) {
           // The provider is not obliged to send a name, and an account with a blank
           // one is unreadable in the console - so the subject stands in for it.
           displayName: mapped.displayName ?? identity.subject,
-          fhirUserReference: mapped.fhirUser ?? null,
+          // Only a SMART endpoint has a FHIR server for the reference to name; the
+          // console refuses the mapping elsewhere, and a stale one is not honoured.
+          fhirUserReference:
+            issuerContext.endpoint.kind === "smart"
+              ? (mapped.fhirUser ?? null)
+              : null,
+          email: mapped.email ?? null,
+          emailVerified: mapped.emailVerified ?? false,
           roles: mapped.roles,
           attributes: mapped.attributes,
         }),

@@ -25,8 +25,9 @@ const REDIRECT = "https://app.example.org/cb";
 const CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 
 const endpoint: AuthorizeEndpoint = {
+  kind: "smart",
   status: "active",
-  fhirBaseUrl: FHIR_BASE,
+  audience: FHIR_BASE,
   supportsEhrLaunch: true,
   supportsStandaloneLaunch: true,
   allowsPublicClients: true,
@@ -506,5 +507,66 @@ describe("validateAuthorizeRequest", () => {
   it("reports encounter context when launch/encounter is requested", () => {
     const result = validate({ params: { scope: "launch/encounter" } });
     expect(result.ok && result.request.requestsEncounterContext).toBe(true);
+  });
+
+  describe("on an OAuth / OpenID Connect endpoint", () => {
+    const API = "https://api.example.org/v1";
+
+    /** Validates against an OAuth endpoint with every SMART-only flag off. */
+    function validateOAuth(overrides: Partial<AuthorizeParams> = {}) {
+      return validate({
+        params: {
+          scope: "openid profile orders:read",
+          aud: undefined,
+          ...overrides,
+        },
+        endpoint: {
+          kind: "oauth",
+          audience: API,
+          supportsEhrLaunch: false,
+          supportsStandaloneLaunch: false,
+          supportsV1Scopes: false,
+          supportsV2Scopes: false,
+          supportsPatientScopes: false,
+          supportsUserScopes: false,
+        },
+        client: {
+          allowedScopes: ["openid", "profile", "orders:read", "patient/x.read"],
+        },
+      });
+    }
+
+    it("takes the endpoint's audience when the client names none", () => {
+      const result = validateOAuth();
+      expect(result.ok && result.request.aud).toBe(API);
+    });
+
+    it("accepts resources naming the audience", () => {
+      expect(validateOAuth({ resources: [API, `${API}/`] }).ok).toBe(true);
+    });
+
+    it("refuses a resource naming another API with invalid_target", () => {
+      const refusal = refusalOf(
+        validateOAuth({ resources: ["https://other.example.org"] }),
+      );
+      expect(refusal.error).toBe("invalid_target");
+    });
+
+    it("refuses an aud naming another API with invalid_target", () => {
+      expect(
+        refusalOf(validateOAuth({ aud: "https://other.example.org" })).error,
+      ).toBe("invalid_target");
+    });
+
+    it("reads a SMART-shaped scope as opaque, so no SMART flag refuses it", () => {
+      const result = validateOAuth({ scope: "patient/x.read" });
+      expect(result.ok && result.request.requestsPatientContext).toBe(false);
+    });
+
+    it("refuses a launch handle", () => {
+      expect(refusalOf(validateOAuth({ launch: "xyz" })).description).toContain(
+        "EHR launch",
+      );
+    });
   });
 });

@@ -20,10 +20,11 @@ import { withFields } from "./rules.js";
 import { CheckboxField, ListField, SelectField } from "../components/fields.js";
 import { formatList, parseList } from "../forms/lists.js";
 
-import type { ScopeGrantRule } from "@signet/core";
+import type { EndpointKind, ScopeGrantRule } from "@signet/core";
 
 interface GrantRuleFieldsProps {
   readonly rule: ScopeGrantRule;
+  readonly kind: EndpointKind;
   readonly disabled: boolean;
   readonly onChange: (rule: ScopeGrantRule) => void;
 }
@@ -37,6 +38,7 @@ const CONTEXT_REQUIREMENTS: readonly ("patient" | "encounter")[] = [
 /** The fields of one grant rule. */
 export function GrantRuleFields({
   rule,
+  kind,
   disabled,
   onChange,
 }: Readonly<GrantRuleFieldsProps>) {
@@ -50,6 +52,7 @@ export function GrantRuleFields({
       <PatternField
         label="Matches"
         value={rule.match}
+        kind={kind}
         disabled={disabled}
         hint="A requested scope matches when its permissions are a subset of these. patient/*.rs matches patient/Observation.r but not patient/Observation.cud."
         onChange={(match) => {
@@ -71,50 +74,57 @@ export function GrantRuleFields({
         }}
       />
 
-      <CheckboxField
-        label="Narrow instead of refusing"
-        checked={rule.narrow === true}
-        disabled={disabled}
-        hint="When an app asks for more permissions than this rule permits, grant the overlap rather than nothing. Without it, a read-only policy answers a request for patient/*.cruds with no data access at all - which fails at the app's first API call rather than degrading to read."
-        onChange={(narrow) => {
-          patch({ narrow });
-        }}
-      />
+      {/* Neither applies on an OAuth endpoint: an exactly matched scope has no
+          permissions to narrow, and there is no launch context to require. */}
+      {kind === "smart" ? (
+        <>
+          <CheckboxField
+            label="Narrow instead of refusing"
+            checked={rule.narrow === true}
+            disabled={disabled}
+            hint="When an app asks for more permissions than this rule permits, grant the overlap rather than nothing. Without it, a read-only policy answers a request for patient/*.cruds with no data access at all - which fails at the app's first API call rather than degrading to read."
+            onChange={(narrow) => {
+              patch({ narrow });
+            }}
+          />
 
-      <fieldset className="fieldset min-w-0">
-        <legend className="fieldset-legend text-sm max-sm:text-base">
-          Requires launch context
-        </legend>
-        <div className="flex flex-wrap gap-3">
-          {CONTEXT_REQUIREMENTS.map((key) => (
-            <label
-              key={key}
-              className="flex cursor-pointer items-center gap-1 text-sm max-sm:min-h-11 max-sm:text-base"
-            >
-              <input
-                type="checkbox"
-                className="checkbox checkbox-xs"
-                disabled={disabled}
-                checked={(rule.requireContext ?? []).includes(key)}
-                onChange={(event) => {
-                  const current = rule.requireContext ?? [];
-                  const next = event.currentTarget.checked
-                    ? [...current, key]
-                    : current.filter((existing) => existing !== key);
-                  patch({
-                    requireContext: next.length === 0 ? undefined : next,
-                  });
-                }}
-              />
-              <code className="font-mono">{key}</code>
-            </label>
-          ))}
-        </div>
-        <p className="label whitespace-normal text-xs max-sm:text-base">
-          Granting a patient-context scope with no patient resolved would hand
-          the app a token whose meaning depends on what the FHIR server infers.
-        </p>
-      </fieldset>
+          <fieldset className="fieldset min-w-0">
+            <legend className="fieldset-legend text-sm max-sm:text-base">
+              Requires launch context
+            </legend>
+            <div className="flex flex-wrap gap-3">
+              {CONTEXT_REQUIREMENTS.map((key) => (
+                <label
+                  key={key}
+                  className="flex cursor-pointer items-center gap-1 text-sm max-sm:min-h-11 max-sm:text-base"
+                >
+                  <input
+                    type="checkbox"
+                    className="checkbox checkbox-xs"
+                    disabled={disabled}
+                    checked={(rule.requireContext ?? []).includes(key)}
+                    onChange={(event) => {
+                      const current = rule.requireContext ?? [];
+                      const next = event.currentTarget.checked
+                        ? [...current, key]
+                        : current.filter((existing) => existing !== key);
+                      patch({
+                        requireContext: next.length === 0 ? undefined : next,
+                      });
+                    }}
+                  />
+                  <code className="font-mono">{key}</code>
+                </label>
+              ))}
+            </div>
+            <p className="label whitespace-normal text-xs max-sm:text-base">
+              Granting a patient-context scope with no patient resolved would
+              hand the app a token whose meaning depends on what the FHIR server
+              infers.
+            </p>
+          </fieldset>
+        </>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <ListField

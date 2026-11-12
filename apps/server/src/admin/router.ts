@@ -128,12 +128,7 @@ export function createAdminRouter(
   // Attached to the POST alone, so signing out is never refused for it.
   router.post(
     "/session",
-    rateLimit(
-      "signIn",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("signIn", context),
     adminLoginHandler(context),
   );
   router.get("/session", adminSessionHandler(context));
@@ -145,22 +140,12 @@ export function createAdminRouter(
   // an allowance of its own and exhausting one leaves password sign-in untouched.
   router.post(
     "/session/passkey-options",
-    rateLimit(
-      "signIn",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("signIn", context),
     adminPasskeySignInOptionsHandler(context),
   );
   router.post(
     "/session/passkey",
-    rateLimit(
-      "signIn",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("signIn", context),
     adminPasskeySignInHandler(context),
   );
 
@@ -170,23 +155,13 @@ export function createAdminRouter(
   router.get("/account/passkeys", adminPasskeyListHandler(context));
   router.post(
     "/account/passkeys/options",
-    rateLimit(
-      "signIn",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("signIn", context),
     adminPasskeyRegistrationOptionsHandler(context),
   );
   router.post("/account/passkeys", adminPasskeyRegisterHandler(context));
   router.delete(
     "/account/passkeys/:passkeyId",
-    rateLimit(
-      "signIn",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("signIn", context),
     adminPasskeyRemoveHandler(context),
   );
 

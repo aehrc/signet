@@ -78,6 +78,13 @@
       "when": 1794513841755,
       "tag": "0010_end_user_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794517553559,
+      "tag": "0011_oauth_endpoints",
+      "breakpoints": true
     }
   ]
 }

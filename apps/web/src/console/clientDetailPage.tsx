@@ -134,7 +134,7 @@ function VouchingPanel({
 
 /** One client's detail page. */
 export function ClientDetailPage() {
-  const { tenant, endpointSlug, role } = useEndpointContext();
+  const { tenant, endpointSlug, endpoint, role } = useEndpointContext();
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
 
@@ -218,11 +218,15 @@ export function ClientDetailPage() {
           <DetailRow label="Grants">
             <Chips values={current.grantTypes} />
           </DetailRow>
-          <DetailRow label="Launch URI">
-            {current.launchUri ?? (
-              <span className="text-base-content/50">none</span>
-            )}
-          </DetailRow>
+          {/* An OAuth endpoint has no EHR launch, so a launch URI means nothing
+              there and is not shown. */}
+          {endpoint.kind === "smart" ? (
+            <DetailRow label="Launch URI">
+              {current.launchUri ?? (
+                <span className="text-base-content/50">none</span>
+              )}
+            </DetailRow>
+          ) : null}
           <DetailRow label="Registered">
             {formatInstant(current.createdAt)}
           </DetailRow>

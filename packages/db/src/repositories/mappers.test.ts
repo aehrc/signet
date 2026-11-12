@@ -32,7 +32,8 @@ const endpoint: Endpoint = {
   slug: "pathling",
   name: "Pathling",
   description: null,
-  fhirBaseUrl: "https://fhir.example.org/fhir",
+  kind: "smart",
+  audience: "https://fhir.example.org/fhir",
   supportsEhrLaunch: true,
   supportsStandaloneLaunch: true,
   supportsAuthorizePost: false,
@@ -102,6 +103,8 @@ const endUser: EndUser = {
   username: "alice",
   passwordHash: "$argon2id$never-emitted",
   fhirUserReference: "Practitioner/123",
+  email: null,
+  emailVerified: false,
   displayName: "Alice Example",
   roles: ["clinician"],
   attributes: { department: "cardiology" },
@@ -182,7 +185,8 @@ describe("toEvaluationEndpoint", () => {
       tenantSlug: "demo",
       slug: "pathling",
       issuer,
-      fhirBaseUrl: endpoint.fhirBaseUrl,
+      kind: "smart",
+      audience: endpoint.audience,
     });
   });
 });

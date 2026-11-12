@@ -19,9 +19,12 @@
  * Author: John Grimes
  */
 
+import { DEFAULT_PATTERN, formatPattern } from "./patterns.js";
+
 import type {
   ClaimRule,
   ContextRule,
+  EndpointKind,
   PolicyDocument,
   ScopeGrantRule,
   ScopeMappingRule,
@@ -319,4 +322,69 @@ export function withFields(
 /** Whether a rule is enabled: absent means yes. */
 export function isRuleEnabled(rule: AnyRule): boolean {
   return rule.enabled !== false;
+}
+
+/**
+ * The rule the builder's "Add rule" button appends to a list, before it is given an
+ * identifier.
+ *
+ * On a SMART endpoint a new grant starts on narrowing patient reads and a new
+ * mapping on every read, which are the patterns most rules are a small edit of. On an
+ * OAuth endpoint a scope is an opaque string matched exactly - there is no pattern to
+ * start from and nothing to narrow - so the scope is left for the operator to name.
+ *
+ * @param list - The list being added to.
+ * @param kind - The endpoint's kind.
+ * @example
+ * newRule("scopeGrants", "oauth"); // { match: "", allow: true }
+ */
+export function newRule(list: RuleList, kind: EndpointKind): AnyRule {
+  switch (list) {
+    case "scopeGrants": {
+      return kind === "smart"
+        ? { match: formatPattern(DEFAULT_PATTERN), allow: true, narrow: true }
+        : { match: "", allow: true };
+    }
+    case "claimRules": {
+      return { when: { always: true }, emit: {} };
+    }
+    case "scopeMappings": {
+      return {
+        forEachScope: kind === "smart" ? "*/*.r" : "",
+        appendTo: "authorities",
+        values: [""],
+      };
+    }
+    case "contextRules": {
+      return { emit: {} };
+    }
+  }
+}
+
+/** The condition shapes the builder offers, in the order they are usually wanted. */
+export const CONDITION_KINDS = [
+  { value: "always", label: "Always" },
+  { value: "hasUser", label: "When there is a signed-in user" },
+  { value: "noUser", label: "When there is no user (a backend service)" },
+  { value: "scope", label: "When a granted scope matches a pattern" },
+  { value: "context", label: "When the launch context has a value" },
+] as const;
+
+/** One condition shape. */
+export type ConditionKind = (typeof CONDITION_KINDS)[number]["value"];
+
+/**
+ * The condition shapes the builder offers on an endpoint of a kind.
+ *
+ * An OAuth endpoint has no launch context, and the server refuses a condition on
+ * one, so the builder does not offer it there.
+ *
+ * @param kind - The endpoint's kind.
+ */
+export function conditionOptions(
+  kind: EndpointKind,
+): readonly (typeof CONDITION_KINDS)[number][] {
+  return kind === "smart"
+    ? CONDITION_KINDS
+    : CONDITION_KINDS.filter((option) => option.value !== "context");
 }

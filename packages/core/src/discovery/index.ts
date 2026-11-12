@@ -13,6 +13,7 @@ export {
   DEFAULT_SCOPES_SUPPORTED,
   defaultEndpointCapabilities,
   deriveCapabilities,
+  OAUTH_DEFAULT_SCOPES_SUPPORTED,
 } from "./capabilities.js";
 export {
   endpointUrls,

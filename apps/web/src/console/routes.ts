@@ -30,6 +30,7 @@ import {
 } from "@primer/octicons-react";
 
 import type { Icon } from "@primer/octicons-react";
+import type { EndpointKind } from "@signet/core";
 
 /** Where the console lives within the application. */
 export const CONSOLE_BASE = "/console";
@@ -74,13 +75,16 @@ export function endUserRoute(
   return endpointRoute(tenant, endpoint, `/users/${segment(userId)}`);
 }
 
-/** The tabs an endpoint's pages are reached by, in the order they are shown. */
-export const ENDPOINT_TABS: readonly {
+/** One tab of an endpoint's pages. */
+export interface EndpointTab {
   readonly path: string;
   readonly label: string;
   /** Drawn beside the label in the tab bar. */
   readonly icon: Icon;
-}[] = [
+}
+
+/** The tabs an endpoint's pages are reached by, in the order they are shown. */
+export const ENDPOINT_TABS: readonly EndpointTab[] = [
   { path: "", label: "Overview", icon: HomeIcon },
   { path: "/clients", label: "Clients", icon: AppsIcon },
   { path: "/policy", label: "Policy", icon: LawIcon },
@@ -91,6 +95,26 @@ export const ENDPOINT_TABS: readonly {
   { path: "/requests", label: "Requests", icon: InboxIcon },
   { path: "/launch", label: "Launch", icon: RocketIcon },
 ];
+
+/**
+ * The tabs an endpoint of a kind shows.
+ *
+ * An OAuth endpoint has no EHR launch, so the launch simulator is dropped, and no
+ * permission ticket exchange, so its trust tab is about registration alone and is
+ * named for that.
+ *
+ * @param kind - The endpoint's kind.
+ * @example
+ * endpointTabs("oauth").some((tab) => tab.path === "/launch"); // false
+ */
+export function endpointTabs(kind: EndpointKind): readonly EndpointTab[] {
+  if (kind === "smart") {
+    return ENDPOINT_TABS;
+  }
+  return ENDPOINT_TABS.filter((tab) => tab.path !== "/launch").map((tab) =>
+    tab.path === "/trust" ? { ...tab, label: "Trust" } : tab,
+  );
+}
 
 /**
  * Which endpoint tab a path is on.

@@ -22,7 +22,7 @@ import type { Scope } from "./types.js";
 
 /** Parses a scope, failing the test if it was rejected. */
 function scope(raw: string): Scope {
-  const result = parseScope(raw);
+  const result = parseScope(raw, "smart");
   if (!result.ok) {
     throw new Error(`Expected "${raw}" to parse, got ${result.code}`);
   }
@@ -31,7 +31,7 @@ function scope(raw: string): Scope {
 
 /** Parses a set of scopes from a space-delimited string. */
 function scopes(raw: string): readonly Scope[] {
-  const result = parseScopes(raw);
+  const result = parseScopes(raw, "smart");
   if (result.rejected.length > 0) {
     throw new Error(
       `Unexpected rejections: ${result.rejected.map((r) => r.raw).join(", ")}`,

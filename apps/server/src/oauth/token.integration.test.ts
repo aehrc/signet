@@ -117,7 +117,7 @@ describeWithDatabase("the authorization_code grant", () => {
     const claims = await verifyAgainstJwks(
       stack,
       body.access_token,
-      stack.endpoint.fhirBaseUrl,
+      stack.endpoint.audience,
     );
     expect(claims["sub"]).toBe(stack.user.id);
     expect(claims["client_id"]).toBe(stack.publicClient.clientId);
@@ -132,7 +132,7 @@ describeWithDatabase("the authorization_code grant", () => {
     );
     expect(recorded).toMatchObject({
       subject: stack.user.id,
-      audience: stack.endpoint.fhirBaseUrl,
+      audience: stack.endpoint.audience,
       issuer: stack.issuer,
     });
   });
@@ -542,7 +542,7 @@ describeWithDatabase("the client_credentials grant", () => {
     const claims = await verifyAgainstJwks(
       stack,
       body.access_token,
-      stack.endpoint.fhirBaseUrl,
+      stack.endpoint.audience,
     );
 
     // The whole point of the policy engine: SMART scopes in, vendor authorities out.

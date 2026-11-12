@@ -35,6 +35,10 @@ export const personaContextSchema = z.object({
 const endUserFieldsSchema = z.object({
   displayName: z.string().min(1).max(200),
   fhirUserReference: fhirUserReferenceSchema.nullish(),
+  /** Released in the ID token and userinfo for the `email` scope. */
+  email: z.email().max(320).nullish(),
+  /** Released as `email_verified` beside the email. */
+  emailVerified: z.boolean().optional(),
   roles: z.array(z.string().max(128)).max(50).optional(),
   attributes: z.record(z.string(), z.unknown()).optional(),
   defaultContext: personaContextSchema.nullish(),

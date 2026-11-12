@@ -33,19 +33,28 @@ import { ErrorAlert, Panel } from "../components/layout.js";
 import { Chips, StatusBadge } from "../components/table.js";
 import { formatDuration } from "../formatting/values.js";
 
-import type { PolicyDocument } from "@signet/core";
+import type { EndpointKind, PolicyDocument } from "@signet/core";
 
 interface SimulatePanelProps {
   readonly tenant: string;
   readonly endpointSlug: string;
+  /** The endpoint's kind, which decides the starting scopes and whether a launch context exists. */
+  readonly kind: EndpointKind;
   /** The document as edited. Sent verbatim, so unsaved edits are what is simulated. */
   readonly document: PolicyDocument | undefined;
 }
+
+/** The scopes a simulation starts with, per kind. */
+const STARTING_SCOPES: Readonly<Record<EndpointKind, string>> = {
+  smart: "openid fhirUser launch/patient patient/*.rs",
+  oauth: "openid profile email",
+};
 
 /** The simulator panel. */
 export function SimulatePanel({
   tenant,
   endpointSlug,
+  kind,
   document,
 }: Readonly<SimulatePanelProps>) {
   const clients = useClients(tenant, endpointSlug);
@@ -55,9 +64,7 @@ export function SimulatePanel({
   const [clientId, setClientId] = useState("");
   const [endUserId, setEndUserId] = useState("");
   const [grantType, setGrantType] = useState("authorization_code");
-  const [scopes, setScopes] = useState(
-    "openid fhirUser launch/patient patient/*.rs",
-  );
+  const [scopes, setScopes] = useState(STARTING_SCOPES[kind]);
   const [patient, setPatient] = useState("pat-1");
   const [encounter, setEncounter] = useState("");
   // The document the last run evaluated, so a result can say when it is stale.
@@ -65,6 +72,8 @@ export function SimulatePanel({
 
   const chosenClient = clientId === "" ? clients.data?.[0]?.clientId : clientId;
   const isBackend = grantType === "client_credentials";
+  // A launch context exists only for a user-facing grant on a SMART endpoint.
+  const hasContext = kind === "smart" && !isBackend;
 
   // A result computed from an earlier draft reads as if it were current, which is
   // the one dishonesty a simulator must not commit.
@@ -131,7 +140,7 @@ export function SimulatePanel({
           hint="Space-separated, as an app would send them. Include scopes you expect to be refused: the refusals and their reasons are shown."
         />
 
-        {isBackend ? null : (
+        {hasContext ? (
           <div className="grid gap-3 sm:grid-cols-2">
             <TextField
               label="Patient in context"
@@ -144,7 +153,7 @@ export function SimulatePanel({
               onChange={setEncounter}
             />
           </div>
-        )}
+        ) : null}
 
         <div>
           <button
@@ -167,10 +176,10 @@ export function SimulatePanel({
                 ...(document === undefined ? {} : { document }),
                 ...(isBackend || endUserId === "" ? {} : { endUserId }),
                 context: {
-                  ...(isBackend || patient.trim().length === 0
+                  ...(!hasContext || patient.trim().length === 0
                     ? {}
                     : { patient: patient.trim() }),
-                  ...(isBackend || encounter.trim().length === 0
+                  ...(!hasContext || encounter.trim().length === 0
                     ? {}
                     : { encounter: encounter.trim() }),
                 },

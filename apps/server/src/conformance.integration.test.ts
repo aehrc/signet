@@ -121,7 +121,8 @@ describe.skipIf(testDatabaseUrl === undefined)(
           body: {
             slug,
             name: "Capability off",
-            fhirBaseUrl: "https://fhir.test/R4",
+            kind: "smart",
+            audience: "https://fhir.test/R4",
             ...overrides,
           },
         },
@@ -592,7 +593,7 @@ describe.skipIf(testDatabaseUrl === undefined)(
       );
       const exchanging = await createTestStack({
         allowPrivateOutboundFetches: true,
-        endpoint: { fhirBaseUrl: `${fhir.origin}/fhir` },
+        endpoint: { audience: `${fhir.origin}/fhir` },
       });
       try {
         const cookie = await exchanging.signIn();
@@ -729,6 +730,69 @@ describe.skipIf(testDatabaseUrl === undefined)(
       };
       expect((await postForm(stack, "/token", form)).status).toBe(200);
       expect((await postForm(stack, "/token", form)).status).toBe(401);
+    });
+  },
+);
+
+/**
+ * Which discovery documents each kind of endpoint publishes.
+ *
+ * Not a SMART capability, but the same kind of promise: a document an endpoint
+ * serves tells a client what kind of server it is talking to. An OAuth / OpenID
+ * Connect endpoint that served a SMART configuration would be inviting apps to
+ * attempt launches it refuses, and a SMART endpoint that stopped serving the
+ * OpenID document would break every resource server configured from it.
+ */
+describe.skipIf(testDatabaseUrl === undefined)(
+  "discovery by endpoint kind",
+  () => {
+    let smart: TestStack;
+    let oauth: TestStack;
+
+    beforeAll(async () => {
+      smart = await createTestStack();
+      oauth = await createTestStack({ kind: "oauth" });
+    });
+
+    afterAll(async () => {
+      await smart.close();
+      await oauth.close();
+    });
+
+    /** The status each discovery document answers with on a stack. */
+    async function discoveryStatuses(stack: TestStack) {
+      const smartConfiguration = await stack.app.request(
+        `${issuerPath(stack)}/.well-known/smart-configuration`,
+      );
+      const openIdConfiguration = await stack.app.request(
+        `${issuerPath(stack)}/.well-known/openid-configuration`,
+      );
+      return {
+        smart: smartConfiguration.status,
+        openid: openIdConfiguration.status,
+      };
+    }
+
+    it("serves both documents on a SMART on FHIR endpoint", async () => {
+      expect(await discoveryStatuses(smart)).toEqual({
+        smart: 200,
+        openid: 200,
+      });
+    });
+
+    it("serves only the OpenID document on an OAuth / OpenID Connect endpoint", async () => {
+      expect(await discoveryStatuses(oauth)).toEqual({
+        smart: 404,
+        openid: 200,
+      });
+
+      const document = (await (
+        await oauth.app.request(
+          `${issuerPath(oauth)}/.well-known/openid-configuration`,
+        )
+      ).json()) as { issuer: string; grant_types_supported: string[] };
+      expect(document.issuer).toBe(oauth.issuer);
+      expect(document.grant_types_supported).toContain("authorization_code");
     });
   },
 );

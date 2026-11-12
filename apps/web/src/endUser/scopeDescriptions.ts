@@ -24,6 +24,8 @@
 
 import { parseScope } from "@signet/core";
 
+import type { EndpointKind } from "@signet/core";
+
 /** How each resource type reads in a sentence. */
 const RESOURCE_PHRASES: Readonly<Record<string, string>> = {
   "*": "all of your health information",
@@ -94,20 +96,58 @@ function joinPhrases(phrases: readonly string[]): string {
 }
 
 /**
+ * How each scope an OAuth endpoint gives a meaning reads.
+ *
+ * Only these four. Everything else on an OAuth endpoint is an opaque API scope whose
+ * meaning only the operator knows, so it is described by the granting rule's
+ * description instead.
+ */
+const OAUTH_SCOPE_PHRASES: Readonly<Record<string, string>> = {
+  openid: "Confirm who you are",
+  profile: "Know your name and username",
+  email: "Know your email address",
+  offline_access: "Keep this access when you are not using the app",
+};
+
+/**
  * Describes one scope in a sentence.
  *
  * A scope that cannot be parsed is described by its own text rather than being dropped:
  * the consent screen must not silently omit something the app asked for.
  *
+ * On an OAuth endpoint the identity and refresh scopes have fixed phrases, and every
+ * other scope is opaque - `patient/Observation.rs` included, which is only a string
+ * there - so it is described by the operator's description of the rule that grants
+ * it, falling back to the scope itself. Nothing an opaque scope says can be read as a
+ * write, so none is marked as one.
+ *
  * @param raw - The scope string, as the app requested it.
+ * @param kind - The endpoint's kind, which decides how the scope is read.
+ * @param ruleDescriptions - On an OAuth endpoint, the granting rule's description
+ *   for each scope that has one.
+ * @example
+ * describeScope("orders:read", "oauth", { "orders:read": "Read your orders" });
+ * // { scope: "orders:read", description: "Read your orders", writes: false }
  */
-export function describeScope(raw: string): ScopeDescription {
+export function describeScope(
+  raw: string,
+  kind: EndpointKind,
+  ruleDescriptions: Readonly<Record<string, string>> = {},
+): ScopeDescription {
+  if (kind === "oauth") {
+    return {
+      scope: raw,
+      description: OAUTH_SCOPE_PHRASES[raw] ?? ruleDescriptions[raw] ?? raw,
+      writes: false,
+    };
+  }
+
   const named = NAMED_SCOPE_PHRASES[raw];
   if (named !== undefined) {
     return { scope: raw, description: named, writes: false };
   }
 
-  const parsed = parseScope(raw);
+  const parsed = parseScope(raw, kind);
   if (!parsed.ok || parsed.scope.kind !== "resource") {
     return {
       scope: raw,
@@ -180,14 +220,27 @@ function capitalise(text: string): string {
  * would break the correspondence with what a developer sees in their own request.
  *
  * @param scopes - The requested scopes.
+ * @param kind - The endpoint's kind.
+ * @param ruleDescriptions - On an OAuth endpoint, the granting rule's description
+ *   for each scope that has one.
  */
 export function describeScopes(
   scopes: readonly string[],
+  kind: EndpointKind,
+  ruleDescriptions: Readonly<Record<string, string>> = {},
 ): readonly ScopeDescription[] {
-  return scopes.map((scope) => describeScope(scope));
+  return scopes.map((scope) => describeScope(scope, kind, ruleDescriptions));
 }
 
-/** Whether any of the requested scopes permits changing data. */
-export function includesWrites(scopes: readonly string[]): boolean {
-  return describeScopes(scopes).some((description) => description.writes);
+/**
+ * Whether any of the requested scopes permits changing data.
+ *
+ * @param scopes - The requested scopes.
+ * @param kind - The endpoint's kind.
+ */
+export function includesWrites(
+  scopes: readonly string[],
+  kind: EndpointKind,
+): boolean {
+  return describeScopes(scopes, kind).some((description) => description.writes);
 }

@@ -53,9 +53,13 @@ export function parseScopePattern(
   }
 
   // A wildcard context is probed as `patient` purely to reuse the scope parser;
-  // the wildcard is restored on the way out.
+  // the wildcard is restored on the way out. Patterns exist only in the SMART
+  // grammar, so it is always the SMART parser.
   const probeContext = context === "*" ? "patient" : context;
-  const probe = parseScope(`${probeContext}/${pattern.slice(slash + 1)}`);
+  const probe = parseScope(
+    `${probeContext}/${pattern.slice(slash + 1)}`,
+    "smart",
+  );
   if (!probe.ok || probe.scope.kind !== "resource") {
     return undefined;
   }

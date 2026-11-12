@@ -106,7 +106,13 @@ export function launchContextHandler(context: ServerContext) {
     const issuerContext = c.get("issuer");
     const metadata = requestMetadata(context, c);
 
-    if (!issuerContext.endpoint.supportsEhrLaunch) {
+    // An OAuth / OpenID Connect endpoint has no EHR launch at all; its flag is
+    // stored off, and the kind is checked as well so the refusal cannot depend on
+    // a column a SMART-only rule is meant to keep false.
+    if (
+      issuerContext.endpoint.kind !== "smart" ||
+      !issuerContext.endpoint.supportsEhrLaunch
+    ) {
       return c.json(
         oauthErrorBody(
           "invalid_request",

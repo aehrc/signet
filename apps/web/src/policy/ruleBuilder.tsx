@@ -32,12 +32,12 @@ import { useState } from "react";
 import { ClaimRuleFields } from "./claimRuleFields.js";
 import { GrantRuleFields } from "./grantRuleFields.js";
 import { MappingRuleFields } from "./mappingRuleFields.js";
-import { DEFAULT_PATTERN, formatPattern } from "./patterns.js";
 import { RuleCard } from "./ruleCard.js";
 import {
   appendRule,
   generateRuleId,
   isRuleEnabled,
+  newRule,
   replaceRule,
   rulesIn,
   usedRuleIds,
@@ -51,6 +51,7 @@ import type { AnyRule, RuleList } from "./rules.js";
 import type {
   ClaimRule,
   ContextRule,
+  EndpointKind,
   PolicyDocument,
   ScopeGrantRule,
   ScopeMappingRule,
@@ -58,6 +59,8 @@ import type {
 
 interface RuleBuilderProps {
   readonly document: PolicyDocument;
+  /** The endpoint's kind, which decides how scopes are matched and edited. */
+  readonly kind: EndpointKind;
   readonly onChange: (document: PolicyDocument) => void;
   readonly disabled: boolean;
 }
@@ -88,50 +91,42 @@ const LIST_DESCRIPTIONS: Readonly<
   },
 };
 
+/**
+ * Where an OAuth endpoint's lists read differently.
+ *
+ * A scope there is an opaque string matched exactly, not a pattern, and there is no
+ * launch context for a response parameter to carry.
+ */
+const OAUTH_LIST_DESCRIPTIONS: Readonly<Partial<Record<RuleList, string>>> = {
+  scopeGrants:
+    "Which requested scopes are granted. Each rule names one scope exactly, and the first rule naming a requested scope decides. A scope no rule names is denied.",
+  scopeMappings:
+    "Translates each granted scope into a resource server's own vocabulary, accumulating into an array claim.",
+  contextRules:
+    "What accompanies the token in the response body rather than inside it.",
+};
+
 /** The whole builder. */
 export function RuleBuilder({
   document,
+  kind,
   onChange,
   disabled,
 }: Readonly<RuleBuilderProps>) {
   return (
     <>
-      <RuleSection
-        list="scopeGrants"
-        document={document}
-        onChange={onChange}
-        disabled={disabled}
-        newRule={() => ({
-          match: formatPattern(DEFAULT_PATTERN),
-          allow: true,
-          narrow: true,
-        })}
-      />
-      <RuleSection
-        list="claimRules"
-        document={document}
-        onChange={onChange}
-        disabled={disabled}
-        newRule={() => ({ when: { always: true }, emit: {} })}
-      />
-      <RuleSection
-        list="scopeMappings"
-        document={document}
-        onChange={onChange}
-        disabled={disabled}
-        newRule={() => ({
-          forEachScope: "*/*.r",
-          appendTo: "authorities",
-          values: [""],
-        })}
-      />
-      <RuleSection
-        list="contextRules"
-        document={document}
-        onChange={onChange}
-        disabled={disabled}
-        newRule={() => ({ emit: {} })}
-      />
+      {(
+        ["scopeGrants", "claimRules", "scopeMappings", "contextRules"] as const
+      ).map((list) => (
+        <RuleSection
+          key={list}
+          list={list}
+          kind={kind}
+          document={document}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      ))}
       <DefaultsSection
         document={document}
         onChange={onChange}
@@ -143,23 +138,26 @@ export function RuleBuilder({
 
 interface RuleSectionProps {
   readonly list: RuleList;
+  readonly kind: EndpointKind;
   readonly document: PolicyDocument;
   readonly onChange: (document: PolicyDocument) => void;
   readonly disabled: boolean;
-  /** Builds the rule the "Add" button appends. */
-  readonly newRule: () => AnyRule;
 }
 
 /** One list of rules, collapsed to summaries, with its ordering explained. */
 function RuleSection({
   list,
+  kind,
   document,
   onChange,
   disabled,
-  newRule,
 }: Readonly<RuleSectionProps>) {
   const rules = rulesIn(document, list);
   const meta = LIST_DESCRIPTIONS[list];
+  const description =
+    kind === "oauth"
+      ? (OAUTH_LIST_DESCRIPTIONS[list] ?? meta.description)
+      : meta.description;
 
   // Which rules are open for editing. Collapsed by default so the list reads as a
   // list; a rule the operator has just added opens itself, because the next thing
@@ -182,7 +180,7 @@ function RuleSection({
   return (
     <Panel
       title={meta.title}
-      description={meta.description}
+      description={description}
       actions={
         disabled ? undefined : (
           <button
@@ -192,7 +190,9 @@ function RuleSection({
               // The identifier is chosen here rather than left to appendRule, so
               // the new card can be expanded for editing.
               const id = generateRuleId(list, usedRuleIds(document));
-              onChange(appendRule(document, list, { ...newRule(), id }));
+              onChange(
+                appendRule(document, list, { ...newRule(list, kind), id }),
+              );
               setExpanded((current) => new Set(current).add(id));
             }}
           >
@@ -229,7 +229,7 @@ function RuleSection({
                 }}
                 onChange={onChange}
               >
-                {renderFields(list, rule, disabled, (next) => {
+                {renderFields(list, rule, kind, disabled, (next) => {
                   onChange(replaceRule(document, list, rule.id ?? "", next));
                 })}
               </RuleCard>
@@ -245,6 +245,7 @@ function RuleSection({
 function renderFields(
   list: RuleList,
   rule: AnyRule,
+  kind: EndpointKind,
   disabled: boolean,
   onChange: (rule: AnyRule) => void,
 ) {
@@ -253,6 +254,7 @@ function renderFields(
       return (
         <GrantRuleFields
           rule={rule as ScopeGrantRule}
+          kind={kind}
           disabled={disabled}
           onChange={onChange}
         />
@@ -262,6 +264,7 @@ function renderFields(
       return (
         <ClaimRuleFields
           rule={rule as ClaimRule}
+          kind={kind}
           disabled={disabled}
           withCondition
           onChange={onChange}
@@ -272,6 +275,7 @@ function renderFields(
       return (
         <ClaimRuleFields
           rule={rule as ContextRule}
+          kind={kind}
           disabled={disabled}
           withCondition={false}
           onChange={onChange}
@@ -282,6 +286,7 @@ function renderFields(
       return (
         <MappingRuleFields
           rule={rule as ScopeMappingRule}
+          kind={kind}
           disabled={disabled}
           onChange={onChange}
         />

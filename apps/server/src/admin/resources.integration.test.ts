@@ -74,7 +74,8 @@ describe.skipIf(testDatabaseUrl === undefined)(
           body: {
             slug: "second",
             name: "Second endpoint",
-            fhirBaseUrl: "https://other.test/fhir",
+            kind: "smart",
+            audience: "https://other.test/fhir",
           },
           expect: 201,
         });
@@ -109,7 +110,8 @@ describe.skipIf(testDatabaseUrl === undefined)(
             body: {
               slug: stack.endpoint.slug,
               name: "Clash",
-              fhirBaseUrl: "https://clash.test/fhir",
+              kind: "smart",
+              audience: "https://clash.test/fhir",
             },
           },
         );
@@ -820,7 +822,8 @@ describe.skipIf(testDatabaseUrl === undefined)(
           body: {
             slug: "neighbour",
             name: "Neighbouring endpoint",
-            fhirBaseUrl: "https://neighbour.test/fhir",
+            kind: "smart",
+            audience: "https://neighbour.test/fhir",
           },
           expect: 201,
         });
@@ -955,7 +958,7 @@ describe.skipIf(testDatabaseUrl === undefined)(
         const source = await response.text();
         expect(source).toContain(stack.issuer);
         expect(source).toContain(`${stack.issuer}/jwks`);
-        expect(source).toContain(stack.endpoint.fhirBaseUrl);
+        expect(source).toContain(stack.endpoint.audience);
       });
     });
 

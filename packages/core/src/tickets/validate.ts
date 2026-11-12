@@ -263,7 +263,7 @@ export function validatePermissionTicket(check: TicketCheck): TicketValidation {
     );
   }
 
-  const parsed = parseScopes((raw as readonly string[]).join(" "));
+  const parsed = parseScopes((raw as readonly string[]).join(" "), "smart");
   const rejected = parsed.rejected[0];
   if (rejected !== undefined) {
     return refuseTicket(

@@ -70,7 +70,9 @@ export function registerLaunchRoutes(
     async (c) => {
       const { scope, endpoint, issuer } = c.get("endpoint");
 
-      if (!endpoint.supportsEhrLaunch) {
+      // An OAuth / OpenID Connect endpoint has no EHR launch whatever its stored
+      // flag says, so the kind is checked as well as the flag.
+      if (endpoint.kind !== "smart" || !endpoint.supportsEhrLaunch) {
         return c.json(
           adminErrorBody(
             "invalid_request",
@@ -164,6 +166,18 @@ export function registerLaunchRoutes(
     async (c) => {
       const { endpoint, issuer, urls, scope } = c.get("endpoint");
 
+      // The interceptor reads SMART scopes out of the token, which an OAuth /
+      // OpenID Connect endpoint never issues - there is no FHIR server to put it in.
+      if (endpoint.kind !== "smart") {
+        return c.json(
+          adminErrorBody(
+            "not_found",
+            "A HAPI FHIR interceptor is generated only for a SMART on FHIR endpoint",
+          ),
+          statusForAdminError("not_found"),
+        );
+      }
+
       // The algorithms this endpoint actually publishes keys for, so an operator
       // who chose RS256 for a resource server that reads nothing else is not
       // handed an interceptor that rejects their own tokens.
@@ -174,7 +188,7 @@ export function registerLaunchRoutes(
       const source = generateHapiInterceptor({
         issuer,
         jwksUri: urls.jwks,
-        audience: endpoint.fhirBaseUrl,
+        audience: endpoint.audience,
         endpointName: endpoint.name,
         algorithms: [...new Set(keys.map((key) => key.algorithm))],
       });

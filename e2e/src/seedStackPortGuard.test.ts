@@ -151,6 +151,14 @@ describe("the seed script's env-file port guard", () => {
     expect(output).toContain(REFUSAL);
   });
 
+  // The proxy's port moves the notes endpoint's audience and redirect URI, so it
+  // is as much a stack port as the other three.
+  test("refuses a port declared for oauth2-proxy", () => {
+    const { status, output } = seedIn({ ".env.local": "PROXY_PORT=4280\n" });
+    expect(status).not.toBe(0);
+    expect(output).toContain("PROXY_PORT");
+  });
+
   // A symlink pointing at nothing is not a reason to fail the seed.
   test("ignores a broken symlink", () => {
     const { output } = seedWith((cwd) => {

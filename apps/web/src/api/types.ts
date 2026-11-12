@@ -20,6 +20,8 @@
  * Author: John Grimes
  */
 
+import type { EndpointKind } from "@signet/core";
+
 /** The signed-in person, and the tenants they may act on. */
 export interface SessionView {
   readonly user?: {
@@ -63,9 +65,16 @@ export interface EndpointView {
   readonly slug: string;
   readonly name: string;
   readonly description: string | null;
-  readonly fhirBaseUrl: string;
+  /** What the endpoint secures. Fixed at creation. */
+  readonly kind: EndpointKind;
+  /**
+   * The `aud` every access token carries. On a SMART endpoint this is the FHIR base
+   * URL; on an OAuth endpoint it identifies the protected API.
+   */
+  readonly audience: string;
   readonly issuer: string;
-  readonly smartConfigurationUrl: string;
+  /** Null on an OAuth endpoint, which publishes no SMART configuration. */
+  readonly smartConfigurationUrl: string | null;
   readonly status: "active" | "disabled";
   readonly authMode: "local" | "persona" | "oidc";
   readonly consentMode: "always" | "remember" | "auto";
@@ -165,6 +174,9 @@ export interface EndUserView {
   readonly username: string;
   readonly displayName: string;
   readonly fhirUser: string | null;
+  /** Released for the `email` scope, on an OAuth endpoint. */
+  readonly email: string | null;
+  readonly emailVerified: boolean;
   readonly roles: readonly string[];
   readonly attributes: Readonly<Record<string, unknown>>;
   readonly defaultContext: Readonly<Record<string, unknown>> | null;
@@ -263,6 +275,8 @@ export interface AuditPage {
 /** A policy starting point this deployment ships. */
 export interface PresetView {
   readonly id: string;
+  /** The kind of endpoint the preset is written for, and the only kind offered it. */
+  readonly kind: EndpointKind;
   readonly name: string;
   readonly description: string;
   readonly policy: unknown;
@@ -293,6 +307,7 @@ export interface IdpConfigView {
   readonly scopes: readonly string[];
   readonly claimMappings: {
     readonly fhirUser?: string;
+    readonly email?: string;
     readonly roles?: string;
     readonly displayName?: string;
     readonly attributes?: readonly string[];

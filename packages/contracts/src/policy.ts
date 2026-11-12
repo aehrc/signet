@@ -22,6 +22,8 @@
 import { validatePolicy } from "@signet/core";
 import { z } from "zod";
 
+import type { EndpointKind } from "@signet/core";
+
 /**
  * Splits a core policy issue path into Zod path segments.
  *
@@ -58,22 +60,28 @@ export function policyIssuePath(path: string): (string | number)[] {
 }
 
 /**
- * A complete policy document.
+ * A complete policy document for an endpoint of the given kind.
  *
  * Parses to the `PolicyDocument` the evaluator accepts, so a handler that has
- * parsed a request body needs no further narrowing before publishing it.
+ * parsed a request body needs no further narrowing before publishing it. The kind
+ * is a parameter because it decides the scope grammar: a document valid on a
+ * SMART endpoint is not, in general, valid on an OAuth one, and the reverse.
+ *
+ * @param kind - The kind of endpoint the document is for.
  */
-export const policyDocumentSchema = z.unknown().transform((value, ctx) => {
-  const validation = validatePolicy(value);
-  if (!validation.ok) {
-    for (const issue of validation.issues) {
-      ctx.addIssue({
-        code: "custom",
-        message: issue.message,
-        path: policyIssuePath(issue.path),
-      });
+export function policyDocumentSchemaFor(kind: EndpointKind) {
+  return z.unknown().transform((value, ctx) => {
+    const validation = validatePolicy(value, kind);
+    if (!validation.ok) {
+      for (const issue of validation.issues) {
+        ctx.addIssue({
+          code: "custom",
+          message: issue.message,
+          path: policyIssuePath(issue.path),
+        });
+      }
+      return z.NEVER;
     }
-    return z.NEVER;
-  }
-  return validation.policy;
-});
+    return validation.policy;
+  });
+}

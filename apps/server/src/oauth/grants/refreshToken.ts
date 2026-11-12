@@ -141,11 +141,12 @@ export async function refreshTokenGrant(
     );
   }
 
-  const grantedPreviously = parseScopes(held.scope).scopes;
+  const { kind } = issuerContext.endpoint;
+  const grantedPreviously = parseScopes(held.scope, kind).scopes;
   const raw = formField(body, "scope");
   let requested = grantedPreviously;
   if (raw !== undefined) {
-    const parsed = parseScopes(raw);
+    const parsed = parseScopes(raw, kind);
     const firstRejected = parsed.rejected[0];
     if (firstRejected !== undefined) {
       return grantRefusal(

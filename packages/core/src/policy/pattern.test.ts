@@ -21,7 +21,7 @@ import type { Scope } from "../scopes/types.js";
 
 /** Parses a scope, failing the test if it was rejected. */
 function scope(raw: string): Scope {
-  const result = parseScope(raw);
+  const result = parseScope(raw, "smart");
   if (!result.ok) {
     throw new Error(`Expected "${raw}" to parse, got ${result.code}`);
   }

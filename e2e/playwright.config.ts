@@ -14,8 +14,9 @@ import { resolveStackUrls } from "./src/stackUrls.js";
 /**
  * The end-to-end suite.
  *
- * The stack under test - Signet, Pathling, Postgres and a stub SMART app - is
- * brought up by docker-compose rather than by Playwright. Pathling starts a Spark
+ * The stack under test - Signet, Pathling, Postgres, a stub SMART app and
+ * oauth2-proxy in front of a regular app - is brought up by docker-compose rather
+ * than by Playwright. Pathling starts a Spark
  * session before it serves anything, which takes long enough that a `webServer`
  * readiness check is the wrong tool: it would either time out or mask a real
  * failure to start.
@@ -24,20 +25,20 @@ import { resolveStackUrls } from "./src/stackUrls.js";
  * is idempotent, so a suite against an already-running stack cannot fail for want
  * of a fixture.
  *
- * `SIGNET_PORT`, `PATHLING_PORT` and `APP_PORT` move the stack, issuer identifiers
- * included, for a machine where one of the default ports is taken. **Export them
+ * `SIGNET_PORT`, `PATHLING_PORT`, `APP_PORT` and `PROXY_PORT` move the stack,
+ * issuer identifiers included, for a machine where one of the default ports is taken. **Export them
  * into the shell**, so that this suite and `docker compose` read the same values:
  * Bun does not pass a variable it loaded from a `.env` file to the processes it
  * spawns, and neither `docker compose` nor Playwright is Bun.
  *
- * **Running it twice inside a minute will fail, and that is the product working.**
- * End-user sign-ins are limited to ten a minute per address; one run of this suite
- * spends nine of them and the whole suite comes from one address. A second run
+ * **Running it three times inside a minute will fail, and that is the product
+ * working.** End-user sign-ins are limited per address, and the compose stack sets
+ * the limit to thirty a minute with `SIGNET_SIGN_IN_RATE_LIMIT`. One run of this
+ * suite spends eleven, and the whole suite comes from one address. A third run
  * started before the window rolls over is refused with "Too many requests", which
  * surfaces as a sign-in page that will not proceed. Wait a minute between runs, or
  * run a single spec. The budget is written down in `tests/grants.spec.ts`; anything
- * added here that signs in interactively has to come out of it, and there is one
- * left.
+ * added here that signs in interactively adds to it.
  *
  * The administrator sign-ins are a separate allowance on the same limit, keyed by
  * route: two in `auth.setup.ts` and two in `tests/passkeys.spec.ts`, which signs in

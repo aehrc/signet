@@ -1,0 +1,28 @@
+<!doctype html>
+<!--
+  Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
+  (CSIRO) ABN 41 687 119 230. Licensed under the Apache License, Version 2.0.
+-->
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Notes</title>
+  </head>
+  <body>
+    <!--
+      A regular web app with no knowledge of OAuth. oauth2-proxy stands in front
+      of it, signs the person in through Signet, and passes who they are in
+      request headers. nginx writes those headers into the page with server side
+      includes, which is how the end-to-end suite sees what the proxy passed.
+    -->
+    <h1>Notes</h1>
+    <p>
+      Signed in as
+      <span data-testid="email"
+        ><!--# echo var="http_x_forwarded_email" default="nobody" --></span
+      >.
+    </p>
+  </body>
+</html>

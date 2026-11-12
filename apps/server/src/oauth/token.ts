@@ -21,7 +21,7 @@
  * Author: John Grimes
  */
 
-import { TOKEN_EXCHANGE_GRANT_TYPE } from "@signet/core";
+import { resolveAudience, TOKEN_EXCHANGE_GRANT_TYPE } from "@signet/core";
 
 import {
   authenticateClient,
@@ -33,6 +33,7 @@ import {
   authorizationCodeGrant,
   clientCredentialsGrant,
   formField,
+  formValues,
   refreshTokenGrant,
   tokenExchangeGrant,
 } from "./grants/index.js";
@@ -53,7 +54,9 @@ export function tokenHandler(context: ServerContext) {
     const { endpoint, tenant } = issuerContext;
     const metadata = requestMetadata(context, c);
 
-    const body = await c.req.parseBody();
+    // Every value of a repeated field: `formField` refuses a repeated parameter,
+    // and RFC 8707 lets `resource` alone be repeated.
+    const body = await c.req.parseBody({ all: true });
     const clientId = formField(body, "client_id");
     const grantType = formField(body, "grant_type");
 
@@ -127,6 +130,24 @@ export function tokenHandler(context: ServerContext) {
           ? {}
           : { clientId: authentication.clientId },
       );
+    }
+    // An OAuth endpoint's client may name the resource server it wants a token
+    // for, and every name must be the endpoint's audience - the same rule as at
+    // `/authorize`. Checked before any grant runs, so a refusal spends no code and
+    // no refresh token. A SMART endpoint's token request carries no audience, so
+    // nothing is checked there.
+    if (endpoint.kind === "oauth") {
+      const target = resolveAudience({
+        kind: endpoint.kind,
+        audience: endpoint.audience,
+        resources: formValues(body, "resource"),
+      });
+      if (!target.ok) {
+        return await deny(
+          "invalid_target",
+          "resource must name this endpoint's audience",
+        );
+      }
     }
 
     const request: GrantRequest = {

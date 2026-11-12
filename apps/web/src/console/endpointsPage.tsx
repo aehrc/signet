@@ -7,14 +7,17 @@
  * The tenant's endpoints, and how a new one is created.
  *
  * The list is the console's landing page, because an endpoint is the unit an
- * operator thinks in: one issuer in front of one FHIR server. Each row shows the
- * issuer, since that string is what has to be pasted into the FHIR server's
- * configuration, and whether the endpoint is production - which is the flag that
- * decides whether password-free personas are selectable.
+ * operator thinks in: one issuer for one FHIR server or one API. Each row shows what
+ * kind of endpoint it is, the audience its tokens carry, and whether it is
+ * production - which is the flag that decides whether password-free personas are
+ * selectable.
  *
- * Creating one takes three fields. Everything else has a defensible default, and the
- * server generates the signing key and publishes a starting policy in the same
- * request, so an endpoint created here can serve a discovery document immediately.
+ * Creating one takes four fields. The kind is the one that cannot be revisited: it
+ * decides how every scope, policy and registration on the endpoint is read, so the
+ * form asks for it explicitly rather than defaulting it. Everything else has a
+ * defensible default, and the server generates the signing key and publishes a
+ * starting policy in the same request, so an endpoint created here can serve a
+ * discovery document immediately.
  *
  * Author: John Grimes
  */
@@ -26,7 +29,7 @@ import { endpointRoute } from "./routes.js";
 import { roleAllows, useConsoleContext } from "./useConsole.js";
 import { describeError, issuesByField } from "../api/errors.js";
 import { useCreateEndpoint, useEndpoints } from "../api/queries.js";
-import { FormFooter, TextField } from "../components/fields.js";
+import { FormFooter, RadioField, TextField } from "../components/fields.js";
 import {
   CopyableValue,
   EmptyState,
@@ -36,11 +39,17 @@ import {
   Panel,
 } from "../components/layout.js";
 import { DataTable, StatusBadge } from "../components/table.js";
+import {
+  audienceWording,
+  ENDPOINT_KIND_OPTIONS,
+  endpointKindLabel,
+} from "../formatting/endpointKind.js";
 import { toneForStatus } from "../formatting/status.js";
 import { countOf } from "../formatting/values.js";
 
 import type { EndpointView } from "../api/types.js";
 import type { Column } from "../components/table.js";
+import type { EndpointKind } from "@signet/core";
 
 /** The endpoint list. */
 export function EndpointsPage() {
@@ -69,10 +78,19 @@ export function EndpointsPage() {
       ),
     },
     {
-      key: "fhir",
-      header: "FHIR server",
+      key: "kind",
+      header: "Kind",
       cell: (endpoint) => (
-        <span className="font-mono text-xs">{endpoint.fhirBaseUrl}</span>
+        <StatusBadge tone="neutral">
+          {endpointKindLabel(endpoint.kind)}
+        </StatusBadge>
+      ),
+    },
+    {
+      key: "audience",
+      header: "Audience",
+      cell: (endpoint) => (
+        <span className="font-mono text-xs">{endpoint.audience}</span>
       ),
     },
     {
@@ -100,7 +118,7 @@ export function EndpointsPage() {
     <>
       <PageHeader
         title="Endpoints"
-        description="An endpoint is one SMART authorization server in front of one FHIR base URL. Its issuer is what you point your FHIR server at."
+        description="An endpoint is one authorization server: SMART App Launch in front of a FHIR server, or OAuth / OpenID Connect for any other app or API. Its issuer is what you point your server or app at."
         actions={
           mayCreate ? (
             <button
@@ -144,7 +162,7 @@ export function EndpointsPage() {
             empty={
               <EmptyState
                 title="No endpoints yet"
-                description="Create one, point it at your FHIR server's base URL, and Signet will serve SMART App Launch in front of it."
+                description="Create one for your FHIR server or your API, and Signet will issue tokens for it."
               />
             }
           />
@@ -154,7 +172,7 @@ export function EndpointsPage() {
       {endpoints.data !== undefined && endpoints.data.length > 0 ? (
         <Panel
           title="Issuers"
-          description="Copy an issuer into your FHIR server's SMART configuration, or reverse-proxy its discovery document from your own base URL."
+          description="Copy an issuer into your server's or app's configuration, or reverse-proxy its discovery document from your own base URL."
         >
           <div className="flex flex-col gap-3">
             {endpoints.data.map((endpoint) => (
@@ -172,17 +190,22 @@ export function EndpointsPage() {
   );
 }
 
-/** The three fields a new endpoint needs. */
+/** The four fields a new endpoint needs. */
 function CreateEndpointForm({
   tenant,
   onDone,
 }: Readonly<{ readonly tenant: string; readonly onDone: () => void }>) {
   const create = useCreateEndpoint(tenant);
+  // Empty until chosen: the kind cannot be changed later, so it is not defaulted.
+  const [kind, setKind] = useState<EndpointKind | "">("");
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
-  const [fhirBaseUrl, setFhirBaseUrl] = useState("");
+  const [audience, setAudience] = useState("");
 
   const issues = issuesByField(create.error);
+  // Worded for SMART until a kind is chosen, since that is what most operators
+  // arrive to create.
+  const wording = audienceWording(kind === "" ? "smart" : kind);
 
   return (
     <Panel title="New endpoint">
@@ -191,11 +214,23 @@ function CreateEndpointForm({
         onSubmit={(event) => {
           event.preventDefault();
           create.mutate(
-            { slug, name, fhirBaseUrl },
+            { kind, slug, name, audience },
             { onSuccess: () => onDone() },
           );
         }}
       >
+        <RadioField
+          label="Kind"
+          name="kind"
+          value={kind}
+          onChange={(value) => {
+            setKind(value as EndpointKind);
+          }}
+          options={ENDPOINT_KIND_OPTIONS}
+          error={issues["kind"]}
+          hint="Fixed once the endpoint is created: it decides how every scope, policy and client registration on the endpoint is read."
+          required
+        />
         <TextField
           label="Slug"
           value={slug}
@@ -214,13 +249,13 @@ function CreateEndpointForm({
           required
         />
         <TextField
-          label="FHIR base URL"
+          label={wording.label}
           type="url"
-          value={fhirBaseUrl}
-          onChange={setFhirBaseUrl}
-          error={issues["fhirBaseUrl"]}
-          hint="The server this endpoint fronts. Also the audience every access token is minted for."
-          placeholder="https://fhir.example.org/fhir"
+          value={audience}
+          onChange={setAudience}
+          error={issues["audience"]}
+          hint={wording.hint}
+          placeholder={wording.placeholder}
           required
         />
 

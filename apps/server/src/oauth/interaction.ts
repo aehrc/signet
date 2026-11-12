@@ -32,6 +32,8 @@
 
 import {
   areScopesCoveredBy,
+  evaluatePolicy,
+  grantingRuleDescriptions,
   parseScopes,
   validateLaunchContext,
 } from "@signet/core";
@@ -41,6 +43,7 @@ import {
   deleteAuthorizationSession,
   generateOpaqueToken,
   getClient,
+  getEffectivePolicy,
   getEndUser,
   getIdpConfig,
   getLiveAuthorizationSession,
@@ -52,6 +55,8 @@ import {
   resolveClientScope,
   setResolvedContext,
   toDefaultLaunchContext,
+  toEvaluationClient,
+  toEvaluationUser,
   withTenantScope,
 } from "@signet/db";
 
@@ -66,6 +71,7 @@ import {
   readEndUserCredentials,
   signInEndUser,
 } from "./endUserAuthentication.js";
+import { buildEvaluationContext } from "./evaluationContext.js";
 import { decideStep, interactionUrl } from "./interactionState.js";
 import { authorizeErrorRedirect } from "../http/oauthErrors.js";
 import { requestMetadata } from "../http/requestMeta.js";
@@ -149,7 +155,10 @@ async function loadSession(
     session,
     clientScope: resolved.scope,
     client: resolved.client,
-    requested: parseScopes(session.requestedScopes.join(" ")).scopes,
+    requested: parseScopes(
+      session.requestedScopes.join(" "),
+      issuerContext.endpoint.kind,
+    ).scopes,
   };
 }
 
@@ -182,6 +191,7 @@ async function resolveClientScopeForSession(
 /** Whether a stored consent already covers everything the session requests. */
 async function hasCoveringConsent(
   context: ServerContext,
+  issuerContext: ResolvedIssuerContext,
   loaded: LoadedSession,
   endUserId: string,
 ): Promise<boolean> {
@@ -191,8 +201,51 @@ async function hasCoveringConsent(
     (bound) => listLiveConsents(bound, endUserId, context.clock()),
   );
   return consents.some((consent) =>
-    areScopesCoveredBy(loaded.requested, parseScopes(consent.scope).scopes),
+    areScopesCoveredBy(
+      loaded.requested,
+      parseScopes(consent.scope, issuerContext.endpoint.kind).scopes,
+    ),
   );
+}
+
+/**
+ * What the consent screen says about each scope it cannot phrase itself.
+ *
+ * Only on an OAuth / OpenID Connect endpoint, whose API scopes are opaque strings
+ * that only the operator's grant rules explain; a SMART scope is phrased from its
+ * own grammar. Evaluated with the same policy, context and grant type as the token
+ * the consent will lead to, so the sentence shown is the one belonging to the rule
+ * that will actually grant the scope.
+ */
+async function scopeDescriptionsFor(
+  context: ServerContext,
+  issuerContext: ResolvedIssuerContext,
+  loaded: LoadedSession,
+  user: EndUser | undefined,
+): Promise<Readonly<Record<string, string>>> {
+  if (issuerContext.endpoint.kind !== "oauth" || user === undefined) {
+    return {};
+  }
+  const policy = await withTenantScope(
+    context.db,
+    loaded.clientScope,
+    (bound) => getEffectivePolicy(bound),
+  );
+  if (policy === undefined) {
+    return {};
+  }
+  const evaluation = evaluatePolicy(
+    policy.document,
+    buildEvaluationContext({
+      issuerContext,
+      client: toEvaluationClient(loaded.client),
+      user: toEvaluationUser(user),
+      requested: loaded.requested,
+      launchContext: loaded.session.resolvedContext ?? {},
+      grantType: "authorization_code",
+    }),
+  );
+  return grantingRuleDescriptions(evaluation.grantingRules);
 }
 
 /** Derives the current step and everything the page for it needs. */
@@ -223,7 +276,7 @@ async function buildView(
     hasStoredConsent:
       user === undefined
         ? false
-        : await hasCoveringConsent(context, loaded, user.id),
+        : await hasCoveringConsent(context, issuerContext, loaded, user.id),
   });
 
   const personas =
@@ -245,6 +298,11 @@ async function buildView(
 
   return {
     step,
+    endpointKind: endpoint.kind,
+    scopeDescriptions:
+      step === "consent"
+        ? await scopeDescriptionsFor(context, issuerContext, loaded, user)
+        : {},
     client: {
       clientId: client.clientId,
       name: client.name,
@@ -495,6 +553,11 @@ async function attachUser(
   if (attached === undefined) {
     return;
   }
+  // An OAuth / OpenID Connect endpoint has no launch context: no persona default
+  // and no patient choice is carried into a token there, so none is resolved.
+  if (issuerContext.endpoint.kind !== "smart") {
+    return;
+  }
 
   const requirements = contextRequirements(loaded.requested);
   const resolved: Record<string, string> = {};
@@ -602,6 +665,17 @@ export function interactionContextHandler(context: ServerContext) {
     );
     if (loaded instanceof Response) {
       return loaded;
+    }
+    // Never a step on an OAuth / OpenID Connect endpoint, so a post here is a
+    // client that has misunderstood the endpoint rather than one that is early.
+    if (issuerContext.endpoint.kind !== "smart") {
+      return c.json(
+        {
+          error: "invalid_request",
+          error_description: "This endpoint has no launch context to choose",
+        },
+        400,
+      );
     }
 
     const user = await withTenantScope(

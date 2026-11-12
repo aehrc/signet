@@ -13,6 +13,7 @@ import type {
   PolicyDocument,
   ScopeGrantRule,
 } from "./types.js";
+import type { EndpointKind } from "../endpointKind.js";
 
 /** One hour, the SMART-conventional access token lifetime. */
 const ACCESS_TOKEN_TTL = 3600;
@@ -164,6 +165,52 @@ export const SMART_BASELINE_PRESET: PolicyDocument = {
   ],
   claimRules: FHIR_USER_CLAIM_RULES,
   contextRules: SMART_CONTEXT_RULES,
+  defaults: {
+    accessTokenTtl: ACCESS_TOKEN_TTL,
+    refreshTokenTtl: REFRESH_TOKEN_TTL,
+  },
+};
+
+/**
+ * The starting point for an OAuth / OpenID Connect endpoint.
+ *
+ * Grants sign-in and nothing else: the OpenID Connect scopes, and refresh tokens
+ * for confidential clients as in the SMART baseline. Every API scope is refused
+ * until the operator adds a rule naming it, because a preset cannot know what an
+ * API's scopes mean - and a preset that granted them by default would be the
+ * forgotten edit that turns into an unintended write.
+ */
+export const OAUTH_BASELINE_PRESET: PolicyDocument = {
+  version: 1,
+  scopeGrants: [
+    {
+      id: "grant-openid",
+      description: "Signs you in to the app.",
+      match: "openid",
+      allow: true,
+    },
+    {
+      id: "grant-profile",
+      description: "Shares your name and username with the app.",
+      match: "profile",
+      allow: true,
+    },
+    {
+      id: "grant-email",
+      description: "Shares your email address with the app.",
+      match: "email",
+      allow: true,
+    },
+    {
+      id: "grant-offline-access",
+      description: "Refresh tokens, for confidential clients only.",
+      match: "offline_access",
+      allow: true,
+      clientTypes: ["confidential-symmetric", "confidential-asymmetric"],
+    },
+  ],
+  claimRules: [],
+  contextRules: [],
   defaults: {
     accessTokenTtl: ACCESS_TOKEN_TTL,
     refreshTokenTtl: REFRESH_TOKEN_TTL,
@@ -663,6 +710,13 @@ export interface PolicyPreset {
   readonly id: string;
   readonly name: string;
   readonly description: string;
+  /**
+   * The kind of endpoint the preset is written for. A preset is offered, and
+   * accepted, only on an endpoint of its own kind: a SMART preset's patterns mean
+   * nothing on an OAuth endpoint, and an OAuth preset grants nothing a SMART app
+   * asks for.
+   */
+  readonly kind: EndpointKind;
   readonly policy: PolicyDocument;
   /**
    * The vendor documentation this preset was written from.
@@ -694,6 +748,7 @@ export interface PolicyPreset {
 export const POLICY_PRESETS: readonly PolicyPreset[] = [
   {
     id: "smart-baseline",
+    kind: "smart",
     name: "SMART baseline",
     description:
       "Read-only SMART App Launch: patient, encounter and banner context, plus a fhirUser claim. A safe starting point for a server that reads SMART scopes itself, including HAPI FHIR behind a generated interceptor.",
@@ -707,6 +762,7 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
   },
   {
     id: "pathling",
+    kind: "smart",
     name: "Pathling",
     description: `Translates SMART scopes into Pathling's authorities claim, pairing each operation authority with the data authority it needs. Covers every authority in Pathling 3.0.0. Reads are open to any user; writing requires the ${PATHLING_ADMIN_ROLE} role.`,
     policy: PATHLING_PRESET,
@@ -726,6 +782,7 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
   },
   {
     id: "aidbox",
+    kind: "smart",
     name: "Aidbox",
     description:
       "SMART v2 scopes as Aidbox reads them: an atv claim declaring the token version, and the patient compartment nested under context.patient.",
@@ -739,6 +796,7 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
   },
   {
     id: "firely",
+    kind: "smart",
     name: "Firely Server",
     description:
       "The baseline plus a patient claim inside the access token, which is where Firely reads the compartment from. Check that Firely's configured audience matches this endpoint's FHIR base URL.",
@@ -752,6 +810,7 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
   },
   {
     id: "smile-cdr",
+    kind: "smart",
     name: "Smile CDR",
     description:
       "The baseline plus a patient claim inside the access token, for the SMART Inbound Security login script to read. The script itself is the contract; this mints the documented convention it expects.",
@@ -765,6 +824,7 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
   },
   {
     id: "ontoserver",
+    kind: "smart",
     name: "Ontoserver",
     description: `Translates SMART scopes into the v1-style authority strings Ontoserver matches inside the authorities claim. Reads are open to signed-in users and backend services; writing requires the ${ONTOSERVER_ADMIN_ROLE} role. The endpoint's signing key must use RS256, because Ontoserver verifies with a static PEM public key rather than a JWKS.`,
     policy: ONTOSERVER_PRESET,
@@ -776,6 +836,20 @@ export const POLICY_PRESETS: readonly PolicyPreset[] = [
       {
         label: "Ontoserver - Security configuration",
         url: "https://ontoserver.csiro.au/docs/6/config-security.html",
+      },
+    ],
+  },
+  {
+    id: "oauth-baseline",
+    kind: "oauth",
+    name: "OAuth / OpenID Connect baseline",
+    description:
+      "Sign-in only: openid, profile, email, and refresh tokens for confidential clients. Every API scope is refused until you add a grant rule naming it.",
+    policy: OAUTH_BASELINE_PRESET,
+    references: [
+      {
+        label: "OpenID Connect Core 1.0 - Requesting Claims using Scope Values",
+        url: "https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims",
       },
     ],
   },

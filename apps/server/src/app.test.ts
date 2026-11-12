@@ -34,6 +34,7 @@ function contextWith(execute: () => Promise<unknown>): ServerContext {
       webRoot: undefined,
       allowPrivateOutboundFetches: false,
       trustedProxyCount: 0,
+      signInRateLimit: 10,
     },
     rateLimits: createUnlimitedStore(),
     jwksCache: createRemoteJwksCache(),

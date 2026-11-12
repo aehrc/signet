@@ -22,24 +22,29 @@
  * Author: John Grimes
  */
 
-/** Error codes the authorization endpoint may return. RFC 6749 §4.1.2.1. */
+/**
+ * Error codes the authorization endpoint may return. RFC 6749 §4.1.2.1, plus
+ * RFC 8707 §2's `invalid_target` for a resource the endpoint does not front.
+ */
 export type AuthorizeErrorCode =
   | "invalid_request"
   | "unauthorized_client"
   | "access_denied"
   | "unsupported_response_type"
   | "invalid_scope"
+  | "invalid_target"
   | "server_error"
   | "temporarily_unavailable";
 
-/** Error codes the token endpoint may return. RFC 6749 §5.2. */
+/** Error codes the token endpoint may return. RFC 6749 §5.2 and RFC 8707 §2. */
 export type TokenErrorCode =
   | "invalid_request"
   | "invalid_client"
   | "invalid_grant"
   | "unauthorized_client"
   | "unsupported_grant_type"
-  | "invalid_scope";
+  | "invalid_scope"
+  | "invalid_target";
 
 /** A serialised OAuth error body. */
 export interface OAuthErrorBody {

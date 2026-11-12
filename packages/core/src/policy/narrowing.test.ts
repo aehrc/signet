@@ -20,7 +20,7 @@ import type { Scope } from "../scopes/types.js";
 
 /** Parses a space-delimited scope string. */
 function scopes(raw: string): readonly Scope[] {
-  const result = parseScopes(raw);
+  const result = parseScopes(raw, "smart");
   if (result.rejected.length > 0) {
     throw new Error(
       `Unexpected rejections: ${result.rejected.map((r) => r.raw).join(", ")}`,
@@ -57,12 +57,16 @@ function contextFor(
       tenantSlug: "demo",
       slug: "pathling",
       issuer: "https://signet.example.org/t/demo/e/pathling",
-      fhirBaseUrl: "https://fhir.example.org/fhir",
+      kind: "smart",
+      audience: "https://fhir.example.org/fhir",
     },
     client: { clientId: "app", name: "App", type: "public", attributes: {} },
     user: {
       id: "u1",
       fhirUser: "Practitioner/1",
+      username: "user-1",
+      email: null,
+      emailVerified: false,
       displayName: "Dr Who",
       roles: ["practitioner"],
       attributes: {},

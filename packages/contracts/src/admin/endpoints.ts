@@ -18,7 +18,7 @@
 
 import { z } from "zod";
 
-import { fhirBaseUrlSchema, slugSchema } from "../primitives.js";
+import { audienceSchema, slugSchema } from "../primitives.js";
 
 /** Every capability flag, all optional so a patch can name one. */
 export const endpointCapabilitiesSchema = z.object({
@@ -45,6 +45,17 @@ export const endpointCapabilitiesSchema = z.object({
   supportsDynamicRegistration: z.boolean().optional(),
 });
 
+/**
+ * What an endpoint secures, fixed at creation.
+ *
+ * `smart` is a SMART App Launch issuer in front of a FHIR server. `oauth` is a
+ * plain OAuth 2.0 / OpenID Connect issuer for any other web app or API: opaque
+ * scopes, an optional `aud` at `/authorize`, and none of the SMART launch
+ * machinery. Immutable because the kind decides how every stored scope, policy
+ * and client registration on the endpoint is read.
+ */
+export const endpointKindSchema = z.enum(["smart", "oauth"]);
+
 /** How end users authenticate on an endpoint. */
 export const endpointAuthModeSchema = z.enum(["local", "persona", "oidc"]);
 
@@ -55,7 +66,7 @@ export const endpointConsentModeSchema = z.enum(["always", "remember", "auto"]);
 const endpointSettingsSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).nullish(),
-  fhirBaseUrl: fhirBaseUrlSchema,
+  audience: audienceSchema,
   scopesSupported: z.array(z.string().max(256)).max(200).optional(),
   userAccessBrandBundle: z.string().url().max(2048).nullish(),
   userAccessBrandIdentifier: z.string().max(256).nullish(),
@@ -76,9 +87,12 @@ const endpointSettingsSchema = z.object({
   isProduction: z.boolean().optional(),
 });
 
-/** Creating an endpoint. The slug is fixed at creation; see the patch schema. */
+/**
+ * Creating an endpoint. The slug and kind are fixed at creation; see the patch
+ * schema.
+ */
 export const endpointCreateSchema = endpointSettingsSchema
-  .extend({ slug: slugSchema })
+  .extend({ slug: slugSchema, kind: endpointKindSchema })
   .extend(endpointCapabilitiesSchema.shape);
 
 /**
@@ -92,7 +106,13 @@ export const endpointCreateSchema = endpointSettingsSchema
 export const endpointPatchSchema = endpointSettingsSchema
   .partial()
   .extend(endpointCapabilitiesSchema.shape)
-  .extend({ status: z.enum(["active", "disabled"]).optional() });
+  .extend({
+    status: z.enum(["active", "disabled"]).optional(),
+    /** Refused rather than ignored: the kind cannot change after creation. */
+    kind: z
+      .never({ error: "An endpoint's kind is fixed at creation" })
+      .optional(),
+  });
 
 /** Generating a signing key. */
 export const endpointKeyCreateSchema = z.object({
@@ -105,6 +125,7 @@ export const endpointKeyCreateSchema = z.object({
 });
 
 export type EndpointCreate = z.infer<typeof endpointCreateSchema>;
+export type EndpointKind = z.infer<typeof endpointKindSchema>;
 export type EndpointPatch = z.infer<typeof endpointPatchSchema>;
 export type EndpointCapabilities = z.infer<typeof endpointCapabilitiesSchema>;
 export type EndpointKeyCreate = z.infer<typeof endpointKeyCreateSchema>;

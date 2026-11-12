@@ -321,6 +321,88 @@ export function CheckboxField({
   );
 }
 
+interface RadioFieldProps {
+  readonly label: string;
+  /** Groups the radios, so the browser lets only one be chosen. */
+  readonly name: string;
+  /** The chosen option, or empty for none yet. */
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly options: readonly {
+    readonly value: string;
+    readonly label: string;
+    readonly description?: string;
+  }[];
+  readonly hint?: ReactNode;
+  readonly error?: string | undefined;
+  readonly required?: boolean;
+  readonly disabled?: boolean;
+}
+
+/**
+ * A choice from a short closed set, where each option needs explaining.
+ *
+ * Radios rather than a select when the options carry a sentence each and none of
+ * them is a safe default: a select always shows a value, so a choice that has to be
+ * made deliberately would look as if it had already been made. With `required` and
+ * nothing chosen, the browser refuses the form until one is picked.
+ *
+ * Each option's label wraps its radio, as `CheckboxField` does, so the whole row is
+ * the tap target.
+ */
+export function RadioField({
+  label,
+  name,
+  value,
+  onChange,
+  options,
+  hint,
+  error,
+  required,
+  disabled,
+}: Readonly<RadioFieldProps>) {
+  return (
+    <FieldFrame label={label} hint={hint} error={error}>
+      {(frame) => (
+        <div
+          role="radiogroup"
+          aria-labelledby={frame.labelledBy}
+          aria-describedby={frame.describedBy}
+          className="flex flex-col gap-2"
+        >
+          {options.map((option) => (
+            <label
+              key={option.value}
+              className="flex cursor-pointer items-start gap-3 text-sm max-sm:min-h-11 max-sm:text-base"
+            >
+              <input
+                type="radio"
+                className="radio radio-sm mt-1"
+                name={name}
+                value={option.value}
+                checked={value === option.value}
+                required={required}
+                disabled={disabled}
+                onChange={() => {
+                  onChange(option.value);
+                }}
+              />
+              <span className="min-w-0">
+                <span className="font-medium">{option.label}</span>
+                {option.description === undefined ? null : (
+                  <span className="text-base-content/60 block text-xs max-sm:text-base">
+                    {option.description}
+                  </span>
+                )}
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+    </FieldFrame>
+  );
+}
+
 interface ListFieldProps {
   readonly label: string;
   /** One entry per line, as the operator types them. */

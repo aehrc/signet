@@ -16,7 +16,7 @@ import type { ResourceScope, Scope } from "./types.js";
 
 /** Parses a scope, failing the test if it was rejected. */
 function parsed(raw: string): Scope {
-  const result = parseScope(raw);
+  const result = parseScope(raw, "smart");
   if (!result.ok) {
     throw new Error(
       `Expected "${raw}" to parse, got ${result.code}: ${result.message}`,
@@ -38,7 +38,7 @@ function resource(raw: string): ResourceScope {
 
 /** Returns the error code for a scope expected to be rejected. */
 function rejection(raw: string): string {
-  const result = parseScope(raw);
+  const result = parseScope(raw, "smart");
   if (result.ok) {
     throw new Error(`Expected "${raw}" to be rejected, but it parsed`);
   }
@@ -309,6 +309,7 @@ describe("parseScopes", () => {
   it("parses a space-delimited scope string in order", () => {
     const result = parseScopes(
       "launch/patient patient/Observation.rs openid fhirUser",
+      "smart",
     );
     expect(result.rejected).toEqual([]);
     expect(result.scopes.map(formatScope)).toEqual([
@@ -320,19 +321,23 @@ describe("parseScopes", () => {
   });
 
   it("tolerates arbitrary whitespace between scopes", () => {
-    const result = parseScopes("  openid \n  fhirUser \t patient/Patient.r  ");
+    const result = parseScopes(
+      "  openid \n  fhirUser \t patient/Patient.r  ",
+      "smart",
+    );
     expect(result.scopes).toHaveLength(3);
     expect(result.rejected).toEqual([]);
   });
 
   it("returns an empty result for an empty string", () => {
-    expect(parseScopes("")).toEqual({ scopes: [], rejected: [] });
-    expect(parseScopes("   ")).toEqual({ scopes: [], rejected: [] });
+    expect(parseScopes("", "smart")).toEqual({ scopes: [], rejected: [] });
+    expect(parseScopes("   ", "smart")).toEqual({ scopes: [], rejected: [] });
   });
 
   it("collects rejected scopes instead of throwing, so they can be audited", () => {
     const result = parseScopes(
       "patient/Observation.rs patient/Observation.dus admin/Patient.r",
+      "smart",
     );
     expect(result.scopes.map(formatScope)).toEqual(["patient/Observation.rs"]);
     expect(result.rejected).toEqual([

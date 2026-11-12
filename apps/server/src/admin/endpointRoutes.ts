@@ -29,7 +29,13 @@ import {
   endpointKeyCreateSchema,
   endpointPatchSchema,
 } from "@signet/contracts";
-import { SMART_BASELINE_PRESET } from "@signet/core";
+import {
+  OAUTH_BASELINE_PRESET,
+  OAUTH_DEFAULT_SCOPES_SUPPORTED,
+  SMART_BASELINE_PRESET,
+  SMART_ONLY_CAPABILITY_FLAGS,
+  smartOnlySettingsEnabled,
+} from "@signet/core";
 import {
   createEndpoint,
   createPolicyVersion,
@@ -52,6 +58,7 @@ import { adminErrorBody, statusForAdminError } from "./errors.js";
 import { ENDPOINT_PATH, TENANT_PATH } from "./paths.js";
 import { principalAdminUserId } from "./principal.js";
 import { parseBody } from "./requestBody.js";
+import { refuseSmartOnly } from "./smartOnly.js";
 import { endpointKeyView, endpointView } from "./views.js";
 import { generateEndpointKey } from "../keys/material.js";
 import { issuerFor } from "../oauth/issuer.js";
@@ -87,7 +94,7 @@ function capabilityColumns(
 const SETTING_FIELDS = [
   "name",
   "description",
-  "fhirBaseUrl",
+  "audience",
   "scopesSupported",
   "userAccessBrandBundle",
   "userAccessBrandIdentifier",
@@ -110,6 +117,30 @@ function settingColumns(
     ]),
   );
 }
+
+/**
+ * What an OAuth / OpenID Connect endpoint is created with before the request's own
+ * settings apply: every SMART-only flag off, rather than the SMART-flavoured column
+ * defaults, and the OpenID Connect scopes in `scopes_supported`.
+ */
+const OAUTH_ENDPOINT_DEFAULTS = {
+  ...Object.fromEntries(
+    SMART_ONLY_CAPABILITY_FLAGS.map((flag) => [flag, false]),
+  ),
+  scopesSupported: [...OAUTH_DEFAULT_SCOPES_SUPPORTED],
+};
+
+/** The policy each kind of endpoint starts with, and its history note. */
+const STARTING_POLICY = {
+  smart: {
+    document: SMART_BASELINE_PRESET,
+    note: "SMART baseline, created with the endpoint",
+  },
+  oauth: {
+    document: OAUTH_BASELINE_PRESET,
+    note: "OAuth / OpenID Connect baseline, created with the endpoint",
+  },
+} as const;
 
 /**
  * Registers the endpoint and signing key routes.
@@ -149,6 +180,13 @@ export function registerEndpointRoutes(
     if (body instanceof Response) {
       return body;
     }
+    const refusal = refuseSmartOnly(
+      c,
+      body.kind === "oauth" ? smartOnlySettingsEnabled(body) : [],
+    );
+    if (refusal !== undefined) {
+      return refusal;
+    }
 
     let endpoint;
     try {
@@ -156,7 +194,9 @@ export function registerEndpointRoutes(
         createEndpoint(bound, {
           slug: body.slug,
           name: body.name,
-          fhirBaseUrl: body.fhirBaseUrl,
+          kind: body.kind,
+          audience: body.audience,
+          ...(body.kind === "oauth" ? OAUTH_ENDPOINT_DEFAULTS : {}),
           ...settingColumns(body),
           ...capabilityColumns(body),
         }),
@@ -201,9 +241,8 @@ export function registerEndpointRoutes(
 
     const version = await withTenantScope(context.db, endpointScope, (bound) =>
       createPolicyVersion(bound, {
-        document: SMART_BASELINE_PRESET,
+        ...STARTING_POLICY[endpoint.kind],
         createdBy: principalAdminUserId(c.get("principal")),
-        note: "SMART baseline, created with the endpoint",
       }),
     );
     if (!version.ok) {
@@ -229,7 +268,8 @@ export function registerEndpointRoutes(
       target: { type: "endpoint", id: endpoint.id },
       detail: {
         slug: endpoint.slug,
-        fhirBaseUrl: endpoint.fhirBaseUrl,
+        kind: endpoint.kind,
+        audience: endpoint.audience,
         kid: key.kid,
       },
     });
@@ -249,12 +289,22 @@ export function registerEndpointRoutes(
    * Every capability flag is a conformance claim published in the discovery
    * document, so a change here changes what Signet promises. The audit event names
    * the fields that changed for exactly that reason.
+   *
+   * The kind is not editable: the contract refuses a body naming it, and the data
+   * layer has no way to write it.
    */
   router.patch(ENDPOINT_PATH, requireRole("admin"), async (c) => {
     const { scope, endpoint, issuer } = c.get("endpoint");
     const body = await parseBody(c, endpointPatchSchema);
     if (body instanceof Response) {
       return body;
+    }
+    const refusal = refuseSmartOnly(
+      c,
+      endpoint.kind === "oauth" ? smartOnlySettingsEnabled(body) : [],
+    );
+    if (refusal !== undefined) {
+      return refusal;
     }
 
     const patch = {

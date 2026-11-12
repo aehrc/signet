@@ -26,9 +26,9 @@
  * Author: John Grimes
  */
 
-import { policyDocumentSchema } from "@signet/contracts";
+import { policyDocumentSchemaFor } from "@signet/contracts";
 
-import type { PolicyDocument } from "@signet/core";
+import type { EndpointKind, PolicyDocument } from "@signet/core";
 
 /** A problem with the text, addressed by path where there is one. */
 export interface DocumentIssue {
@@ -65,9 +65,14 @@ export function formatPolicy(document: PolicyDocument): string {
  * person typing they are the same kind of problem - something about this text is
  * wrong, and here is where.
  *
+ * Validated for the endpoint's kind, as the server will validate it on save: an
+ * OAuth endpoint reads every scope as an opaque string and refuses launch context,
+ * so a document can be valid for one kind and not the other.
+ *
  * @param text - The editor's contents.
+ * @param kind - The endpoint's kind.
  */
-export function parsePolicy(text: string): DocumentParse {
+export function parsePolicy(text: string, kind: EndpointKind): DocumentParse {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -84,7 +89,7 @@ export function parsePolicy(text: string): DocumentParse {
     };
   }
 
-  const result = policyDocumentSchema.safeParse(parsed);
+  const result = policyDocumentSchemaFor(kind).safeParse(parsed);
   if (!result.success) {
     return {
       ok: false,

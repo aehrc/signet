@@ -11,6 +11,7 @@ export {
   assembleAccessTokenClaims,
   assembleIdTokenClaims,
   assembleTokenResponse,
+  identityClaims,
   type IdTokenInput,
 } from "./assemble.js";
 export { buildIntrospectionResponse } from "./introspect.js";

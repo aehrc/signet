@@ -158,7 +158,7 @@ describeWithDatabase("an endpoint with capabilities turned off", () => {
       endpoint: {
         slug: "fhir",
         name: "Restricted",
-        fhirBaseUrl: "https://fhir.test/R4",
+        audience: "https://fhir.test/R4",
         supportsOpenIdConnect: false,
         supportsStandaloneLaunch: false,
         allowsPublicClients: false,

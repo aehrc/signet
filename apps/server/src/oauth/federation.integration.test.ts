@@ -631,3 +631,105 @@ describe.skipIf(testDatabaseUrl === undefined)("the outbound guard", () => {
     expect(["insecure-scheme", "blocked-address"]).toContain(body.problem);
   });
 });
+
+describe.skipIf(testDatabaseUrl === undefined)(
+  "upstream federation on an OAuth / OpenID Connect endpoint",
+  () => {
+    let stack: TestStack;
+    let idp: UpstreamIdp;
+
+    beforeAll(async () => {
+      idp = await startUpstreamIdp();
+      stack = await createTestStack({
+        kind: "oauth",
+        endpoint: { authMode: "oidc", consentMode: "auto" },
+        allowPrivateOutboundFetches: true,
+      });
+      const cookie = await stack.signIn();
+      const response = await adminRequest(
+        stack,
+        "PUT",
+        `${endpointPath(stack)}/idp`,
+        {
+          credential: { cookie },
+          body: {
+            issuer: idp.issuer,
+            displayName: "Test Hospital SSO",
+            clientId: idp.clientId,
+            clientSecret: "upstream-secret",
+            scopes: ["openid", "profile", "email"],
+            claimMappings: { displayName: "name", email: "email" },
+          },
+        },
+      );
+      expect(response.status).toBe(200);
+    });
+
+    afterAll(async () => {
+      await stack.close();
+      await idp.close();
+    });
+
+    /** Signs in through the provider, which asserts the given claims. */
+    async function signInWith(
+      idTokenClaims: Readonly<Record<string, unknown>>,
+    ): Promise<Response> {
+      const session = await startAuthorization(stack, {
+        clientId: stack.publicClient.clientId,
+        scope: "openid email",
+        challenge: (await pkcePair()).challenge,
+        aud: null,
+      });
+      const started = await stack.app.request(
+        `${issuerPath(stack)}/federation/start?session=${session}`,
+      );
+      const location = started.headers.get("location") ?? "";
+      await fetch(location);
+      idp.configure({ idTokenClaims });
+      return await stack.app.request(
+        `${issuerPath(stack)}/federation/callback?${new URLSearchParams({
+          state: new URL(location).searchParams.get("state") ?? "",
+          code: "upstream-code",
+        }).toString()}`,
+      );
+    }
+
+    /** The account the stub provider's subject was provisioned as. */
+    async function federatedUser() {
+      const users = await withTenantScope(
+        stack.context.db,
+        stack.scope,
+        (bound) => listEndUsers(bound),
+      );
+      return users.find(
+        (user) => user.username === `${idp.issuer}#${UPSTREAM_SUBJECT}`,
+      );
+    }
+
+    it("carries a verified email across from the provider", async () => {
+      const response = await signInWith({
+        name: "Dr Upstream",
+        email: "upstream@hospital.test",
+        email_verified: true,
+      });
+      expect(response.status).toBe(302);
+
+      const user = await federatedUser();
+      expect(user?.email).toBe("upstream@hospital.test");
+      expect(user?.emailVerified).toBe(true);
+      expect(user?.fhirUserReference).toBeNull();
+    });
+
+    it("does not repeat a verification the provider did not assert as a boolean", async () => {
+      await signInWith({
+        name: "Dr Upstream",
+        email: "upstream@hospital.test",
+        email_verified: "true",
+      });
+
+      const user = await federatedUser();
+      expect(user?.email).toBe("upstream@hospital.test");
+      expect(user?.emailVerified).toBe(false);
+    });
+  },
+);

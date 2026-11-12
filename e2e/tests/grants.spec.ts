@@ -19,11 +19,12 @@
  * the page would be leaking its credential. That split is the point of the client
  * type, so the test is written the way the deployment is.
  *
- * **The sign-in budget.** End-user sign-ins are rate limited to ten a minute per
- * address, and the whole suite runs from one address inside a single window. This
- * file spends three of them, `launch.spec.ts` spends four, `console.spec.ts` spends
- * one and `trust.spec.ts` spends one, so a run has one to spare for retries.
- * Anything added here that signs in interactively has to come out of that, which is
+ * **The sign-in budget.** End-user sign-ins are rate limited per address, and the
+ * whole suite runs from one address inside a single window. The compose stack sets
+ * the limit to thirty a minute with `SIGNET_SIGN_IN_RATE_LIMIT`. This file spends
+ * three of them, `launch.spec.ts` spends four, and `console.spec.ts`,
+ * `trust.spec.ts`, `responsive.spec.ts` and `oauth.spec.ts` spend one each: eleven
+ * a run. Anything added here that signs in interactively adds to that, which is
  * why the negative cases below are driven through the request context wherever the
  * browser is not what is being tested.
  *

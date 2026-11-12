@@ -14,6 +14,8 @@
  * Author: John Grimes
  */
 
+import { RATE_LIMITS } from "./http/rateLimit.js";
+
 /** A resolved, validated Signet configuration. */
 export interface SignetConfig {
   readonly port: number;
@@ -55,6 +57,16 @@ export interface SignetConfig {
    * says nothing gets the socket address, not whatever the caller wrote.
    */
   readonly trustedProxyCount: number;
+  /**
+   * How many sign-in attempts one address may make on one sign-in surface per
+   * minute: the end-user login, the management page sign-in and the console
+   * sign-in, each counted separately.
+   *
+   * Raising it widens online password guessing by the same factor, so it exists
+   * for a test stack that signs in more often than a person would, not as a
+   * tuning knob. At least one: zero would refuse every sign-in.
+   */
+  readonly signInRateLimit: number;
 }
 
 /** Thrown when the environment cannot produce a usable configuration. */
@@ -445,32 +457,43 @@ export function loadConfig(env: Environment): SignetConfig {
       env,
       "SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES",
     ),
-    trustedProxyCount: readNonNegativeInteger(
+    trustedProxyCount: readInteger(env, "SIGNET_TRUSTED_PROXY_COUNT", 0, 0),
+    signInRateLimit: readInteger(
       env,
-      "SIGNET_TRUSTED_PROXY_COUNT",
+      "SIGNET_SIGN_IN_RATE_LIMIT",
+      RATE_LIMITS.signIn.limit,
+      1,
     ),
   };
 }
 
 /**
- * Reads a non-negative integer, refusing anything else rather than defaulting.
+ * Reads a whole number no smaller than a minimum, refusing anything else rather
+ * than defaulting.
  *
  * @param env - The environment to read.
  * @param name - The variable's name, for the error message.
- * @returns The value, or zero when the variable is absent.
- * @throws {ConfigError} When the variable is present but not a non-negative
- *   integer. A typo that silently read as zero would leave the limiter keying on
- *   the socket address of a proxy that forwards client-chosen addresses, which is
- *   the failure mode to avoid.
+ * @param fallback - The value when the variable is absent.
+ * @param minimum - The smallest value accepted.
+ * @returns The value, or the fallback when the variable is absent.
+ * @throws {ConfigError} When the variable is present but not an integer of at
+ *   least the minimum. A typo that silently read as the default would leave, say,
+ *   the limiter keying on the socket address of a proxy that forwards
+ *   client-chosen addresses, which is the failure mode to avoid.
  */
-function readNonNegativeInteger(env: Environment, name: string): number {
+function readInteger(
+  env: Environment,
+  name: string,
+  fallback: number,
+  minimum: number,
+): number {
   const value = read(env, name);
   if (value === undefined) {
-    return 0;
+    return fallback;
   }
-  if (!/^\d+$/.test(value)) {
+  if (!/^\d+$/.test(value) || Number(value) < minimum) {
     throw new ConfigError(
-      `${name} must be a non-negative integer, got "${value}"`,
+      `${name} must be an integer of at least ${String(minimum)}, got "${value}"`,
     );
   }
   return Number(value);

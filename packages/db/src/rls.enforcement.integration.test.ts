@@ -237,7 +237,8 @@ describeWithDatabase("row-level security as the serving role", () => {
       createEndpoint(bound, {
         slug: `e-${unique()}`,
         name: "Endpoint",
-        fhirBaseUrl: "https://fhir.example.org/fhir",
+        kind: "smart",
+        audience: "https://fhir.example.org/fhir",
       }),
     );
     const endpointScope = endpointScopeFromRow(tenantScope, endpoint);

@@ -33,7 +33,7 @@ const document: PolicyDocument = {
 
 describe("formatPolicy and parsePolicy", () => {
   it("round-trips a document unchanged", () => {
-    const parsed = parsePolicy(formatPolicy(document));
+    const parsed = parsePolicy(formatPolicy(document), "smart");
     expect(parsed).toEqual({ ok: true, document });
   });
 
@@ -42,7 +42,7 @@ describe("formatPolicy and parsePolicy", () => {
   });
 
   it("reports a syntax error against the document as a whole", () => {
-    const parsed = parsePolicy("{ not json");
+    const parsed = parsePolicy("{ not json", "smart");
     expect(parsed.ok).toBe(false);
     const issues = parsed.ok ? [] : parsed.issues;
     expect(issues[0]?.path).toBe("");
@@ -54,7 +54,7 @@ describe("formatPolicy and parsePolicy", () => {
       ...document,
       claimRules: [{ when: { always: true }, emit: { a: "{{ user.fhirUser" } }],
     };
-    const parsed = parsePolicy(JSON.stringify(broken));
+    const parsed = parsePolicy(JSON.stringify(broken), "smart");
 
     expect(parsed.ok).toBe(false);
     const issues = parsed.ok ? [] : parsed.issues;
@@ -62,9 +62,9 @@ describe("formatPolicy and parsePolicy", () => {
   });
 
   it("refuses a document that is valid JSON but not a policy", () => {
-    expect(parsePolicy('{"hello":"world"}').ok).toBe(false);
-    expect(parsePolicy("[]").ok).toBe(false);
-    expect(parsePolicy('"a string"').ok).toBe(false);
+    expect(parsePolicy('{"hello":"world"}', "smart").ok).toBe(false);
+    expect(parsePolicy("[]", "smart").ok).toBe(false);
+    expect(parsePolicy('"a string"', "smart").ok).toBe(false);
   });
 
   it("refuses an unknown scope pattern, as the server would", () => {
@@ -75,6 +75,37 @@ describe("formatPolicy and parsePolicy", () => {
         ...document,
         scopeGrants: [{ match: "nonsense", allow: true }],
       }),
+      "smart",
+    );
+    expect(parsed.ok).toBe(false);
+  });
+
+  it("accepts an opaque API scope on an OAuth endpoint", () => {
+    // The same string the SMART grammar refuses is a valid custom scope there.
+    const parsed = parsePolicy(
+      JSON.stringify({
+        ...document,
+        scopeGrants: [{ match: "nonsense", allow: true }],
+        claimRules: [],
+        contextRules: [],
+      }),
+      "oauth",
+    );
+    expect(parsed.ok).toBe(true);
+  });
+
+  it("refuses a launch context requirement on an OAuth endpoint", () => {
+    // There is no launch context to require, so the server would refuse it.
+    const parsed = parsePolicy(
+      JSON.stringify({
+        ...document,
+        scopeGrants: [
+          { match: "orders:read", allow: true, requireContext: ["patient"] },
+        ],
+        claimRules: [],
+        contextRules: [],
+      }),
+      "oauth",
     );
     expect(parsed.ok).toBe(false);
   });

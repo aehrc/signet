@@ -145,7 +145,7 @@ describeWithDatabase("permission ticket exchange", () => {
 
     stack = await createTestStack({
       allowPrivateOutboundFetches: true,
-      endpoint: { fhirBaseUrl: `${fhir.origin}/fhir` },
+      endpoint: { audience: `${fhir.origin}/fhir` },
     });
     // A whole second, so that a lifetime asserted exactly is exactly what a
     // ticket minted at this instant leaves. The grant floors the remaining
@@ -317,7 +317,7 @@ describeWithDatabase("permission ticket exchange", () => {
 
       const claims = decodePayload(exchanged.body.access_token ?? "");
       expect(claims["scope"]).toBe("patient/Patient.rs");
-      expect(claims["aud"]).toBe(stack.endpoint.fhirBaseUrl);
+      expect(claims["aud"]).toBe(stack.endpoint.audience);
       expect(claims["iss"]).toBe(stack.issuer);
       expect(claims["client_id"]).toBe(stack.symmetricClient.clientId);
     });
@@ -358,7 +358,7 @@ describeWithDatabase("permission ticket exchange", () => {
       const presented = (search?.authorization ?? "").replace(/^Bearer /u, "");
       const claims = decodePayload(presented);
       expect(claims["iss"]).toBe(stack.issuer);
-      expect(claims["aud"]).toBe(stack.endpoint.fhirBaseUrl);
+      expect(claims["aud"]).toBe(stack.endpoint.audience);
       expect(String(claims["scope"])).toContain("system/Patient.rs");
       // Short-lived: it exists for one search.
       expect(Number(claims["exp"]) - Number(claims["iat"])).toBeLessThanOrEqual(
@@ -479,7 +479,7 @@ describeWithDatabase("permission ticket exchange", () => {
     it("refuses rather than exchanging when the issuer's keys cannot be fetched", async () => {
       const cold = await createTestStack({
         allowPrivateOutboundFetches: true,
-        endpoint: { fhirBaseUrl: `${fhir.origin}/fhir` },
+        endpoint: { audience: `${fhir.origin}/fhir` },
       });
       try {
         await withTenantScope(cold.context.db, cold.scope, (bound) =>
@@ -692,7 +692,7 @@ describeWithDatabase("permission ticket exchange", () => {
 
       const unreachable = await createTestStack({
         allowPrivateOutboundFetches: true,
-        endpoint: { fhirBaseUrl: `${origin}/fhir` },
+        endpoint: { audience: `${origin}/fhir` },
       });
       try {
         await withTenantScope(

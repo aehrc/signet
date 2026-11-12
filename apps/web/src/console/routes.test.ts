@@ -14,6 +14,7 @@ import {
   clientRoute,
   ENDPOINT_TABS,
   endpointRoute,
+  endpointTabs,
   endUserRoute,
   tenantRoute,
 } from "./routes.js";
@@ -102,5 +103,38 @@ describe("ENDPOINT_TABS", () => {
     for (const tab of ENDPOINT_TABS) {
       expect(tab.icon).toBeDefined();
     }
+  });
+});
+
+describe("endpointTabs", () => {
+  it("offers every tab on a SMART endpoint", () => {
+    expect(endpointTabs("smart")).toEqual(ENDPOINT_TABS);
+  });
+
+  it("drops the launch simulator on an OAuth endpoint", () => {
+    // There is no EHR launch on an OAuth endpoint, so the simulator could only
+    // ever mint a handle the endpoint refuses.
+    expect(endpointTabs("oauth").map((tab) => tab.path)).not.toContain(
+      "/launch",
+    );
+  });
+
+  it("does not mention tickets on an OAuth endpoint", () => {
+    // Permission ticket exchange is SMART-only; registration trust remains.
+    const trust = endpointTabs("oauth").find((tab) => tab.path === "/trust");
+    expect(trust?.label).toBe("Trust");
+  });
+
+  it("keeps the other tabs, in order, on an OAuth endpoint", () => {
+    expect(endpointTabs("oauth").map((tab) => tab.path)).toEqual([
+      "",
+      "/clients",
+      "/policy",
+      "/users",
+      "/keys",
+      "/identity",
+      "/trust",
+      "/requests",
+    ]);
   });
 });

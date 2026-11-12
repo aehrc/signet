@@ -10,7 +10,8 @@
  * registration and permission ticket exchange on every endpoint, and this screen
  * is the only thing that changes either - so each refusing state is stated in
  * words rather than being the absence of a filled-in form, and each enabled state
- * says exactly what it enabled.
+ * says exactly what it enabled. An OAuth endpoint has only the first: ticket
+ * exchange is SMART-only, and the API refuses its configuration there.
  *
  * There is no separate switch on either rule. The rule *is* the capability:
  * saving one turns it on and removing it turns it off. A toggle beside the fields
@@ -139,12 +140,15 @@ function ticketRequestBody(form: TicketIssuerForm): Record<string, unknown> {
 
 /** The endpoint's trust and ticket settings. */
 export function TrustPage() {
-  const { tenant, endpointSlug, role } = useEndpointContext();
+  const { tenant, endpointSlug, endpoint, role } = useEndpointContext();
+  const isSmart = endpoint.kind === "smart";
   const anchor = useTrustAnchor(tenant, endpointSlug);
-  const ticketIssuer = useTicketIssuer(tenant, endpointSlug);
+  const ticketIssuer = useTicketIssuer(tenant, endpointSlug, isSmart);
   const mayEdit = roleAllows(role, "admin");
 
-  if (anchor.isPending || ticketIssuer.isPending) {
+  // `isLoading` rather than `isPending` for the tickets: a query that is not
+  // enabled stays pending for ever, and on an OAuth endpoint it never is.
+  if (anchor.isPending || ticketIssuer.isLoading) {
     return <Loading label="Loading the endpoint's trust rules" />;
   }
 
@@ -154,8 +158,12 @@ export function TrustPage() {
   return (
     <div>
       <PageHeader
-        title="Trust and tickets"
-        description="Who may vouch for a client registering itself on this endpoint, and whose permission tickets it will exchange for tokens."
+        title={isSmart ? "Trust and tickets" : "Trust"}
+        description={
+          isSmart
+            ? "Who may vouch for a client registering itself on this endpoint, and whose permission tickets it will exchange for tokens."
+            : "Who may vouch for a client registering itself on this endpoint."
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={current === null ? "neutral" : "success"}>
@@ -163,9 +171,11 @@ export function TrustPage() {
                 ? "registration refused"
                 : "registration enabled"}
             </StatusBadge>
-            <StatusBadge tone={ticketRule === null ? "neutral" : "success"}>
-              {ticketRule === null ? "exchange refused" : "exchange enabled"}
-            </StatusBadge>
+            {isSmart ? (
+              <StatusBadge tone={ticketRule === null ? "neutral" : "success"}>
+                {ticketRule === null ? "exchange refused" : "exchange enabled"}
+              </StatusBadge>
+            ) : null}
           </div>
         }
       />
@@ -178,7 +188,9 @@ export function TrustPage() {
       )}
 
       <AnchorSection current={current} mayEdit={mayEdit} />
-      <TicketIssuerSection current={ticketRule} mayEdit={mayEdit} />
+      {isSmart ? (
+        <TicketIssuerSection current={ticketRule} mayEdit={mayEdit} />
+      ) : null}
     </div>
   );
 }

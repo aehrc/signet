@@ -57,6 +57,7 @@ import { requireRole } from "./authentication.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
 import { ENDPOINT_PATH } from "./paths.js";
 import { parseBody } from "./requestBody.js";
+import { refuseSmartOnly, smartOnlyUserFields } from "./smartOnly.js";
 import { endUserView, invitationView } from "./views.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
@@ -143,6 +144,13 @@ export function registerEndUserRoutes(
     if (body instanceof Response) {
       return body;
     }
+    const refusal = refuseSmartOnly(
+      c,
+      smartOnlyUserFields(endpoint.kind, body),
+    );
+    if (refusal !== undefined) {
+      return refusal;
+    }
 
     let user;
     try {
@@ -157,6 +165,10 @@ export function registerEndUserRoutes(
           ...(body.fhirUserReference === undefined
             ? {}
             : { fhirUserReference: body.fhirUserReference }),
+          ...(body.email === undefined ? {} : { email: body.email }),
+          ...(body.emailVerified === undefined
+            ? {}
+            : { emailVerified: body.emailVerified }),
           ...(body.roles === undefined ? {} : { roles: body.roles }),
           ...(body.attributes === undefined
             ? {}
@@ -213,6 +225,13 @@ export function registerEndUserRoutes(
       const body = await parseBody(c, endUserPatchSchema);
       if (body instanceof Response) {
         return body;
+      }
+      const refusal = refuseSmartOnly(
+        c,
+        smartOnlyUserFields(c.get("endpoint").endpoint.kind, body),
+      );
+      if (refusal !== undefined) {
+        return refusal;
       }
 
       const { disabled, defaultContext, ...fields } = body;

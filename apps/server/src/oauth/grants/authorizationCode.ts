@@ -201,7 +201,10 @@ export async function authorizationCodeGrant(
     /* jscpd:ignore-end */
     grantType: "authorization_code",
     // From the session, never from the request body. See the module header.
-    requested: parseScopes(session.requestedScopes.join(" ")).scopes,
+    requested: parseScopes(
+      session.requestedScopes.join(" "),
+      issuerContext.endpoint.kind,
+    ).scopes,
     launchContext: session.resolvedContext ?? {},
     subject: user.id,
     vouchingExpiresAt: client.vouchingExpiresAt,

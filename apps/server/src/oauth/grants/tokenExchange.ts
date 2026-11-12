@@ -120,9 +120,16 @@ export async function tokenExchangeGrant(
   const { issuerContext, authenticated, body } = request;
   const { scope, client } = authenticated;
 
-  const rule = await withTenantScope(context.db, issuerContext.scope, (bound) =>
-    getEndpointTicketIssuer(bound),
-  );
+  // A permission ticket names a patient on a FHIR server, which an OAuth / OpenID
+  // Connect endpoint does not front - so the grant does not exist there, whatever
+  // rows the endpoint has. Checked before the rule is read, so the answer cannot
+  // depend on one.
+  const rule =
+    issuerContext.endpoint.kind === "smart"
+      ? await withTenantScope(context.db, issuerContext.scope, (bound) =>
+          getEndpointTicketIssuer(bound),
+        )
+      : undefined;
   if (rule === undefined) {
     // Indistinguishable from a grant type this server does not implement, which
     // is what an endpoint with no rule must look like. Not audited as an
@@ -232,9 +239,10 @@ export async function tokenExchangeGrant(
   }
 
   const overlap = intersectTicketScopes({
-    requested: parseScopes(formField(body, "scope") ?? "").scopes,
+    requested: parseScopes(formField(body, "scope") ?? "", "smart").scopes,
     ticketScopes: ticket.scopes,
-    clientAllowlist: parseScopes(client.allowedScopes.join(" ")).scopes,
+    clientAllowlist: parseScopes(client.allowedScopes.join(" "), "smart")
+      .scopes,
   });
   if (!overlap.ok) {
     return await refuse("invalid_scope", overlap.description, identity);

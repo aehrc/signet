@@ -56,6 +56,14 @@ export interface InteractionView {
     readonly logoUrl: string | null;
   };
   readonly requestedScopes: readonly string[];
+  /** What the endpoint secures, which decides how the pages phrase a scope. */
+  readonly endpointKind: "smart" | "oauth";
+  /**
+   * The description of the policy rule that would grant each scope, keyed by the
+   * scope string, for scopes whose granting rule has one. The consent page shows
+   * it for an opaque API scope, and falls back to the scope string itself.
+   */
+  readonly scopeDescriptions: Readonly<Record<string, string>>;
   readonly authMode: string;
   readonly allowsPersonas: boolean;
   readonly personas: readonly InteractionPersona[];

@@ -155,6 +155,7 @@ export function InvitationPanel({
           invitation={issued}
           username={user.username}
           endpointName={endpoint.name}
+          recipient={user.email}
           onClose={() => {
             setIssued(undefined);
           }}

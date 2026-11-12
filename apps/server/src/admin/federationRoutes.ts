@@ -43,6 +43,7 @@ import { requireRole } from "./authentication.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
 import { ENDPOINT_PATH } from "./paths.js";
 import { parseBody } from "./requestBody.js";
+import { refuseSmartOnly, smartOnlyClaimMappings } from "./smartOnly.js";
 import { federationCallbackUrl } from "../oauth/federation.js";
 import { fetchGuardedJson } from "../security/outboundFetch.js";
 
@@ -109,6 +110,13 @@ export function registerFederationRoutes(
     const body = await parseBody(c, idpConfigWriteSchema);
     if (body instanceof Response) {
       return body;
+    }
+    const refusal = refuseSmartOnly(
+      c,
+      smartOnlyClaimMappings(endpoint.kind, body.claimMappings),
+    );
+    if (refusal !== undefined) {
+      return refusal;
     }
 
     const existing = await withTenantScope(context.db, scope, (bound) =>
@@ -262,6 +270,7 @@ function claimMappings(
   mappings:
     | {
         readonly fhirUser?: string | undefined;
+        readonly email?: string | undefined;
         readonly roles?: string | undefined;
         readonly displayName?: string | undefined;
         readonly attributes?: readonly string[] | undefined;
@@ -277,6 +286,7 @@ function claimMappings(
     ...(mappings.displayName === undefined
       ? {}
       : { displayName: mappings.displayName }),
+    ...(mappings.email === undefined ? {} : { email: mappings.email }),
     ...(mappings.attributes === undefined
       ? {}
       : { attributes: mappings.attributes }),

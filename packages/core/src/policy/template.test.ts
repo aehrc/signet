@@ -37,7 +37,7 @@ const SCOPE: TemplateScope = {
     tenantSlug: "demo",
     slug: "pathling",
     issuer: "https://signet.example.org/t/demo/e/pathling",
-    fhirBaseUrl: "https://fhir.example.org/fhir",
+    audience: "https://fhir.example.org/fhir",
   },
   granted: ["patient/Observation.rs", "openid"],
   scope: {

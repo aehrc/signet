@@ -38,6 +38,11 @@ export interface ClaimMappings {
   /** Claim yielding roles, as an array or a space-delimited string. */
   readonly roles?: string;
   readonly displayName?: string;
+  /**
+   * Claim yielding an email address. The upstream `email_verified` claim is
+   * carried across beside it.
+   */
+  readonly email?: string;
   /** Further claims copied verbatim into the user's attributes. */
   readonly attributes?: readonly string[];
 }
@@ -47,6 +52,14 @@ export interface MappedIdentity {
   /** Absent when the mapping named no claim, or the provider sent none. */
   readonly fhirUser?: string;
   readonly displayName?: string;
+  /** Absent when the mapping named no email claim, or the provider sent none. */
+  readonly email?: string;
+  /**
+   * Present exactly when `email` is: true only when the provider sent
+   * `email_verified: true`, the boolean. Anything else - absent, false, or the
+   * string `"true"` - is an assertion Signet will not repeat to a relying party.
+   */
+  readonly emailVerified?: boolean;
   readonly roles: readonly string[];
   readonly attributes: Readonly<Record<string, unknown>>;
 }
@@ -129,10 +142,14 @@ export function mapUpstreamClaims(
 
   const fhirUser = stringClaim(claims, mappings.fhirUser);
   const displayName = stringClaim(claims, mappings.displayName);
+  const email = stringClaim(claims, mappings.email);
 
   return {
     ...(fhirUser === undefined ? {} : { fhirUser }),
     ...(displayName === undefined ? {} : { displayName }),
+    ...(email === undefined
+      ? {}
+      : { email, emailVerified: claims["email_verified"] === true }),
     roles: readRoles(claims, mappings.roles),
     attributes,
   };

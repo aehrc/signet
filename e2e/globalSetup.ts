@@ -32,7 +32,12 @@ import { SEED } from "./support/stack.js";
 
 const run = promisify(execFile);
 
-const { signet: SIGNET, fhir: FHIR, app: APP } = resolveStackUrls(process.env);
+const {
+  signet: SIGNET,
+  fhir: FHIR,
+  app: APP,
+  proxy: PROXY,
+} = resolveStackUrls(process.env);
 
 /** How long to wait for Pathling, which is the slow one by a wide margin. */
 const READY_TIMEOUT_MS = 300_000;
@@ -64,11 +69,12 @@ export default async function globalSetup(): Promise<void> {
   await waitFor("Signet", `${SIGNET}/healthz`);
   await waitFor("the stub SMART app", `${APP}/`);
   await waitFor("Pathling", `${FHIR}/metadata`);
+  await waitFor("oauth2-proxy", `${PROXY}/ping`);
 
   // The stack's own credentials, set last so a developer's `SIGNET_BOOTSTRAP_*`
   // cannot reach the seed. See `support/stack.ts` for why that matters.
   //
-  // The three URLs are passed explicitly rather than left to the script's own
+  // The URLs are passed explicitly rather than left to the script's own
   // defaults, so that what the seed *stores* is what this suite will *ask for*
   // even if the two ever disagree about how to read the environment.
   const { stdout } = await run("bun", ["scripts/seedStack.mjs"], {
@@ -78,6 +84,7 @@ export default async function globalSetup(): Promise<void> {
       SIGNET_BASE_URL: SIGNET,
       SIGNET_SEED_FHIR_BASE: FHIR,
       SIGNET_SEED_APP_ORIGIN: APP,
+      SIGNET_SEED_PROXY_ORIGIN: PROXY,
       SIGNET_BOOTSTRAP_EMAIL: SEED.adminEmail,
       SIGNET_BOOTSTRAP_PASSWORD: SEED.adminPassword,
     },

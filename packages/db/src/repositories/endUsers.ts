@@ -251,6 +251,10 @@ export interface FederatedIdentity {
   readonly username: string;
   readonly displayName: string;
   readonly fhirUserReference: string | null;
+  /** Null when no email claim is mapped, or the provider sent none. */
+  readonly email: string | null;
+  /** True only when the provider asserted `email_verified: true`. */
+  readonly emailVerified: boolean;
   readonly roles: readonly string[];
   readonly attributes: Readonly<Record<string, unknown>>;
 }
@@ -285,6 +289,8 @@ export async function upsertFederatedEndUser(
   const values = {
     displayName: identity.displayName,
     fhirUserReference: identity.fhirUserReference,
+    email: identity.email,
+    emailVerified: identity.emailVerified,
     roles: [...identity.roles],
     attributes: identity.attributes as Record<string, unknown>,
   };

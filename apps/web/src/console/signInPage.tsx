@@ -62,7 +62,7 @@ export function SignInPage() {
   return (
     <CentredShell
       title="Sign in"
-      subtitle="Signet is the authorization server in front of your FHIR server. Sign in to manage its endpoints."
+      subtitle="Signet is the authorization server for your FHIR servers, apps and APIs. Sign in to manage its endpoints."
     >
       <form
         className="flex flex-col gap-3"

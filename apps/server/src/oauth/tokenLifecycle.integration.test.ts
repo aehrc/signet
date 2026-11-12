@@ -321,7 +321,7 @@ describeWithDatabase("introspection, revocation and UserInfo", () => {
       client_id: stack.symmetricClient.clientId,
       sub: stack.user.id,
       iss: stack.issuer,
-      aud: stack.endpoint.fhirBaseUrl,
+      aud: stack.endpoint.audience,
       token_type: "Bearer",
     });
     expect(body["patient"]).toBe("pat-1");

@@ -4,12 +4,19 @@
 [![Licence: Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-blue.svg)](LICENSE)
 
 A multi-tenant [SMART App Launch 2.2.0](https://hl7.org/fhir/smart-app-launch/)
-authorization server.
+and OpenID Connect authorization server.
 
-Bring your own FHIR server. Create an _endpoint_ in Signet pointed at it, define
-how SMART scopes map to access-token claims, and point your FHIR server's
-authorization issuer at Signet. Your server keeps serving FHIR; Signet does
-SMART App Launch and SMART Backend Services in front of it.
+Signet secures FHIR servers and regular web apps and APIs. Each _endpoint_ in
+Signet is one of two kinds, chosen when it is created:
+
+- **SMART on FHIR.** Bring your own FHIR server, point its authorization issuer
+  at the endpoint, and define how SMART scopes map to access-token claims. Your
+  server keeps serving FHIR; Signet does SMART App Launch and SMART Backend
+  Services in front of it.
+- **OAuth / OpenID Connect.** Sign people in to a web app with OpenID Connect,
+  and issue access tokens for an API with its own scopes. Any relying party or
+  API that validates a JWT against a JWKS works with it. See
+  [docs/oauth-endpoints.md](docs/oauth-endpoints.md).
 
 Stand up an endpoint in a minute, seed personas, invite users by email, let app
 developers request a client registration, and simulate an EHR launch without an
@@ -45,9 +52,9 @@ developer collects the credentials.
 | `packages/db`        | Drizzle schema, migrations, tenant-scoped repositories.                        |
 | `apps/server`        | Hono: OAuth endpoints and admin API.                                           |
 | `apps/web`           | React console, end-user auth pages, developer portal.                          |
-| `e2e`                | Playwright suite driving a real SMART launch against a real FHIR server.       |
+| `e2e`                | Playwright suite driving real browser flows against a FHIR server and a proxy. |
 | `deploy`             | Helm chart, and the docker-compose stack the end-to-end suite runs against.    |
-| `docs`               | What each resource server wants in a token, and how to run Signet.             |
+| `docs`               | Resource servers, OAuth / OpenID Connect endpoints, and how to run Signet.     |
 
 ## Getting started
 
@@ -68,12 +75,12 @@ integration suites skip themselves when `SIGNET_TEST_DATABASE_URL` is unset, so 
 database.
 
 The end-to-end stack builds the container image and runs it alongside Postgres,
-a FHIR server and a stub SMART app:
+a FHIR server, a stub SMART app, and oauth2-proxy in front of a static web app:
 
 ```sh
 bun run stack:up      # build and start; waits for health
 bun run stack:seed    # endpoint, policy, clients and accounts
-bun run test:e2e      # drive a launch through a browser
+bun run test:e2e      # drive the launches and sign-ins through a browser
 bun run stack:down
 ```
 

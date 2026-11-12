@@ -42,6 +42,7 @@ import { admitRequest, isWindowStale } from "@signet/core";
 
 import { requestAddress } from "./requestMeta.js";
 
+import type { SignetConfig } from "../config.js";
 import type { WindowLimit, WindowState } from "@signet/core";
 import type { Context, MiddlewareHandler } from "hono";
 
@@ -69,6 +70,9 @@ export const RATE_LIMITS = {
    * Ten a minute. A person who has mistyped their password ten times in a minute
    * is not going to get it right on the eleventh, and an attacker gets ten
    * guesses a minute per address against an Argon2id hash.
+   *
+   * The default only: `SIGNET_SIGN_IN_RATE_LIMIT` replaces the count, never the
+   * window.
    */
   signIn: { limit: 10, windowMs: 60_000 },
   /**
@@ -102,6 +106,14 @@ export const RATE_LIMITS = {
 
 /** Which limit a route is under. */
 export type RateLimitName = keyof typeof RATE_LIMITS;
+
+/** What the limiter reads from the server context. */
+export interface RateLimitContext {
+  /** Reads the current time. Injected so tests need no real one. */
+  readonly clock: () => Date;
+  readonly rateLimits: RateLimitStore;
+  readonly config: Pick<SignetConfig, "trustedProxyCount" | "signInRateLimit">;
+}
 
 /** The counters for one process. */
 export interface RateLimitStore {
@@ -216,19 +228,25 @@ const REFUSAL = {
  * meaning, and a client library that understands it will wait rather than treat
  * the refusal as a permanent failure of the credential it just sent.
  *
+ * The sign-in limit is the one an operator may change, through
+ * `SIGNET_SIGN_IN_RATE_LIMIT`; every other limit, and every window, is fixed.
+ *
  * @param name - Which limit to apply.
- * @param clock - Reads the current time. Injected so tests need no real one.
- * @param store - The counters to use. One per application; see `ServerContext`.
- * @param trustedProxyCount - How many proxies append to `X-Forwarded-For`, which
- *   is what the limiter keys addresses by. See `./requestMeta.js`.
+ * @param context - The clock, the counters - one store per application, see
+ *   `ServerContext` - and the configuration: how many proxies append to
+ *   `X-Forwarded-For`, which is what addresses are keyed by (see
+ *   `./requestMeta.js`), and the configured sign-in limit.
  */
 export function rateLimit(
   name: RateLimitName,
-  clock: () => Date,
-  store: RateLimitStore,
-  trustedProxyCount: number,
+  context: RateLimitContext,
 ): MiddlewareHandler {
-  const limit = RATE_LIMITS[name];
+  const { clock, rateLimits: store } = context;
+  const { trustedProxyCount, signInRateLimit } = context.config;
+  const limit: WindowLimit =
+    name === "signIn"
+      ? { ...RATE_LIMITS.signIn, limit: signInRateLimit }
+      : RATE_LIMITS[name];
   return async (c, next) => {
     const now = clock().getTime();
     const decision = store.check(

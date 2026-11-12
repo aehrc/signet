@@ -340,6 +340,8 @@ export function manageAuthorizationsHandler(context: ServerContext) {
 
     c.header("Cache-Control", "no-store");
     return c.json({
+      // What the endpoint secures, which decides how the page phrases a scope.
+      endpointKind: issuerContext.endpoint.kind,
       user: {
         displayName: user.displayName,
         username: user.username,

@@ -25,7 +25,12 @@
 import { readFileSync, readdirSync } from "node:fs";
 
 /** The variables that move the stack, and that only the shell can carry. */
-const PORT_VARIABLES = ["SIGNET_PORT", "PATHLING_PORT", "APP_PORT"];
+const PORT_VARIABLES = [
+  "SIGNET_PORT",
+  "PATHLING_PORT",
+  "APP_PORT",
+  "PROXY_PORT",
+];
 
 /**
  * Refuses to seed when a port variable was declared in a `.env` file.
@@ -102,8 +107,8 @@ function setting(name) {
 
 // The ports the compose stack publishes on. Duplicated from `e2e/src/stackUrls.ts`
 // rather than imported: this script runs as bare `node` inside the runtime image,
-// which ships no `node_modules`, so it can import nothing. The three
-// `SIGNET_SEED_*` and `SIGNET_BASE_URL` variables below win where they are set,
+// which ships no `node_modules`, so it can import nothing. The `SIGNET_SEED_*`
+// and `SIGNET_BASE_URL` variables below win where they are set,
 // and compose sets all of them - so the ports matter only when a developer runs
 // `bun run stack:seed` from the host.
 //
@@ -112,6 +117,7 @@ function setting(name) {
 const SIGNET_PORT = setting("SIGNET_PORT") ?? "3000";
 const PATHLING_PORT = setting("PATHLING_PORT") ?? "8080";
 const APP_PORT = setting("APP_PORT") ?? "4000";
+const PROXY_PORT = setting("PROXY_PORT") ?? "4180";
 
 const BASE = setting("SIGNET_BASE_URL") ?? `http://localhost:${SIGNET_PORT}`;
 const TENANT = setting("SIGNET_SEED_TENANT") ?? "demo";
@@ -126,6 +132,10 @@ const FHIR_BASE =
 /** Where the stub SMART app is served. */
 const APP_ORIGIN =
   setting("SIGNET_SEED_APP_ORIGIN") ?? `http://localhost:${APP_PORT}`;
+
+/** Where oauth2-proxy serves the regular app, as the browser reaches it. */
+const PROXY_ORIGIN =
+  setting("SIGNET_SEED_PROXY_ORIGIN") ?? `http://localhost:${PROXY_PORT}`;
 
 /** The end user the suite signs in as. */
 export const SEED_USER = {
@@ -209,6 +219,25 @@ async function signIn() {
 }
 
 /**
+ * A copy of a shipped preset's policy, fetched from the server that ships it.
+ *
+ * @param id - The preset's identifier.
+ * @returns A copy of its policy document, safe to modify.
+ */
+async function presetPolicy(id) {
+  const response = await api("GET", "/presets");
+  if (!response.ok) {
+    throw new Error(`could not read the presets: ${response.status}`);
+  }
+  const { presets } = await response.json();
+  const preset = presets.find((candidate) => candidate.id === id);
+  if (preset === undefined) {
+    throw new Error(`the deployment ships no ${id} preset`);
+  }
+  return structuredClone(preset.policy);
+}
+
+/**
  * The Pathling preset, fetched from the server that ships it.
  *
  * With one rule turned on. The preset ships `grant-system-write` disabled, which is
@@ -223,16 +252,7 @@ async function signIn() {
  * `stub-writer` below.
  */
 async function pathlingPolicy() {
-  const response = await api("GET", "/presets");
-  if (!response.ok) {
-    throw new Error(`could not read the presets: ${response.status}`);
-  }
-  const { presets } = await response.json();
-  const preset = presets.find((candidate) => candidate.id === "pathling");
-  if (preset === undefined) {
-    throw new Error("the deployment ships no Pathling preset");
-  }
-  const document = structuredClone(preset.policy);
+  const document = await presetPolicy("pathling");
   const systemWrite = document.scopeGrants.find(
     (grant) => grant.id === "grant-system-write",
   );
@@ -250,7 +270,8 @@ const endpointPath = `/tenants/${TENANT}/endpoints/pathling`;
 await ensure("the pathling endpoint", "POST", `/tenants/${TENANT}/endpoints`, {
   slug: "pathling",
   name: "Pathling",
-  fhirBaseUrl: FHIR_BASE,
+  kind: "smart",
+  audience: FHIR_BASE,
   // Non-production, so the suite can use a persona and pick a patient that is
   // not on the account's list. A production endpoint would refuse both.
   isProduction: false,
@@ -677,7 +698,82 @@ await ensure("a patient persona", "POST", `${endpointPath}/users`, {
   defaultContext: { patient: "pat-9" },
 });
 
+/**
+ * The OAuth / OpenID Connect endpoint, for a regular web app and its API.
+ *
+ * oauth2-proxy signs people in to the app through it, and validates the access
+ * tokens it mints for the API. Its audience is the API's URL, which is what
+ * oauth2-proxy checks `aud` against. Nothing about it is SMART: its scopes are
+ * the OpenID Connect ones plus `notes:read`, an opaque scope that only a grant
+ * rule naming it can grant.
+ */
+const notesPath = `/tenants/${TENANT}/endpoints/notes`;
+
+await ensure("the notes endpoint", "POST", `/tenants/${TENANT}/endpoints`, {
+  slug: "notes",
+  name: "Notes",
+  kind: "oauth",
+  audience: `${PROXY_ORIGIN}/api`,
+  isProduction: false,
+  consentMode: "always",
+  supportsOpenIdConnect: true,
+  allowsConfidentialSymmetricClients: true,
+  supportsBackendServices: true,
+});
+
+/**
+ * The baseline grants the OpenID Connect scopes and nothing else. `notes:read` is
+ * refused until a rule names it, so this one does, and only for the client
+ * credentials grant: it is the API's scope, for a service calling it.
+ */
+async function notesPolicy() {
+  const document = await presetPolicy("oauth-baseline");
+  document.scopeGrants.push({
+    id: "grant-notes-read",
+    description: "Read your notes.",
+    match: "notes:read",
+    allow: true,
+    grantTypes: ["client_credentials"],
+  });
+  return document;
+}
+
+await ensure("the notes policy", "POST", `${notesPath}/policies`, {
+  document: await notesPolicy(),
+  note: "Seeded by scripts/seedStack.mjs for the end-to-end suite.",
+  publish: true,
+});
+
+await ensure("the oauth2-proxy client", "POST", `${notesPath}/clients`, {
+  clientId: "notes-proxy",
+  name: "Notes (oauth2-proxy)",
+  clientType: "confidential-symmetric",
+  secret: "notes-proxy-secret-value-00000",
+  redirectUris: [`${PROXY_ORIGIN}/oauth2/callback`],
+  grantTypes: ["authorization_code", "refresh_token"],
+  allowedScopes: ["openid", "profile", "email"],
+});
+
+await ensure("the notes service client", "POST", `${notesPath}/clients`, {
+  clientId: "notes-service",
+  name: "Notes service",
+  clientType: "confidential-symmetric",
+  secret: "notes-service-secret-value-0000",
+  grantTypes: ["client_credentials"],
+  allowedScopes: ["notes:read"],
+});
+
+await ensure("the notes account", "POST", `${notesPath}/users`, {
+  username: "nora",
+  password: "nora-password",
+  displayName: "Nora Notes",
+  email: "nora@example.org",
+  emailVerified: true,
+});
+
 console.log(`\nSeeded ${BASE}/t/${TENANT}/e/pathling`);
 console.log(
   `Launch the stub app at ${APP_ORIGIN}/?iss=${BASE}/t/${TENANT}/e/pathling`,
 );
+console.log(`Seeded ${BASE}/t/${TENANT}/e/notes`);
+console.log(`Open the regular app at ${PROXY_ORIGIN}/`);

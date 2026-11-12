@@ -26,7 +26,8 @@ const FHIR_BASE = "https://fhir.example.com/fhir";
 /** An endpoint that supports nothing at all: the baseline for each flag test. */
 const NOTHING: EndpointCapabilityConfig = {
   issuer: ISSUER,
-  fhirBaseUrl: FHIR_BASE,
+  kind: "smart",
+  audience: FHIR_BASE,
 
   supportsEhrLaunch: false,
   supportsStandaloneLaunch: false,
@@ -173,13 +174,13 @@ describe("deriveCapabilities", () => {
 
 describe("DEFAULT_SCOPES_SUPPORTED", () => {
   it("contains only scopes the scope parser accepts", () => {
-    const result = parseScopes(DEFAULT_SCOPES_SUPPORTED.join(" "));
+    const result = parseScopes(DEFAULT_SCOPES_SUPPORTED.join(" "), "smart");
     expect(result.rejected).toEqual([]);
     expect(result.scopes).toHaveLength(DEFAULT_SCOPES_SUPPORTED.length);
   });
 
   it("is already in canonical v2 form, so it round-trips unchanged", () => {
-    const result = parseScopes(DEFAULT_SCOPES_SUPPORTED.join(" "));
+    const result = parseScopes(DEFAULT_SCOPES_SUPPORTED.join(" "), "smart");
     expect(formatScopes(result.scopes)).toBe(
       DEFAULT_SCOPES_SUPPORTED.join(" "),
     );
@@ -221,7 +222,7 @@ describe("defaultEndpointCapabilities", () => {
   it("fills in the issuer and FHIR base URL", () => {
     const config = defaultEndpointCapabilities(ISSUER, FHIR_BASE);
     expect(config.issuer).toBe(ISSUER);
-    expect(config.fhirBaseUrl).toBe(FHIR_BASE);
+    expect(config.audience).toBe(FHIR_BASE);
   });
 
   it("carries the default flags through", () => {

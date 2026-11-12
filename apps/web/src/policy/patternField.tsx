@@ -34,12 +34,18 @@ import {
 } from "./patterns.js";
 import { SelectField, TextField } from "../components/fields.js";
 
+import type { EndpointKind } from "@signet/core";
 import type { ReactNode } from "react";
 
 interface PatternFieldProps {
   readonly label: string;
   readonly hint?: ReactNode;
   readonly value: string;
+  /**
+   * The endpoint's kind. On an OAuth endpoint every scope is an opaque string
+   * matched exactly, so there is no pattern to pick and the field is plain text.
+   */
+  readonly kind: EndpointKind;
   readonly onChange: (pattern: string) => void;
   readonly disabled: boolean;
 }
@@ -49,9 +55,24 @@ export function PatternField({
   label,
   hint,
   value,
+  kind,
   onChange,
   disabled,
 }: Readonly<PatternFieldProps>) {
+  if (kind === "oauth") {
+    return (
+      <TextField
+        label={label}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        placeholder="orders:read"
+        required
+        hint="One scope, exactly as an app requests it - matched by equality, never as a pattern."
+      />
+    );
+  }
+
   const draft = patternDraft(value);
 
   if (draft === undefined) {
