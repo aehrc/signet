@@ -29,11 +29,12 @@ import {
   endpointKeyStatusEnum,
   endpointStatusEnum,
   grantTypeEnum,
+  tenantLogoVariantEnum,
   tenantMemberRoleEnum,
 } from "./enums.js";
 import * as schema from "./index.js";
 
-import type { ClientType, GrantType } from "@signet/core";
+import type { ClientType, GrantType, LogoVariant } from "@signet/core";
 import type { PgColumn } from "drizzle-orm/pg-core";
 
 /** True only when two types are mutually assignable. */
@@ -67,6 +68,7 @@ const EXPECTED_TABLES = [
   "launch_contexts",
   "policies",
   "refresh_tokens",
+  "tenant_logos",
   "tenant_members",
   "tenants",
 ] as const;
@@ -444,6 +446,15 @@ describe("enums", () => {
       "client_credentials",
       "refresh_token",
     ]);
+  });
+
+  it("mirrors the LogoVariant union in @signet/core", () => {
+    const matches: Exact<
+      (typeof tenantLogoVariantEnum.enumValues)[number],
+      LogoVariant
+    > = true;
+    expect(matches).toBe(true);
+    expect([...tenantLogoVariantEnum.enumValues]).toEqual(["light", "dark"]);
   });
 
   it("fixes the remaining closed value sets", () => {

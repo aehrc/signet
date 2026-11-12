@@ -64,6 +64,7 @@ export * from "./routines.js";
 export * from "./rows.js";
 export * from "./scope.js";
 export * from "./sweep.js";
+export * from "./tenantLogos.js";
 export * from "./tenants.js";
 export * from "./time.js";
 export * from "./trust.js";

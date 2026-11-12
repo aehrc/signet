@@ -124,6 +124,12 @@ import {
   TenantScopeViolationError,
 } from "./scope.js";
 import { sweepExpiredRuntimeRows } from "./sweep.js";
+import {
+  deleteTenantLogo,
+  getTenantLogo,
+  listTenantLogoVersions,
+  putTenantLogo,
+} from "./tenantLogos.js";
 import { createTenant } from "./tenants.js";
 import {
   deleteEndpointTicketIssuer,
@@ -474,6 +480,150 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       );
       expect(refreshed.email).toBe("new@example.org");
       expect(refreshed.emailVerified).toBe(false);
+    });
+  });
+
+  describe("tenant logos", () => {
+    /** A few bytes standing in for an image; the repository does not inspect them. */
+    const LIGHT = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 1, 2, 3);
+    const DARK = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 4, 5, 6);
+
+    it("stores a logo and reads it back byte for byte with its media type", async () => {
+      const tenant = await newTenant();
+      await withTenantScope(db, tenant, (bound) =>
+        putTenantLogo(bound, {
+          variant: "light",
+          mediaType: "image/png",
+          content: LIGHT,
+        }),
+      );
+
+      const read = await withTenantScope(db, tenant, (bound) =>
+        getTenantLogo(bound, "light"),
+      );
+      expect(read?.mediaType).toBe("image/png");
+      expect([...(read?.content ?? [])]).toEqual([...LIGHT]);
+    });
+
+    it("replaces a variant in place and advances its version", async () => {
+      const tenant = await newTenant();
+      const first = await withTenantScope(db, tenant, (bound) =>
+        putTenantLogo(
+          bound,
+          { variant: "light", mediaType: "image/png", content: LIGHT },
+          new Date("2026-01-01T00:00:00Z"),
+        ),
+      );
+      const second = await withTenantScope(db, tenant, (bound) =>
+        putTenantLogo(
+          bound,
+          { variant: "light", mediaType: "image/svg+xml", content: DARK },
+          new Date("2026-01-02T00:00:00Z"),
+        ),
+      );
+      expect(second?.updatedAt.getTime()).toBeGreaterThan(
+        first?.updatedAt.getTime() ?? Infinity,
+      );
+
+      const versions = await withTenantScope(db, tenant, (bound) =>
+        listTenantLogoVersions(bound),
+      );
+      expect(versions).toEqual([
+        { variant: "light", updatedAt: new Date("2026-01-02T00:00:00Z") },
+      ]);
+      const read = await withTenantScope(db, tenant, (bound) =>
+        getTenantLogo(bound, "light"),
+      );
+      expect(read?.mediaType).toBe("image/svg+xml");
+    });
+
+    it("refuses a dark variant for a tenant with no logo", async () => {
+      // A dark variant on its own would never be shown, so storing one is a
+      // mistake the operator should hear about rather than a silent no-op.
+      const tenant = await newTenant();
+      const stored = await withTenantScope(db, tenant, (bound) =>
+        putTenantLogo(bound, {
+          variant: "dark",
+          mediaType: "image/png",
+          content: DARK,
+        }),
+      );
+      expect(stored).toBeUndefined();
+      expect(
+        await withTenantScope(db, tenant, (bound) =>
+          listTenantLogoVersions(bound),
+        ),
+      ).toEqual([]);
+    });
+
+    it("removes the dark variant along with the logo, but not the logo with the variant", async () => {
+      const tenant = await newTenant();
+      const putBoth = async () => {
+        await withTenantScope(db, tenant, async (bound) => {
+          await putTenantLogo(bound, {
+            variant: "light",
+            mediaType: "image/png",
+            content: LIGHT,
+          });
+          await putTenantLogo(bound, {
+            variant: "dark",
+            mediaType: "image/png",
+            content: DARK,
+          });
+        });
+      };
+      const variants = async () =>
+        (
+          await withTenantScope(db, tenant, (bound) =>
+            listTenantLogoVersions(bound),
+          )
+        ).map((version) => version.variant);
+
+      await putBoth();
+      expect(
+        await withTenantScope(db, tenant, (bound) =>
+          deleteTenantLogo(bound, "dark"),
+        ),
+      ).toBe(true);
+      expect(await variants()).toEqual(["light"]);
+
+      await putBoth();
+      expect(
+        await withTenantScope(db, tenant, (bound) =>
+          deleteTenantLogo(bound, "light"),
+        ),
+      ).toBe(true);
+      expect(await variants()).toEqual([]);
+
+      // Nothing left to remove.
+      expect(
+        await withTenantScope(db, tenant, (bound) =>
+          deleteTenantLogo(bound, "light"),
+        ),
+      ).toBe(false);
+    });
+
+    it("is invisible to another tenant", async () => {
+      const mine = await newTenant();
+      const theirs = await newTenant();
+      await withTenantScope(db, theirs, (bound) =>
+        putTenantLogo(bound, {
+          variant: "light",
+          mediaType: "image/png",
+          content: LIGHT,
+        }),
+      );
+
+      expect(
+        await withTenantScope(db, mine, (bound) =>
+          getTenantLogo(bound, "light"),
+        ),
+      ).toBeUndefined();
+      expect(
+        await withTenantScope(db, mine, (bound) =>
+          listTenantLogoVersions(bound),
+        ),
+      ).toEqual([]);
     });
   });
 

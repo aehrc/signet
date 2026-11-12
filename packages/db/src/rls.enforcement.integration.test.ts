@@ -72,6 +72,7 @@ import {
   resolveTenantScope,
   tenantScopeFromRow,
 } from "./repositories/scope.js";
+import { putTenantLogo } from "./repositories/tenantLogos.js";
 import { createTenant } from "./repositories/tenants.js";
 import {
   upsertEndpointTicketIssuer,
@@ -230,6 +231,13 @@ describeWithDatabase("row-level security as the serving role", () => {
         role: "owner",
         createdBy: admin.id,
         expiresAt: soon(),
+      }),
+    );
+    await withTenantScope(owner, tenantScope, (bound) =>
+      putTenantLogo(bound, {
+        variant: "light",
+        mediaType: "image/png",
+        content: Uint8Array.of(0x89, 0x50, 0x4e, 0x47),
       }),
     );
 
