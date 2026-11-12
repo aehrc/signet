@@ -58,7 +58,8 @@ scope is an opaque string, compared for exact equality. That includes strings th
 look like SMART scopes, such as `patient/Observation.rs`: on this kind of endpoint
 they are just strings.
 
-The baseline policy grants the four and nothing else. An API scope is refused until
+The baseline policy grants the four and nothing else, and grants `offline_access`
+to confidential clients only, as the SMART presets do. An API scope is refused until
 the operator adds a grant rule that names it exactly. There are no wildcards. This
 is the deny-by-default rule Signet applies everywhere: forgetting to add a rule
 produces a refused request, never an unintended grant.
