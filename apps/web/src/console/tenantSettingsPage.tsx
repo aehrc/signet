@@ -4,7 +4,7 @@
  */
 
 /**
- * Tenant membership and personal access tokens.
+ * Tenant membership, personal access tokens and the logo.
  *
  * Two invariants the server enforces are worth stating on the page rather than
  * leaving to an error message. A tenant can never be left without an owner, because
@@ -20,6 +20,7 @@
 
 import { useState } from "react";
 
+import { LogoPanel } from "./logoPanel.js";
 import { roleAllows, useConsoleContext } from "./useConsole.js";
 import { describeError, issuesByField } from "../api/errors.js";
 import {
@@ -65,8 +66,9 @@ export function TenantSettingsPage() {
     <>
       <PageHeader
         title="Tenant settings"
-        description="Who may act on this tenant, and which scripts hold a credential for it."
+        description="Who may act on this tenant, which scripts hold a credential for it, and the logo its end users see."
       />
+      <LogoPanel tenant={tenant} mayAdminister={mayAdminister} />
       <MembersPanel
         tenant={tenant}
         role={role}

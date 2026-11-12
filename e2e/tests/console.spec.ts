@@ -580,6 +580,56 @@ test.describe("an authenticated operator", () => {
       });
     }).toPass({ timeout: 60_000 });
   });
+
+  test("puts the tenant's logo on its sign-in page, and takes it off again", async ({
+    page,
+  }) => {
+    const settings = `${SIGNET}/console/t/demo/settings`;
+    const logo = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40"><rect width="160" height="40" fill="#0b6e4f"/></svg>',
+    );
+
+    await page.goto(settings);
+    await page.locator("#logo-light").setInputFiles({
+      name: "logo.svg",
+      mimeType: "image/svg+xml",
+      buffer: logo,
+    });
+    await expect(page.getByText("Logo uploaded.")).toBeVisible();
+    // The console's own sidebar carries it too.
+    await expect(
+      page.getByRole("navigation").getByRole("img", { name: "Demo Hospital" }),
+    ).toBeVisible();
+
+    // Reached the way an end user reaches it: an app sending them to /authorize.
+    try {
+      await startLaunch(page);
+      await expect(
+        page.getByRole("heading", { name: "Sign in" }),
+      ).toBeVisible();
+      const mark = page.getByRole("img", { name: "Demo Hospital" });
+      await expect(mark).toBeVisible();
+      // Loaded and decoded, rather than a broken image carrying the right alt text.
+      expect(
+        await mark.evaluate(
+          (image: { readonly naturalWidth: number }) => image.naturalWidth,
+        ),
+      ).toBeGreaterThan(0);
+      await expect(page).toHaveTitle("Demo Hospital");
+      await expect(page.getByText("Signet", { exact: true })).toHaveCount(0);
+    } finally {
+      // The tenant is shared with every other spec, so it is left as it was found.
+      page.once("dialog", (dialog) => void dialog.accept());
+      await page.goto(settings);
+      await page.getByRole("button", { name: "Remove" }).first().click();
+      await expect(page.getByText("Logo removed.")).toBeVisible();
+    }
+
+    await startLaunch(page);
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByText("Signet", { exact: true })).toBeVisible();
+    await expect(page).toHaveTitle("Signet");
+  });
 });
 
 test.describe("a viewer-role operator", () => {

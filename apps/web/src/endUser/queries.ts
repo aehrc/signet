@@ -25,6 +25,7 @@ import {
   manageSignIn,
   manageSignOut,
   readAuthorizations,
+  readBranding,
   readInteraction,
   readInvitation,
   readPortal,
@@ -35,6 +36,35 @@ import {
 } from "./api.js";
 
 import type { LoginCredentials } from "./api.js";
+import type { TenantBranding } from "@signet/core";
+
+/** The query key of a tenant's branding, which the console's uploads invalidate. */
+export function brandingKey(tenant: string) {
+  return ["branding", tenant] as const;
+}
+
+/**
+ * Reads a tenant's branding, as the value `BrandingContext` carries.
+ *
+ * Undefined while the read is in flight, and null - the Signet wordmark - when the
+ * tenant has no logo or the read failed. No retry: a page that cannot read its
+ * branding is better off with the wordmark than with an empty header held open
+ * through three more attempts.
+ *
+ * @param tenant - The tenant's slug, or undefined to read nothing.
+ * @returns The branding to provide.
+ */
+export function useTenantBranding(
+  tenant: string | undefined,
+): TenantBranding | null | undefined {
+  const query = useQuery({
+    queryKey: brandingKey(tenant ?? ""),
+    queryFn: async () => await readBranding(tenant ?? ""),
+    enabled: tenant !== undefined,
+    retry: false,
+  });
+  return query.isPending ? undefined : (query.data ?? null);
+}
 
 /** Reads the current step of an authorization. */
 export function useInteractionState(

@@ -19,6 +19,7 @@
  * Author: John Grimes
  */
 
+import { describeLogoProblem, inspectLogo } from "@signet/core";
 import {
   useMutation,
   useQuery,
@@ -43,6 +44,7 @@ import {
   type AuditQuery,
 } from "./paths.js";
 import { getField, patchField, postField } from "./unwrap.js";
+import { brandingKey } from "../endUser/queries.js";
 
 import type {
   IdpCheckView,
@@ -67,6 +69,7 @@ import type {
   SessionView,
   SimulationView,
 } from "./types.js";
+import type { LogoVariant } from "@signet/core";
 import type {
   AuthenticationResponseJSON,
   PublicKeyCredentialCreationOptionsJSON,
@@ -1118,6 +1121,50 @@ export function useRevokeApiToken(tenant: string) {
     },
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: keys.apiTokens(tenant) });
+    },
+  });
+}
+
+/**
+ * Uploads one of the tenant's logos.
+ *
+ * The file is checked here with the same `inspectLogo` the server applies, so a file
+ * that would be refused is refused at once, in the same words, without a round trip.
+ * What is sent is the file's bytes typed as what they were found to be, not as
+ * whatever the browser guessed from its extension.
+ */
+export function useUploadLogo(tenant: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (upload: {
+      readonly variant: LogoVariant;
+      readonly file: Blob;
+    }) => {
+      const bytes = new Uint8Array(await upload.file.arrayBuffer());
+      const inspection = inspectLogo(bytes);
+      if (!inspection.ok) {
+        throw new Error(describeLogoProblem(inspection.problem));
+      }
+      await put<unknown>(
+        tenantPath(tenant, `/logo/${upload.variant}`),
+        new Blob([bytes], { type: inspection.mediaType }),
+      );
+    },
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: brandingKey(tenant) });
+    },
+  });
+}
+
+/** Removes one of the tenant's logos; removing the logo removes its dark variant. */
+export function useRemoveLogo(tenant: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (variant: LogoVariant) => {
+      await remove(tenantPath(tenant, `/logo/${variant}`));
+    },
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: brandingKey(tenant) });
     },
   });
 }

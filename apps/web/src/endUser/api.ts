@@ -23,6 +23,7 @@
 import { requestJson } from "../api/request.js";
 
 import type { InteractionView as InteractionState } from "@signet/contracts";
+import type { TenantBranding } from "@signet/core";
 
 export type {
   InteractionStep,
@@ -77,6 +78,20 @@ function normaliseOAuthError(body: unknown): unknown {
         ? record["error_description"]
         : "That request was refused",
   };
+}
+
+/**
+ * Reads a tenant's branding: null when it has no logo and the pages keep the Signet
+ * wordmark. Under `/t/{tenant}` rather than an issuer, because the console reads it
+ * too.
+ */
+export async function readBranding(
+  tenant: string,
+): Promise<TenantBranding | null> {
+  const { branding } = await request<{
+    readonly branding: TenantBranding | null;
+  }>(`/t/${encodeURIComponent(tenant)}/branding`);
+  return branding;
 }
 
 /** Reads the current step of an authorization. */

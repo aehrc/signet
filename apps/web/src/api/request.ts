@@ -29,7 +29,10 @@ import { toApiError } from "./errors.js";
 /** What a request may carry. */
 export interface RequestOptions {
   readonly method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
-  /** Serialised as JSON. Omit for a request with no body. */
+  /**
+   * Serialised as JSON, or sent as it is when it is a `Blob` - an uploaded file, with
+   * the blob's own type. Omit for a request with no body.
+   */
   readonly body?: unknown;
   /** Aborts the request; supplied by TanStack Query. */
   readonly signal?: AbortSignal;
@@ -66,12 +69,22 @@ export async function requestJson<T>(
       accept: "application/json",
       ...(options.body === undefined
         ? {}
-        : { "content-type": "application/json" }),
+        : {
+            "content-type":
+              options.body instanceof Blob
+                ? options.body.type || "application/octet-stream"
+                : "application/json",
+          }),
       ...options.headers,
     },
     ...(options.body === undefined
       ? {}
-      : { body: JSON.stringify(options.body) }),
+      : {
+          body:
+            options.body instanceof Blob
+              ? options.body
+              : JSON.stringify(options.body),
+        }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
 
