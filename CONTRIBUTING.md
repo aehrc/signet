@@ -69,9 +69,11 @@ file, and why. The compose stack's ports (`SIGNET_PORT`, `PATHLING_PORT`,
 written to a file, because Bun does not pass variables it loaded from a file to
 the processes it launches. The root `.env.example` explains this.
 
-To run the server on a port other than 3000, set `PORT` and `SIGNET_PUBLIC_URL`
-in `apps/server/.env.local` and `SIGNET_SERVER_URL` in `apps/web/.env.local` (see
-`apps/web/.env.example`), so that the console's dev server proxies to it.
+To run the server on a port other than 3000, set `PORT` in
+`apps/server/.env.local` and `SIGNET_SERVER_URL` in `apps/web/.env.local` (see
+`apps/web/.env.example`), so that the console's dev server proxies to it. To move
+the console off 5173, set `SIGNET_CONSOLE_PORT` there and change
+`SIGNET_PUBLIC_URL` to match: passkeys are verified against that origin.
 
 ## Coding standards
 

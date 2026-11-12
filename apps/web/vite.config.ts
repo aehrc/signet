@@ -22,16 +22,19 @@ const END_USER_PAGE_PATTERN =
   /^\/t\/[^/]+\/e\/[^/]+\/(login|picker|consent|manage|apps|invitation)$/;
 
 export default defineConfig(({ mode }) => {
-  // The Signet server the dev server proxies to. Read from `.env.local` in this
-  // directory; see `.env.example`.
-  const serverUrl =
-    loadEnv(mode, import.meta.dirname, "SIGNET_").SIGNET_SERVER_URL ??
-    "http://localhost:3000";
+  // Read from `.env.local` in this directory; see `.env.example`.
+  const env = loadEnv(mode, import.meta.dirname, "SIGNET_");
+  // The Signet server the dev server proxies to.
+  const serverUrl = env.SIGNET_SERVER_URL ?? "http://localhost:3000";
 
   return {
     plugins: [react(), tailwindcss()],
     server: {
-      port: 5173,
+      // Strict, because the server's SIGNET_PUBLIC_URL names this origin: passkey
+      // ceremonies are verified against it, so a silent move to the next free port
+      // breaks them.
+      port: Number(env.SIGNET_CONSOLE_PORT ?? "5173"),
+      strictPort: true,
       proxy: {
         "/api": { target: serverUrl, changeOrigin: true },
         "/t": {
