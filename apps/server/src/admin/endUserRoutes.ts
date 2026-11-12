@@ -33,6 +33,7 @@ import {
   invitationRefusal,
   invitationUrl,
   toLaunchContext,
+  withEmailVerification,
 } from "@signet/core";
 import {
   cancelEndUserInvitation,
@@ -234,7 +235,12 @@ export function registerEndUserRoutes(
         return refusal;
       }
 
-      const { disabled, defaultContext, ...fields } = body;
+      // A changed or cleared address loses its verified flag unless this same edit
+      // vouches for it again; see `withEmailVerification`.
+      const { disabled, defaultContext, ...fields } = withEmailVerification(
+        existing,
+        body,
+      );
       const patch: Record<string, unknown> = Object.fromEntries(
         Object.entries(fields).filter(([, value]) => value !== undefined),
       );

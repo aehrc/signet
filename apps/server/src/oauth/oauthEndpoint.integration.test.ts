@@ -604,6 +604,96 @@ describeWithDatabase("an OAuth / OpenID Connect endpoint", () => {
       expect(refused.status).toBe(400);
     });
 
+    it("withdraws email_verified when the address changes unvouched", async () => {
+      const cookie = await stack.signIn();
+      const created = await adminJson<{ user: { id: string } }>(
+        stack,
+        "POST",
+        endpointPath(stack, "/users"),
+        {
+          credential: { cookie },
+          body: {
+            username: "changing-email",
+            displayName: "Changing Email",
+            password: TEST_PASSWORD,
+            email: "first@signet.test",
+            emailVerified: true,
+          },
+          expect: 201,
+        },
+      );
+      const userPath = endpointPath(stack, `/users/${created.user.id}`);
+      const patch = async (body: unknown) =>
+        await adminJson<{
+          user: { email: string | null; emailVerified: boolean };
+        }>(stack, "PATCH", userPath, { credential: { cookie }, body });
+
+      // A display name edit says nothing about the address.
+      expect((await patch({ displayName: "Renamed" })).user).toMatchObject({
+        email: "first@signet.test",
+        emailVerified: true,
+      });
+      // A new address the operator does not vouch for is not verified.
+      expect((await patch({ email: "second@signet.test" })).user).toMatchObject(
+        { email: "second@signet.test", emailVerified: false },
+      );
+      // One they do vouch for is.
+      expect(
+        (await patch({ email: "third@signet.test", emailVerified: true })).user,
+      ).toMatchObject({ email: "third@signet.test", emailVerified: true });
+      // And a cleared address takes the flag with it.
+      expect((await patch({ email: null })).user).toMatchObject({
+        email: null,
+        emailVerified: false,
+      });
+    });
+
+    it("refuses a client launch URI and an allowlist entry that is not a scope-token", async () => {
+      const cookie = await stack.signIn();
+      const create = async (body: Record<string, unknown>) =>
+        await adminRequest(stack, "POST", endpointPath(stack, "/clients"), {
+          credential: { cookie },
+          body: {
+            name: "Orders app",
+            clientType: "public",
+            redirectUris: ["https://orders-app.test/callback"],
+            ...body,
+          },
+        });
+
+      const withLaunch = await create({
+        launchUri: "https://orders-app.test/launch",
+      });
+      expect(withLaunch.status).toBe(400);
+      expect(JSON.stringify(await withLaunch.json())).toContain("launchUri");
+
+      const withBadScope = await create({
+        allowedScopes: ["orders:read", 'bad scope"'],
+      });
+      expect(withBadScope.status).toBe(400);
+      expect(JSON.stringify(await withBadScope.json())).toContain(
+        "allowedScopes.1",
+      );
+
+      const accepted = await create({
+        clientId: "orders-app-ok",
+        allowedScopes: ["openid", "orders:read"],
+      });
+      expect(accepted.status).toBe(201);
+
+      const clientPath = endpointPath(stack, "/clients/orders-app-ok");
+      for (const body of [
+        { launchUri: "https://orders-app.test/launch" },
+        { allowedScopes: ['bad scope"'] },
+      ]) {
+        const patched = await adminRequest(stack, "PATCH", clientPath, {
+          credential: { cookie },
+          body,
+        });
+        expect(patched.status).toBe(400);
+      }
+    });
+
     it("refuses a permission ticket issuer", async () => {
       const cookie = await stack.signIn();
       const response = await adminRequest(

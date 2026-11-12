@@ -79,7 +79,12 @@ require it.
 
 The consent screen describes each identity scope in words ("Confirm who you are",
 "Know your email address"). An API scope is described by the description of the
-rule that granted it, and by the scope itself when the rule has none.
+rule that granted it, and by the scope itself when the rule has none. That makes
+a grant rule's description end-user copy on this kind of endpoint, and the
+console's rule editor says so.
+
+A client's scope allowlist is checked against the same grammar: an entry that is
+not an RFC 6749 scope-token is refused when the client is registered or edited.
 
 ### Identity claims
 
@@ -91,9 +96,13 @@ The ID token and userinfo carry:
 | `profile` | `name` (the display name), `preferred_username` (the username) |
 | `email`   | `email` and `email_verified`, when the user has an email       |
 
-An end user's email and its verified flag are set in the console. A federated
+An end user's email and its verified flag are set in the console. Changing or
+clearing the email withdraws the verified flag unless the same edit sets it again,
+so a flag set for one address never carries over to the next. A federated
 sign-in sets the email from the upstream claim mapped to `email`, and sets
 `email_verified` only when the upstream provider asserted `email_verified: true`.
+An invitation works as it does on a SMART endpoint, and the console starts its
+email to the account's recorded address.
 
 There is no `fhirUser`, and roles are not added to the ID token. Roles reach an API
 the same way they do on a SMART endpoint: through a claim rule on the access token.
@@ -105,7 +114,8 @@ The endpoint serves `{iss}/.well-known/openid-configuration` and answers
 
 ### What is not available
 
-- EHR launch, `/launch-context` and the console's launch simulator.
+- EHR launch, `/launch-context`, a client's launch URI and the console's launch
+  simulator.
 - The patient and encounter picker, and persona launch context. Personas still
   work on non-production endpoints.
 - Permission tickets and token exchange.

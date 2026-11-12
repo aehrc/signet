@@ -23,4 +23,5 @@ export * from "./federation/index.js";
 export * from "./limits/index.js";
 export * from "./manage/index.js";
 export * from "./invitations/index.js";
+export * from "./endUsers/index.js";
 export * from "./uris.js";
