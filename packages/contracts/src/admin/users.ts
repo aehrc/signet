@@ -41,6 +41,18 @@ const endUserFieldsSchema = z.object({
 });
 
 /**
+ * The shortest end user password accepted, exported so that a page checking a
+ * password before sending it applies the same bound.
+ */
+export const END_USER_PASSWORD_MIN_LENGTH = 8;
+
+/** An end user's password, wherever one is set. */
+const endUserPasswordField = z
+  .string()
+  .min(END_USER_PASSWORD_MIN_LENGTH)
+  .max(1024);
+
+/**
  * Creating an end user or persona.
  *
  * A password is refused for a persona. For a local account it is optional: an account
@@ -53,7 +65,7 @@ const endUserFieldsSchema = z.object({
 export const endUserCreateSchema = endUserFieldsSchema
   .extend({
     username: z.string().min(1).max(128),
-    password: z.string().min(8).max(1024).optional(),
+    password: endUserPasswordField.optional(),
     isPersona: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
@@ -80,7 +92,7 @@ export const endUserPatchSchema = endUserFieldsSchema
 
 /** Setting an end user's password. */
 export const endUserPasswordSchema = z.object({
-  password: z.string().min(8).max(1024),
+  password: endUserPasswordField,
 });
 
 export type EndUserCreate = z.infer<typeof endUserCreateSchema>;

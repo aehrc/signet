@@ -447,7 +447,10 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       // The harness's clinician already has a password; a link replaces it.
       const signedIn = await manageSignIn(stack.user.username, TEST_PASSWORD);
       expect(signedIn.status).toBe(200);
-      const cookie = (signedIn.headers.get("set-cookie") ?? "").split(";", 1)[0];
+      const cookie = (signedIn.headers.get("set-cookie") ?? "").split(
+        ";",
+        1,
+      )[0];
       const token = await invite(stack.user.id);
 
       expect(

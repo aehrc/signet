@@ -114,6 +114,22 @@ test.describe("an invited end user", () => {
         inviteePage.getByRole("heading", { name: "This link does not work" }),
       ).toBeVisible();
       await expect(inviteePage.getByLabel("Password")).toHaveCount(0);
+
+      // ---- A replacement link works in the tab that showed the spent one -----
+      // Opening it there changes only the fragment, which does not reload the
+      // page, so the page has to follow the fragment rather than its first value.
+      await page.getByRole("link", { name: displayName }).click();
+      await page.getByRole("button", { name: "Invite by email" }).click();
+      const replacementDialog = page.getByRole("dialog", {
+        name: `Invitation for ${username}`,
+      });
+      const replacement =
+        (await replacementDialog.locator("code").textContent()) ?? "";
+      expect(replacement).not.toBe(url);
+      await inviteePage.goto(replacement);
+      await expect(
+        inviteePage.getByRole("heading", { name: "Choose your password" }),
+      ).toBeVisible();
     } finally {
       await invitee.close();
     }

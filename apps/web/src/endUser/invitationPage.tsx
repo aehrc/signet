@@ -24,7 +24,7 @@
 
 import { invitationTokenFromFragment } from "@signet/core";
 import { useState } from "react";
-import { useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
 
 import { issuerBase } from "./api.js";
 import { passwordChoiceIssues } from "./passwordChoice.js";
@@ -52,11 +52,9 @@ export function InvitationPage() {
     tenant: string;
     endpoint: string;
   }>();
-  // Read once, on arrival: the link is what was opened, not whatever the fragment
-  // becomes afterwards.
-  const [token] = useState(() =>
-    invitationTokenFromFragment(globalThis.location.hash),
-  );
+  // Followed rather than read once: opening a second link in a tab already showing
+  // this page changes only the fragment, which does not remount it.
+  const token = invitationTokenFromFragment(useLocation().hash);
 
   if (token === undefined) {
     // No server call: nothing in the fragment could have been a token.
@@ -65,7 +63,10 @@ export function InvitationPage() {
   if (tenant === undefined || endpoint === undefined) {
     return <InvalidLink message={INVALID_LINK} />;
   }
-  return <Invitation tenant={tenant} endpoint={endpoint} token={token} />;
+  // Keyed on the token so that a new link starts with a fresh lookup and form.
+  return (
+    <Invitation key={token} tenant={tenant} endpoint={endpoint} token={token} />
+  );
 }
 
 /** The page proper, once there is a token to ask about. */

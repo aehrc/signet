@@ -10,7 +10,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { invitationMailto } from "./invitationMailto.js";
-import { formatInstant } from "../formatting/values.js";
+import { formatInstantWithZone } from "../formatting/values.js";
 
 const INVITATION = {
   to: "casey@example.org",
@@ -71,7 +71,8 @@ describe("invitationMailto", () => {
     expect(body).toContain(INVITATION.url);
     expect(body).toContain("casey");
     expect(body).toContain("Pathling & friends");
-    expect(body).toContain(formatInstant(INVITATION.expiresAt));
+    // With its zone: the invitee may not be in the administrator's.
+    expect(body).toContain(formatInstantWithZone(INVITATION.expiresAt));
   });
 
   it("keeps the link intact rather than letting its fragment end the URI", () => {

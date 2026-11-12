@@ -13,8 +13,10 @@
  * Author: John Grimes
  */
 
+import { END_USER_PASSWORD_MIN_LENGTH } from "@signet/contracts";
+
 /** The shortest password the server accepts. */
-const MINIMUM_LENGTH = 8;
+const MINIMUM_LENGTH = END_USER_PASSWORD_MIN_LENGTH;
 
 /** The problems with a choice, keyed by the field each belongs under. */
 export interface PasswordChoiceIssues {

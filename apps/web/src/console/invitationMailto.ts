@@ -17,7 +17,7 @@
  * Author: John Grimes
  */
 
-import { formatInstant } from "../formatting/values.js";
+import { formatInstantWithZone } from "../formatting/values.js";
 
 /** What the message says. */
 export interface InvitationMessage {
@@ -57,7 +57,7 @@ export function invitationMailto(message: InvitationMessage): string {
     "",
     message.url,
     "",
-    `The link works once, and expires on ${formatInstant(message.expiresAt)}. If it has expired, ask for a new one.`,
+    `The link works once, and expires on ${formatInstantWithZone(message.expiresAt)}. If it has expired, ask for a new one.`,
   ].join("\r\n");
 
   // The `@` is left readable: it is legal there, and some mail clients do not
