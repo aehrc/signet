@@ -152,6 +152,7 @@ const TENANT_PREDICATES: Readonly<Record<string, string>> = {
   refresh_tokens: viaEndpoint("refresh_tokens"),
   consents: viaEndpoint("consents"),
   end_user_sessions: viaEndpoint("end_user_sessions"),
+  end_user_invitations: viaEndpoint("end_user_invitations"),
   federation_states: viaEndpoint("federation_states"),
 
   // Two hops: through the client, which is on an endpoint.

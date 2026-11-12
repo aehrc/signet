@@ -15,6 +15,7 @@ import {
   countOf,
   formatDuration,
   formatInstant,
+  formatInstantWithZone,
   formatSince,
   pluralise,
   truncate,
@@ -35,6 +36,16 @@ describe("formatInstant", () => {
   it("passes through a value it cannot parse", () => {
     // Better to show the server's value than to claim it is invalid.
     expect(formatInstant("not a date")).toBe("not a date");
+  });
+});
+
+describe("formatInstantWithZone", () => {
+  it("names the time zone after the time, for a reader somewhere else", () => {
+    const value = "2026-08-04T06:30:00.000Z";
+    const zoned = formatInstantWithZone(value);
+    // The local rendering, followed by a zone designator such as AEST or GMT+10.
+    expect(zoned.startsWith(formatInstant(value))).toBe(true);
+    expect(zoned.slice(formatInstant(value).length)).toMatch(/[A-Z]{2,}/);
   });
 });
 

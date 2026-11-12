@@ -45,6 +45,7 @@ import {
   LoginPage,
   PickerPage,
 } from "./endUser/interactionPages.js";
+import { InvitationPage } from "./endUser/invitationPage.js";
 import { ManagePage } from "./endUser/managePage.js";
 import { PortalPage } from "./endUser/portalPage.js";
 import { PolicyPage } from "./policy/policyPage.js";
@@ -109,6 +110,10 @@ export function App() {
           <Route
             path="/t/:tenant/e/:endpoint/manage"
             element={<ManagePage />}
+          />
+          <Route
+            path="/t/:tenant/e/:endpoint/invitation"
+            element={<InvitationPage />}
           />
           <Route path="/t/:tenant/e/:endpoint/apps" element={<PortalPage />} />
 

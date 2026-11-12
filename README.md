@@ -11,10 +11,10 @@ how SMART scopes map to access-token claims, and point your FHIR server's
 authorization issuer at Signet. Your server keeps serving FHIR; Signet does
 SMART App Launch and SMART Backend Services in front of it.
 
-Stand up an endpoint in a minute, seed personas, let app developers request a
-client registration, and simulate an EHR launch without an EHR. Each endpoint
-has its own signing keys with rotation, an append-only audit trail, and can
-federate to an existing identity provider.
+Stand up an endpoint in a minute, seed personas, invite users by email, let app
+developers request a client registration, and simulate an EHR launch without an
+EHR. Each endpoint has its own signing keys with rotation, an append-only audit
+trail, and can federate to an existing identity provider.
 
 ## Claims mapping
 

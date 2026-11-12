@@ -31,6 +31,15 @@ const DURATION_UNITS: readonly {
   { seconds: 1, name: "second" },
 ];
 
+/** How an absolute instant is written: a day, an abbreviated month and a time. */
+const INSTANT_FORMAT: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+};
+
 /**
  * Formats an instant as an absolute date and time.
  *
@@ -45,12 +54,21 @@ export function formatInstant(value: string | null | undefined): string {
   if (Number.isNaN(at.getTime())) {
     return value;
   }
-  return at.toLocaleString(LOCALE, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+  return at.toLocaleString(LOCALE, INSTANT_FORMAT);
+}
+
+/**
+ * Formats an instant as {@link formatInstant} does, followed by the time zone.
+ *
+ * For text read by somebody who may be in another zone, such as an email.
+ *
+ * @param value - An ISO timestamp.
+ * @returns The formatted date and time with a zone designator.
+ */
+export function formatInstantWithZone(value: string): string {
+  return new Date(value).toLocaleString(LOCALE, {
+    ...INSTANT_FORMAT,
+    timeZoneName: "short",
   });
 }
 

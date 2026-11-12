@@ -209,6 +209,44 @@ export async function revokeAuthorization(
   });
 }
 
+/** What an invitation link offers, as the invitation page shows it. */
+export interface InvitationDetails {
+  readonly username: string;
+  readonly displayName: string;
+  readonly expiresAt: string;
+  readonly endpointName: string;
+}
+
+/**
+ * Reads what an invitation link is for, without spending it.
+ *
+ * The token goes in a request body rather than the URL, for the reason it sits in
+ * the link's fragment: a body is not written to access logs.
+ */
+export async function readInvitation(
+  tenant: string,
+  endpoint: string,
+  token: string,
+): Promise<InvitationDetails> {
+  return await request<InvitationDetails>(
+    `${issuerBase(tenant, endpoint)}/invitation/details`,
+    { method: "POST", body: { token } },
+  );
+}
+
+/** Spends an invitation link, setting the account's password. */
+export async function acceptInvitation(
+  tenant: string,
+  endpoint: string,
+  token: string,
+  password: string,
+): Promise<{ readonly username: string }> {
+  return await request<{ readonly username: string }>(
+    `${issuerBase(tenant, endpoint)}/invitation/accept`,
+    { method: "POST", body: { token, password } },
+  );
+}
+
 /** A registration request, as the portal reads it back. */
 export interface PortalRequestView {
   readonly id: string;

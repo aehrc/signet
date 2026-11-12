@@ -53,6 +53,7 @@ const ONE_HOP_TABLES = [
   "access_tokens",
   "refresh_tokens",
   "consents",
+  "end_user_invitations",
 ];
 
 describe("policy coverage", () => {

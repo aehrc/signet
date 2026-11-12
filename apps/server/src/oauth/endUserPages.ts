@@ -30,6 +30,8 @@ export const END_USER_PAGES = [
   "manage",
   /** The developer portal: ask for a client, and collect it. */
   "apps",
+  /** Choose an account's password, from the link an administrator sent. */
+  "invitation",
 ] as const;
 
 /** One of the page names. */

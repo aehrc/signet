@@ -27,13 +27,24 @@ import {
   endUserPasswordSchema,
   endUserPatchSchema,
 } from "@signet/contracts";
-import { toLaunchContext } from "@signet/core";
 import {
+  INVITATION_REFUSAL_MESSAGES,
+  invitationExpiry,
+  invitationRefusal,
+  invitationUrl,
+  toLaunchContext,
+} from "@signet/core";
+import {
+  cancelEndUserInvitation,
   createEndUser,
   deleteEndUser,
+  findOutstandingEndUserInvitation,
+  generateOpaqueToken,
   getEndUser,
   hashPassword,
+  hashToken,
   isUniqueViolation,
+  issueEndUserInvitation,
   listEndUsers,
   setEndUserDisabled,
   setEndUserPasswordHash,
@@ -46,7 +57,7 @@ import { requireRole } from "./authentication.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
 import { ENDPOINT_PATH } from "./paths.js";
 import { parseBody } from "./requestBody.js";
-import { endUserView } from "./views.js";
+import { endUserView, invitationView } from "./views.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { EndpointScope, EndUser } from "@signet/db";
@@ -300,6 +311,130 @@ export function registerEndUserRoutes(
         detail: { passwordChanged: true },
       });
 
+      return c.body(null, 204);
+    },
+  );
+
+  /** Reports whether a user has an outstanding invitation, and when it expires. */
+  router.get(
+    `${ENDPOINT_PATH}/users/:userId/invitation`,
+    requireRole("viewer"),
+    async (c) => {
+      const route = await loadEndUserRoute(c, context);
+      if (route instanceof Response) {
+        return route;
+      }
+      const invitation = await withTenantScope(
+        context.db,
+        route.scope,
+        (bound) =>
+          findOutstandingEndUserInvitation(
+            bound,
+            route.userId,
+            context.clock(),
+          ),
+      );
+      return c.json({
+        invitation:
+          invitation === undefined ? null : invitationView(invitation),
+      });
+    },
+  );
+
+  /**
+   * Issues an invitation link, replacing any the user already has.
+   *
+   * The link is returned once and only its digest is stored, so the console shows it
+   * to the administrator in the response to this request and never again. Refused for
+   * an account that could not sign in with the password it would choose; the rule is
+   * `invitationRefusal` in `@signet/core`, which the console also uses to decide
+   * whether to offer the action.
+   */
+  router.post(
+    `${ENDPOINT_PATH}/users/:userId/invitation`,
+    requireRole("admin"),
+    async (c) => {
+      const route = await loadEndUserRoute(c, context);
+      if (route instanceof Response) {
+        return route;
+      }
+      const { endpoint, issuer } = c.get("endpoint");
+      const refusal = invitationRefusal(endpoint, route.user);
+      if (refusal !== undefined) {
+        return c.json(
+          adminErrorBody(
+            "invalid_request",
+            INVITATION_REFUSAL_MESSAGES[refusal],
+          ),
+          statusForAdminError("invalid_request"),
+        );
+      }
+
+      const token = generateOpaqueToken();
+      const tokenHash = await hashToken(token);
+      const invitation = await withTenantScope(
+        context.db,
+        route.scope,
+        (bound) =>
+          issueEndUserInvitation(bound, {
+            endUserId: route.userId,
+            tokenHash,
+            expiresAt: invitationExpiry(context.clock()),
+          }),
+      );
+
+      await recordAdminEvent(context, c, {
+        action: "end-user.invited",
+        target: { type: "end-user", id: route.userId },
+        detail: {
+          username: route.user.username,
+          expiresAt: invitation.expiresAt.toISOString(),
+        },
+      });
+
+      c.header("Cache-Control", "no-store");
+      return c.json(
+        {
+          invitation: {
+            url: invitationUrl(issuer, token),
+            ...invitationView(invitation),
+          },
+        },
+        201,
+      );
+    },
+  );
+
+  /** Withdraws a user's outstanding invitation, so its link stops working. */
+  router.delete(
+    `${ENDPOINT_PATH}/users/:userId/invitation`,
+    requireRole("admin"),
+    async (c) => {
+      const route = await loadEndUserRoute(c, context);
+      if (route instanceof Response) {
+        return route;
+      }
+      const cancelled = await withTenantScope(
+        context.db,
+        route.scope,
+        (bound) =>
+          cancelEndUserInvitation(bound, route.userId, context.clock()),
+      );
+      if (!cancelled) {
+        return c.json(
+          adminErrorBody(
+            "not_found",
+            "This user has no outstanding invitation",
+          ),
+          statusForAdminError("not_found"),
+        );
+      }
+
+      await recordAdminEvent(context, c, {
+        action: "end-user.invitation-cancelled",
+        target: { type: "end-user", id: route.userId },
+        detail: { username: route.user.username },
+      });
       return c.body(null, 204);
     },
   );

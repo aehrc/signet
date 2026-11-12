@@ -65,6 +65,9 @@ const REQUIRED_ACTIONS: readonly AuditAction[] = [
   "end-user.created",
   "end-user.updated",
   "end-user.disabled",
+  "end-user.invited",
+  "end-user.invitation-cancelled",
+  "end-user.invitation-accepted",
 ];
 
 describe("the audit action vocabulary", () => {

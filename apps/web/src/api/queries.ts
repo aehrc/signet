@@ -57,6 +57,8 @@ import type {
   EndpointKeyView,
   EndpointView,
   EndUserView,
+  InvitationView,
+  IssuedInvitationView,
   LaunchSimulationView,
   MemberView,
   PasskeyView,
@@ -124,6 +126,12 @@ export const keys = {
   ],
   endUser: (tenant: string, endpoint: string, userId: string): QueryKey => [
     "user",
+    tenant,
+    endpoint,
+    userId,
+  ],
+  invitation: (tenant: string, endpoint: string, userId: string): QueryKey => [
+    "invitation",
     tenant,
     endpoint,
     userId,
@@ -826,6 +834,66 @@ export function useDeleteEndUser(tenant: string, endpoint: string) {
       });
       await client.invalidateQueries({
         queryKey: keys.users(tenant, endpoint),
+      });
+    },
+  });
+}
+
+/** A user's outstanding invitation, or null when there is none. */
+export function useEndUserInvitation(
+  tenant: string,
+  endpoint: string,
+  userId: string,
+) {
+  return useQuery({
+    queryKey: keys.invitation(tenant, endpoint, userId),
+    queryFn: async ({ signal }) =>
+      await getField<"invitation", InvitationView | null>(
+        endUserPath(tenant, endpoint, userId, "/invitation"),
+        "invitation",
+        signal,
+      ),
+  });
+}
+
+/**
+ * Makes a new invitation for a user, replacing any outstanding one.
+ *
+ * The user is the mutation's variable rather than the hook's, so the Add user form
+ * can invite the account it has only just created.
+ */
+export function useCreateInvitation(tenant: string, endpoint: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) =>
+      await postField<"invitation", IssuedInvitationView>(
+        endUserPath(tenant, endpoint, userId, "/invitation"),
+        "invitation",
+      ),
+    onSettled: async (_invitation, _error, userId) => {
+      // Settled rather than succeeded: a refusal may still have replaced the old
+      // link, and what the panel shows must not be a guess.
+      await client.invalidateQueries({
+        queryKey: keys.invitation(tenant, endpoint, userId),
+      });
+    },
+  });
+}
+
+/** Cancels a user's outstanding invitation, so its link stops working. */
+export function useCancelInvitation(
+  tenant: string,
+  endpoint: string,
+  userId: string,
+) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await remove(endUserPath(tenant, endpoint, userId, "/invitation"));
+    },
+    onSettled: async () => {
+      await client.invalidateQueries({
+        queryKey: keys.invitation(tenant, endpoint, userId),
       });
     },
   });

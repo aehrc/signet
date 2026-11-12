@@ -17,20 +17,32 @@
  * next to the summary that explains what each of them costs, rather than beside a
  * row that shows a name and a badge.
  *
+ * A local account can be added without a password and sent an invitation instead,
+ * so its holder chooses their own. The account is created first and the invitation
+ * made straight after; if the second step fails the account still exists, so the
+ * page says so and points to the detail page, where inviting can be tried again.
+ *
  * Author: John Grimes
  */
 
+import { invitationRefusal } from "@signet/core";
 import { useState } from "react";
 import { Link } from "react-router";
 
+import { InvitationDialog } from "./invitationDialog.js";
 import { endUserRoute } from "./routes.js";
 import { roleAllows, useEndpointContext } from "./useConsole.js";
 import { describeError, issuesByField } from "../api/errors.js";
-import { useCreateEndUser, useEndUsers } from "../api/queries.js";
+import {
+  useCreateEndUser,
+  useCreateInvitation,
+  useEndUsers,
+} from "../api/queries.js";
 import {
   CheckboxField,
   FormFooter,
   ListField,
+  SelectField,
   TextField,
 } from "../components/fields.js";
 import {
@@ -45,14 +57,28 @@ import { Chips, DataTable, StatusBadge } from "../components/table.js";
 import { countOf, formatInstant } from "../formatting/values.js";
 import { parseList } from "../forms/lists.js";
 
-import type { EndUserView } from "../api/types.js";
+import type { EndUserView, IssuedInvitationView } from "../api/types.js";
 import type { Column } from "../components/table.js";
+
+/** What became of an invitation made by the Add user form. */
+type InviteOutcome =
+  | {
+      readonly kind: "issued";
+      readonly user: EndUserView;
+      readonly invitation: IssuedInvitationView;
+    }
+  | {
+      readonly kind: "failed";
+      readonly user: EndUserView;
+      readonly error: unknown;
+    };
 
 /** The users and personas page. */
 export function UsersPage() {
   const { tenant, endpointSlug, endpoint, role } = useEndpointContext();
   const users = useEndUsers(tenant, endpointSlug);
   const [adding, setAdding] = useState(false);
+  const [outcome, setOutcome] = useState<InviteOutcome | undefined>();
 
   const mayWrite = roleAllows(role, "admin");
 
@@ -124,6 +150,7 @@ export function UsersPage() {
               type="button"
               className="btn btn-primary btn-sm"
               onClick={() => {
+                setOutcome(undefined);
                 setAdding((open) => !open);
               }}
             >
@@ -145,8 +172,38 @@ export function UsersPage() {
 
       {adding ? (
         <EndUserForm
-          onDone={() => {
+          onDone={(result) => {
             setAdding(false);
+            setOutcome(result);
+          }}
+        />
+      ) : null}
+
+      {outcome?.kind === "failed" ? (
+        <div className="mb-6">
+          <ErrorAlert
+            message={`${outcome.user.username} was added, but the invitation could not be made: ${describeError(outcome.error)}`}
+          >
+            <p className="text-sm max-sm:text-base">
+              Try again from{" "}
+              <Link
+                className="link"
+                to={endUserRoute(tenant, endpointSlug, outcome.user.id)}
+              >
+                their detail page
+              </Link>
+              .
+            </p>
+          </ErrorAlert>
+        </div>
+      ) : null}
+      {outcome?.kind === "issued" ? (
+        <InvitationDialog
+          invitation={outcome.invitation}
+          username={outcome.user.username}
+          endpointName={endpoint.name}
+          onClose={() => {
+            setOutcome(undefined);
           }}
         />
       ) : null}
@@ -183,10 +240,18 @@ export function UsersPage() {
   );
 }
 
-/** The form for a local account or a persona. */
-function EndUserForm({ onDone }: Readonly<{ readonly onDone: () => void }>) {
-  const { tenant, endpointSlug } = useEndpointContext();
+/**
+ * The form for a local account or a persona.
+ *
+ * `onDone` is called with no outcome when the form is cancelled or an account is
+ * added with a password, and with the invitation's outcome when one was asked for.
+ */
+function EndUserForm({
+  onDone,
+}: Readonly<{ readonly onDone: (outcome?: InviteOutcome) => void }>) {
+  const { tenant, endpointSlug, endpoint } = useEndpointContext();
   const create = useCreateEndUser(tenant, endpointSlug);
+  const invite = useCreateInvitation(tenant, endpointSlug);
 
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -195,7 +260,14 @@ function EndUserForm({ onDone }: Readonly<{ readonly onDone: () => void }>) {
   const [roles, setRoles] = useState("");
   const [isPersona, setIsPersona] = useState(false);
   const [patient, setPatient] = useState("");
+  const [setup, setSetup] = useState<"password" | "invite">("password");
 
+  // Asked of a hypothetical enabled local account, since the account does not
+  // exist yet: what is left is whether the endpoint checks local passwords at all.
+  const mayInvite =
+    invitationRefusal(endpoint, { isPersona: false, disabledAt: null }) ===
+    undefined;
+  const inviting = !isPersona && mayInvite && setup === "invite";
   const issues = issuesByField(create.error);
 
   return (
@@ -209,7 +281,9 @@ function EndUserForm({ onDone }: Readonly<{ readonly onDone: () => void }>) {
               username,
               displayName,
               isPersona,
-              ...(isPersona ? {} : { password }),
+              // An invited account is created without a password: its holder
+              // chooses one through the link.
+              ...(isPersona || inviting ? {} : { password }),
               ...(fhirUser.trim().length === 0
                 ? {}
                 : { fhirUserReference: fhirUser.trim() }),
@@ -218,7 +292,22 @@ function EndUserForm({ onDone }: Readonly<{ readonly onDone: () => void }>) {
                 ? {}
                 : { defaultContext: { patient: patient.trim() } }),
             },
-            { onSuccess: () => onDone() },
+            {
+              onSuccess: (user) => {
+                if (!inviting) {
+                  onDone();
+                  return;
+                }
+                invite.mutate(user.id, {
+                  onSuccess: (invitation) => {
+                    onDone({ kind: "issued", user, invitation });
+                  },
+                  onError: (error) => {
+                    onDone({ kind: "failed", user, error });
+                  },
+                });
+              },
+            },
           );
         }}
       >
@@ -244,7 +333,21 @@ function EndUserForm({ onDone }: Readonly<{ readonly onDone: () => void }>) {
           error={issues["displayName"]}
           required
         />
-        {isPersona ? null : (
+        {isPersona || !mayInvite ? null : (
+          <SelectField
+            label="Account setup"
+            value={setup}
+            onChange={(value) => {
+              setSetup(value === "invite" ? "invite" : "password");
+            }}
+            options={[
+              { value: "password", label: "Set a password now" },
+              { value: "invite", label: "Invite by email" },
+            ]}
+            hint="An invitation is a link you send from your own mail client. The person it is for chooses their own password."
+          />
+        )}
+        {isPersona || inviting ? null : (
           <TextField
             label="Password"
             type="password"
@@ -283,9 +386,11 @@ function EndUserForm({ onDone }: Readonly<{ readonly onDone: () => void }>) {
         <FormFooter
           error={create.error}
           issues={issues}
-          pending={create.isPending}
+          pending={create.isPending || invite.isPending}
           submitLabel="Add"
-          onCancel={onDone}
+          onCancel={() => {
+            onDone();
+          }}
         />
       </form>
     </Panel>

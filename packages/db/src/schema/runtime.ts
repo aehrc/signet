@@ -322,6 +322,38 @@ export const endUserSessions = pgTable(
 );
 
 /**
+ * An outstanding invitation to choose the password of one end user account.
+ *
+ * The link an administrator sends carries the token; only its digest is stored, as for
+ * every other bearer credential here. At most one row per account, which is what makes
+ * issuing a new link invalidate the previous one: the row is replaced, not added to.
+ *
+ * Single-use by deletion rather than by `consumed_at`. Redeeming the link deletes the
+ * row in the same statement that finds it, so two concurrent redemptions cannot both
+ * succeed, and a row's presence means exactly "this link still works, until
+ * `expires_at`".
+ */
+export const endUserInvitations = pgTable(
+  "end_user_invitations",
+  {
+    ...endpointAndEndUser(endpoints, endUsers),
+    /** SHA-256 of the token in the link. The token itself is never stored. */
+    tokenHash: text("token_hash").notNull(),
+    ...createdAt(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "end_user_invitations_pk",
+      columns: [table.endUserId],
+    }),
+    uniqueIndex("end_user_invitations_token_hash_unique").on(table.tokenHash),
+    index("end_user_invitations_endpoint_id_idx").on(table.endpointId),
+    index("end_user_invitations_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+/**
  * One round trip to an upstream identity provider.
  *
  * Written when the browser is sent to the provider and consumed when it comes back.
@@ -439,6 +471,11 @@ export type NewJtiReplay = typeof jtiReplay.$inferInsert;
 export type EndUserSession = typeof endUserSessions.$inferSelect;
 /** Values required to insert an end user session. */
 export type NewEndUserSession = typeof endUserSessions.$inferInsert;
+
+/** An end user invitation row as selected. */
+export type EndUserInvitation = typeof endUserInvitations.$inferSelect;
+/** Values required to insert an end user invitation. */
+export type NewEndUserInvitation = typeof endUserInvitations.$inferInsert;
 
 /** A federation round-trip row as selected. */
 export type FederationState = typeof federationStates.$inferSelect;

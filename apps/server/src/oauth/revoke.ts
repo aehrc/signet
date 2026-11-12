@@ -34,9 +34,9 @@ import {
 } from "@signet/db";
 
 import { readTokenRequest } from "./authenticatedEndpoint.js";
-import { requestMetadata } from "../http/requestMeta.js";
 import { formField } from "./grants/index.js";
 import { unverifiedTokenIdentifier } from "./tokenIdentifier.js";
+import { requestMetadata } from "../http/requestMeta.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { Context } from "hono";

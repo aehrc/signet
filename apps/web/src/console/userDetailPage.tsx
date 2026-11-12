@@ -24,6 +24,7 @@ import { ArrowLeftIcon } from "@primer/octicons-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
+import { InvitationPanel } from "./invitationPanel.js";
 import { endpointRoute } from "./routes.js";
 import { roleAllows, useEndpointContext } from "./useConsole.js";
 import { describeError, issuesByField } from "../api/errors.js";
@@ -271,6 +272,10 @@ export function UserDetailPage() {
 
       {current.isPersona || !mayWrite ? null : (
         <SetPasswordPanel userId={current.id} />
+      )}
+
+      {current.isPersona ? null : (
+        <InvitationPanel user={current} mayWrite={mayWrite} />
       )}
 
       {mayWrite ? (
