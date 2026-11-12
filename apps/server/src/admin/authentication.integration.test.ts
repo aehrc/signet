@@ -351,6 +351,31 @@ describe.skipIf(testDatabaseUrl === undefined)(
         expect(body.presets[0]?.policy).toBeDefined();
       });
 
+      it("says which kind of endpoint each preset is for", async () => {
+        // The console offers an endpoint only the presets of its own kind, so a
+        // preset served without its kind is offered nowhere.
+        const response = await adminRequest(stack, "GET", "/api/v1/presets", {
+          credential: await cookie(),
+        });
+
+        const body = (await response.json()) as {
+          presets: { id: string; kind?: unknown }[];
+        };
+        expect(
+          Object.fromEntries(
+            body.presets.map((preset) => [preset.id, preset.kind]),
+          ),
+        ).toEqual({
+          "smart-baseline": "smart",
+          pathling: "smart",
+          aidbox: "smart",
+          firely: "smart",
+          "smile-cdr": "smart",
+          ontoserver: "smart",
+          "oauth-baseline": "oauth",
+        });
+      });
+
       it("does not serve them to an unauthenticated caller", async () => {
         const response = await adminRequest(stack, "GET", "/api/v1/presets");
         expect(response.status).toBe(401);

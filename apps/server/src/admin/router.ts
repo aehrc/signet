@@ -176,6 +176,7 @@ export function createAdminRouter(
     c.json({
       presets: POLICY_PRESETS.map((preset) => ({
         id: preset.id,
+        kind: preset.kind,
         name: preset.name,
         description: preset.description,
         policy: preset.policy,
