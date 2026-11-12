@@ -77,14 +77,19 @@ export function smartOnlyClaimMappings(
  * Finds what a client registration on an OAuth endpoint may not carry.
  *
  * A launch URI is where an EHR launch starts the app, and an OAuth endpoint has no
- * EHR launch. An allowlist entry must be a scope the endpoint's grammar can parse -
- * an RFC 6749 scope-token - since an entry no request could ever match is a typo
- * nobody would otherwise be told about. Clearing the launch URI is always allowed.
+ * EHR launch. A scope must be one the endpoint's grammar can parse - an RFC 6749
+ * scope-token - since an entry no request could ever match is a typo nobody would
+ * otherwise be told about. Clearing the launch URI is always allowed.
+ *
+ * Read from an administrator's client body, whose scopes are `allowedScopes`, and
+ * from a developer portal request, whose scopes are `requestedScopes`; each issue
+ * names the field it was found in.
  *
  * @param kind - The endpoint's kind.
- * @param body - The validated create or patch body.
+ * @param body - The validated client body or portal request.
  * @param body.launchUri - The launch URI, if the request sets one.
  * @param body.allowedScopes - The scope allowlist, if the request sets one.
+ * @param body.requestedScopes - The scopes a portal request asks for.
  * @returns One issue per offending field, empty on a SMART endpoint.
  */
 export function oauthClientIssues(
@@ -92,6 +97,7 @@ export function oauthClientIssues(
   body: {
     readonly launchUri?: string | null | undefined;
     readonly allowedScopes?: readonly string[] | undefined;
+    readonly requestedScopes?: readonly string[] | undefined;
   },
 ): readonly AdminErrorIssue[] {
   if (kind !== "oauth") {
@@ -101,12 +107,15 @@ export function oauthClientIssues(
     body.launchUri === undefined || body.launchUri === null
       ? []
       : [{ path: "launchUri", message: NOT_ON_OAUTH }];
-  const scopes = (body.allowedScopes ?? []).flatMap((raw, index) => {
-    const parsed = parseScope(raw, "oauth");
-    return parsed.ok
-      ? []
-      : [{ path: `allowedScopes.${String(index)}`, message: parsed.message }];
-  });
+  const scopes = (["allowedScopes", "requestedScopes"] as const).flatMap(
+    (field) =>
+      (body[field] ?? []).flatMap((raw, index) => {
+        const parsed = parseScope(raw, "oauth");
+        return parsed.ok
+          ? []
+          : [{ path: `${field}.${String(index)}`, message: parsed.message }];
+      }),
+  );
   return [...launch, ...scopes];
 }
 

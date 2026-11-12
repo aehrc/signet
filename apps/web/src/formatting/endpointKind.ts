@@ -19,7 +19,7 @@
  * Author: John Grimes
  */
 
-import { SMART_ONLY_CAPABILITY_FLAGS } from "@signet/core";
+import { discoveryUrl, SMART_ONLY_CAPABILITY_FLAGS } from "@signet/core";
 
 import { capabilityLabel } from "./values.js";
 
@@ -117,29 +117,37 @@ export interface DiscoveryDocument {
 }
 
 /**
+ * What an endpoint's discovery document is called.
+ *
+ * @param kind - The endpoint's kind, or undefined where it is not known, as on a
+ *   developer portal that has not yet learned it.
+ * @example
+ * discoveryLabel("oauth"); // "OpenID configuration"
+ */
+export function discoveryLabel(kind: EndpointKind | undefined): string {
+  if (kind === undefined) {
+    return "Discovery document";
+  }
+  return kind === "smart" ? "SMART configuration" : "OpenID configuration";
+}
+
+/**
  * The discovery document an endpoint publishes.
  *
  * A SMART endpoint's is its SMART configuration. An OAuth endpoint publishes none -
- * the API answers 404 there - so its OpenID configuration is the one to copy.
+ * the API answers 404 there - so its OpenID configuration is the one to copy. The
+ * URL comes from core's `discoveryUrl`, as the developer portal's does.
  *
- * @param endpoint - The endpoint, of which only the kind, issuer and SMART
- *   configuration URL are read.
+ * @param endpoint - The endpoint, of which only the kind and issuer are read.
  * @example
- * discoveryDocument({ kind: "oauth", issuer, smartConfigurationUrl: null }).label;
- * // "OpenID configuration"
+ * discoveryDocument({ kind: "oauth", issuer }).label; // "OpenID configuration"
  */
 export function discoveryDocument(
-  endpoint: Pick<EndpointView, "kind" | "issuer" | "smartConfigurationUrl">,
+  endpoint: Pick<EndpointView, "kind" | "issuer">,
 ): DiscoveryDocument {
-  if (endpoint.kind === "smart" && endpoint.smartConfigurationUrl !== null) {
-    return {
-      label: "SMART configuration",
-      url: endpoint.smartConfigurationUrl,
-    };
-  }
   return {
-    label: "OpenID configuration",
-    url: `${endpoint.issuer}/.well-known/openid-configuration`,
+    label: discoveryLabel(endpoint.kind),
+    url: discoveryUrl(endpoint.kind, endpoint.issuer),
   };
 }
 

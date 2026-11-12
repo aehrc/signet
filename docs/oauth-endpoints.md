@@ -110,7 +110,9 @@ the same way they do on a SMART endpoint: through a claim rule on the access tok
 ### Discovery
 
 The endpoint serves `{iss}/.well-known/openid-configuration` and answers
-`{iss}/.well-known/smart-configuration` with 404.
+`{iss}/.well-known/smart-configuration` with 404. The console's overview and the
+developer portal both point at the OpenID configuration. The portal refuses a
+request carrying a launch URI or a scope that is not an RFC 6749 scope-token.
 
 ### What is not available
 

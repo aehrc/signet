@@ -16,6 +16,7 @@ export {
   OAUTH_DEFAULT_SCOPES_SUPPORTED,
 } from "./capabilities.js";
 export {
+  discoveryUrl,
   endpointUrls,
   normaliseIssuer,
   type EndpointUrls,

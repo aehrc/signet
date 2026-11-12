@@ -25,6 +25,7 @@
  * Author: John Grimes
  */
 
+import { discoveryUrl } from "@signet/core";
 import {
   AUDIT_ACTION_DESCRIPTIONS,
   isAuditAction,
@@ -90,9 +91,7 @@ export function endpointView(
      * OAuth / OpenID Connect endpoint, which publishes no SMART configuration.
      */
     smartConfigurationUrl:
-      endpoint.kind === "smart"
-        ? `${issuer}/.well-known/smart-configuration`
-        : null,
+      endpoint.kind === "smart" ? discoveryUrl(endpoint.kind, issuer) : null,
     status: endpoint.status,
     authMode: endpoint.authMode,
     consentMode: endpoint.consentMode,

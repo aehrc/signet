@@ -30,6 +30,7 @@
  */
 
 import { clientRequestSchema } from "@signet/contracts";
+import { discoveryUrl } from "@signet/core";
 import {
   createClientRequest,
   findClientRequestByTrackingToken,
@@ -40,6 +41,7 @@ import {
   withTenantScope,
 } from "@signet/db";
 
+import { oauthClientIssues } from "../admin/smartOnly.js";
 import { bearerToken } from "../http/bearer.js";
 import { requestMetadata } from "../http/requestMeta.js";
 
@@ -106,15 +108,21 @@ export function submitClientRequestHandler(context: ServerContext) {
 
     const raw: unknown = await c.req.json().catch(() => ({}));
     const parsed = clientRequestSchema.safeParse(raw);
-    if (!parsed.success) {
+    // On an OAuth endpoint a launch URI, or a scope its grammar cannot parse, is
+    // refused here, so the developer is told rather than the administrator who
+    // would otherwise find it at approval.
+    const issues = parsed.success
+      ? oauthClientIssues(endpoint.kind, parsed.data)
+      : parsed.error.issues.map((issue) => ({
+          path: issue.path.map(String).join("."),
+          message: issue.message,
+        }));
+    if (!parsed.success || issues.length > 0) {
       return c.json(
         {
           error: "invalid_request",
           error_description: "That request is not valid",
-          issues: parsed.error.issues.map((issue) => ({
-            path: issue.path.map(String).join("."),
-            message: issue.message,
-          })),
+          issues,
         },
         400,
       );
@@ -265,7 +273,10 @@ export function clientRequestStatusHandler(context: ServerContext) {
         : {
             /** What the developer needs to configure their app. */
             issuer: issuerContext.issuer,
-            wellKnown: `${issuerContext.issuer}/.well-known/smart-configuration`,
+            wellKnown: discoveryUrl(
+              issuerContext.endpoint.kind,
+              issuerContext.issuer,
+            ),
           }),
     });
   };
@@ -307,7 +318,10 @@ export function clientRegistrationHandler(context: ServerContext) {
       allowedScopes: client.allowedScopes,
       status: client.status,
       issuer: issuerContext.issuer,
-      wellKnown: `${issuerContext.issuer}/.well-known/smart-configuration`,
+      wellKnown: discoveryUrl(
+        issuerContext.endpoint.kind,
+        issuerContext.issuer,
+      ),
     });
   };
 }

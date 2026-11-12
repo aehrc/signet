@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { endpointUrls, normaliseIssuer } from "./endpoints.js";
+import { discoveryUrl, endpointUrls, normaliseIssuer } from "./endpoints.js";
 
 import type { EndpointUrls } from "./endpoints.js";
 
@@ -101,5 +101,19 @@ describe("endpointUrls", () => {
     for (const url of allUrls(urls)) {
       expect(url).toMatch(/^https:\/\/\S+$/);
     }
+  });
+});
+
+describe("discoveryUrl", () => {
+  it("is the SMART configuration on a SMART endpoint", () => {
+    expect(discoveryUrl("smart", ISSUER)).toBe(
+      `${ISSUER}/.well-known/smart-configuration`,
+    );
+  });
+
+  it("is the OpenID configuration on an OAuth endpoint, which has no SMART one", () => {
+    expect(discoveryUrl("oauth", `${ISSUER}/`)).toBe(
+      `${ISSUER}/.well-known/openid-configuration`,
+    );
   });
 });

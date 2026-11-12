@@ -54,7 +54,10 @@ import {
   ShownOnce,
 } from "../components/layout.js";
 import { Chips, StatusBadge } from "../components/table.js";
-import { defaultClientScopes } from "../formatting/endpointKind.js";
+import {
+  defaultClientScopes,
+  discoveryLabel,
+} from "../formatting/endpointKind.js";
 import { toneForStatus } from "../formatting/status.js";
 import { formatInstant } from "../formatting/values.js";
 import { formatList, parseList, parseScopeList } from "../forms/lists.js";
@@ -348,6 +351,10 @@ function StatusPanel({
   onRequestId,
   onTrackingToken,
 }: Readonly<StatusPanelProps>) {
+  // Shared with the request form's query, so this costs no second fetch. Unknown
+  // while it loads, or on an endpoint that takes no requests, and then labelled
+  // generically rather than as a SMART configuration it may not be.
+  const portal = usePortal(tenant, endpoint);
   const [result, setResult] = useState<
     | {
         readonly request: PortalRequestView;
@@ -445,7 +452,7 @@ function StatusPanel({
               </DetailRow>
             )}
             {result.wellKnown === undefined ? null : (
-              <DetailRow label="SMART configuration">
+              <DetailRow label={discoveryLabel(portal.data?.endpointKind)}>
                 <CopyableValue value={result.wellKnown} label="discovery URL" />
               </DetailRow>
             )}

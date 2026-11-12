@@ -59,3 +59,13 @@ describe("oauthClientIssues", () => {
     ).toEqual([]);
   });
 });
+
+describe("oauthClientIssues on a developer portal request", () => {
+  it("refuses requested scopes that are not scope-tokens, by their own field", () => {
+    expect(
+      oauthClientIssues("oauth", {
+        requestedScopes: ["openid", 'bad scope"'],
+      }).map((issue) => issue.path),
+    ).toEqual(["requestedScopes.1"]);
+  });
+});

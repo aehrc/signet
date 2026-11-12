@@ -14,6 +14,7 @@ import {
   capabilityLabelFor,
   defaultClientScopes,
   discoveryDocument,
+  discoveryLabel,
   ENDPOINT_KIND_OPTIONS,
   endpointKindLabel,
   presetsFor,
@@ -74,8 +75,6 @@ describe("discoveryDocument", () => {
       discoveryDocument({
         kind: "smart",
         issuer: "https://signet.example.org/t/demo/e/fhir",
-        smartConfigurationUrl:
-          "https://signet.example.org/t/demo/e/fhir/.well-known/smart-configuration",
       }),
     ).toEqual({
       label: "SMART configuration",
@@ -88,12 +87,24 @@ describe("discoveryDocument", () => {
       discoveryDocument({
         kind: "oauth",
         issuer: "https://signet.example.org/t/demo/e/api",
-        smartConfigurationUrl: null,
       }),
     ).toEqual({
       label: "OpenID configuration",
       url: "https://signet.example.org/t/demo/e/api/.well-known/openid-configuration",
     });
+  });
+});
+
+describe("discoveryLabel", () => {
+  it("names each kind's discovery document", () => {
+    expect(discoveryLabel("smart")).toBe("SMART configuration");
+    expect(discoveryLabel("oauth")).toBe("OpenID configuration");
+  });
+
+  it("names it generically while the kind is unknown", () => {
+    // The developer portal can show a request's status before, or without, learning
+    // the endpoint's kind, and must not call an OpenID configuration a SMART one.
+    expect(discoveryLabel(undefined)).toBe("Discovery document");
   });
 });
 

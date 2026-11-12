@@ -110,6 +110,69 @@ function redirectedError(response: Response): string | null {
   return new URL(location).searchParams.get("error");
 }
 
+/** Files a developer portal request, with any fields overridden. */
+async function submitPortalRequest(
+  stack: TestStack,
+  extra: Record<string, unknown> = {},
+): Promise<Response> {
+  return await stack.app.request(`${issuerPath(stack)}/apps/requests`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "Portal App",
+      contactEmail: "dev@example.org",
+      clientType: "public",
+      redirectUris: ["https://portal-app.test/cb"],
+      requestedScopes: ["openid"],
+      ...extra,
+    }),
+  });
+}
+
+/**
+ * The discovery URLs the developer portal gives a developer whose request was
+ * approved: one from the request's status, one from the app's registration.
+ */
+async function portalDiscoveryUrls(stack: TestStack): Promise<string[]> {
+  const filed = (await (await submitPortalRequest(stack)).json()) as {
+    request: { id: string };
+    trackingToken: string;
+  };
+  await adminJson(
+    stack,
+    "POST",
+    endpointPath(stack, `/client-requests/${filed.request.id}/approve`),
+    { credential: { cookie: await stack.signIn() }, body: {} },
+  );
+  const status = (await (
+    await stack.app.request(
+      `${issuerPath(stack)}/apps/requests/${filed.request.id}`,
+      { headers: { authorization: `Bearer ${filed.trackingToken}` } },
+    )
+  ).json()) as { clientId: string; wellKnown: string };
+  const registration = (await (
+    await stack.app.request(
+      `${issuerPath(stack)}/apps/registration/${status.clientId}`,
+    )
+  ).json()) as { wellKnown: string };
+  return [status.wellKnown, registration.wellKnown];
+}
+
+/**
+ * Asserts every URL is the named discovery document and that the endpoint serves it.
+ */
+async function expectServedDiscovery(
+  stack: TestStack,
+  urls: readonly string[],
+  document: "openid-configuration" | "smart-configuration",
+): Promise<void> {
+  for (const url of urls) {
+    expect(url).toBe(`${stack.issuer}/.well-known/${document}`);
+    const served = await stack.app.request(new URL(url).pathname);
+    expect(served.status).toBe(200);
+  }
+}
+
 describeWithDatabase("an OAuth / OpenID Connect endpoint", () => {
   let stack: TestStack;
 
@@ -498,6 +561,32 @@ describeWithDatabase("an OAuth / OpenID Connect endpoint", () => {
       const body = (await response.json()) as { endpointKind: string };
       expect(body.endpointKind).toBe("oauth");
     });
+
+    it("points an approved developer at the OpenID configuration", async () => {
+      // The endpoint publishes no SMART configuration, so a portal pointing there
+      // would hand the developer a 404.
+      await expectServedDiscovery(
+        stack,
+        await portalDiscoveryUrls(stack),
+        "openid-configuration",
+      );
+    });
+
+    it("refuses a portal request with a launch URI or a scope that is not a scope-token", async () => {
+      const withLaunch = await submitPortalRequest(stack, {
+        launchUri: "https://portal-app.test/launch",
+      });
+      expect(withLaunch.status).toBe(400);
+      expect(JSON.stringify(await withLaunch.json())).toContain("launchUri");
+
+      const withBadScope = await submitPortalRequest(stack, {
+        requestedScopes: ["openid", 'bad scope"'],
+      });
+      expect(withBadScope.status).toBe(400);
+      expect(JSON.stringify(await withBadScope.json())).toContain(
+        "requestedScopes.1",
+      );
+    });
   });
 
   describe("the admin API", () => {
@@ -797,6 +886,14 @@ describeWithDatabase("a SMART on FHIR endpoint, on the same questions", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ endpointKind: "smart" });
+  });
+
+  it("points an approved developer at the SMART configuration", async () => {
+    await expectServedDiscovery(
+      stack,
+      await portalDiscoveryUrls(stack),
+      "smart-configuration",
+    );
   });
 
   it("describes no scopes by rule at consent", async () => {
