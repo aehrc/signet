@@ -17,6 +17,7 @@ import {
 import { formatScope, parseScope } from "../scopes/index.js";
 
 import type { PolicyDocument, PolicyIssue, PolicyValidation } from "./types.js";
+import type { EndpointKind } from "../endpointKind.js";
 
 const TOP_LEVEL_KEYS: readonly string[] = [
   "version",
@@ -99,7 +100,13 @@ interface Context {
   readonly issues: PolicyIssue[];
   /** Rule ids seen so far, mapped to where they were first used. */
   readonly ids: Map<string, string>;
+  /** The kind of endpoint the policy is for, which decides the scope grammar. */
+  readonly kind: EndpointKind;
 }
+
+/** Why launch context cannot be named in an OAuth endpoint's policy. */
+const NO_LAUNCH_CONTEXT =
+  "An OAuth / OpenID Connect endpoint has no launch context to require";
 
 /** Records one issue. */
 function add(ctx: Context, path: string, message: string): void {
@@ -182,17 +189,29 @@ function checkBoolean(ctx: Context, value: unknown, path: string): void {
 /**
  * Explains why a `match` or `forEachScope` expression is unusable.
  *
- * An expression is either a resource pattern, or the canonical form of a scope
- * that is compared for exact equality - which is how non-resource scopes such
- * as `openid` and `launch/patient` are matched. A scope written in a
- * non-canonical form (a v1 suffix, say) would never compare equal, so it is
- * reported with the form to use instead.
+ * On a SMART endpoint an expression is either a resource pattern, or the
+ * canonical form of a scope that is compared for exact equality - which is how
+ * non-resource scopes such as `openid` and `launch/patient` are matched. A scope
+ * written in a non-canonical form (a v1 suffix, say) would never compare equal,
+ * so it is reported with the form to use instead.
+ *
+ * On an OAuth endpoint there are no patterns: an expression is one scope-token,
+ * compared for exact equality.
  */
-function matchExpressionIssue(value: string): string | undefined {
+function matchExpressionIssue(
+  value: string,
+  kind: EndpointKind,
+): string | undefined {
+  if (kind === "oauth") {
+    const parsed = parseScope(value, "oauth");
+    return parsed.ok
+      ? undefined
+      : `"${value}" is not a scope: ${parsed.message}`;
+  }
   if (parseScopePattern(value) !== undefined) {
     return undefined;
   }
-  const parsed = parseScope(value);
+  const parsed = parseScope(value, "smart");
   if (!parsed.ok) {
     return `"${value}" is not a scope pattern or a scope: ${parsed.message}`;
   }
@@ -213,7 +232,7 @@ function checkMatchExpression(
     add(ctx, path, "Must be a non-empty scope pattern");
     return;
   }
-  const issue = matchExpressionIssue(value);
+  const issue = matchExpressionIssue(value, ctx.kind);
   if (issue !== undefined) {
     add(ctx, path, issue);
   }
@@ -318,7 +337,16 @@ function checkCondition(ctx: Context, value: unknown, path: string): void {
   if (value["scope"] !== undefined) {
     checkMatchExpression(ctx, value["scope"], `${path}.scope`);
   }
-  checkEnumArray(ctx, value["context"], LAUNCH_CONTEXT_KEYS, `${path}.context`);
+  if (ctx.kind === "oauth" && value["context"] !== undefined) {
+    add(ctx, `${path}.context`, NO_LAUNCH_CONTEXT);
+  } else {
+    checkEnumArray(
+      ctx,
+      value["context"],
+      LAUNCH_CONTEXT_KEYS,
+      `${path}.context`,
+    );
+  }
   checkEnumArray(ctx, value["grantTypes"], GRANT_TYPES, `${path}.grantTypes`);
   checkEnumArray(
     ctx,
@@ -408,10 +436,18 @@ function checkDefaults(ctx: Context, value: unknown): void {
  * whether a path resolves depends on the authorization being evaluated, and an
  * unresolved path is a dropped claim rather than an error.
  *
+ * The scope grammar, and so what a rule may name, follows the kind of endpoint:
+ * an OAuth endpoint's policy names opaque scopes exactly, may not narrow, and
+ * may not require launch context, because it has none.
+ *
  * @param input - Parsed JSON, of unknown shape.
+ * @param kind - The kind of endpoint the policy is for.
  * @returns The document, narrowed to {@link PolicyDocument}, or the issues found.
  */
-export function validatePolicy(input: unknown): PolicyValidation {
+export function validatePolicy(
+  input: unknown,
+  kind: EndpointKind,
+): PolicyValidation {
   if (!isRecord(input)) {
     return {
       ok: false,
@@ -419,7 +455,7 @@ export function validatePolicy(input: unknown): PolicyValidation {
     };
   }
 
-  const ctx: Context = { issues: [], ids: new Map<string, string>() };
+  const ctx: Context = { issues: [], ids: new Map<string, string>(), kind };
 
   checkKeys(ctx, input, TOP_LEVEL_KEYS, "");
 
@@ -440,13 +476,23 @@ export function validatePolicy(input: unknown): PolicyValidation {
       }
       if (rule["narrow"] !== undefined && typeof rule["narrow"] !== "boolean") {
         add(ctx, `${path}.narrow`, "Must be a boolean");
+      } else if (kind === "oauth" && rule["narrow"] === true) {
+        add(
+          ctx,
+          `${path}.narrow`,
+          "An OAuth / OpenID Connect scope is opaque, so there is nothing to narrow it to",
+        );
       }
-      checkEnumArray(
-        ctx,
-        rule["requireContext"],
-        REQUIRE_CONTEXT_KEYS,
-        `${path}.requireContext`,
-      );
+      if (kind === "oauth" && rule["requireContext"] !== undefined) {
+        add(ctx, `${path}.requireContext`, NO_LAUNCH_CONTEXT);
+      } else {
+        checkEnumArray(
+          ctx,
+          rule["requireContext"],
+          REQUIRE_CONTEXT_KEYS,
+          `${path}.requireContext`,
+        );
+      }
       checkStringArray(ctx, rule["requireUserRole"], `${path}.requireUserRole`);
       checkEnumArray(
         ctx,

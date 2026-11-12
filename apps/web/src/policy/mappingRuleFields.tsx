@@ -25,10 +25,11 @@ import { PatternField } from "./patternField.js";
 import { ListField, TextField } from "../components/fields.js";
 import { formatList, parseList } from "../forms/lists.js";
 
-import type { ScopeMappingRule } from "@signet/core";
+import type { EndpointKind, ScopeMappingRule } from "@signet/core";
 
 interface MappingRuleFieldsProps {
   readonly rule: ScopeMappingRule;
+  readonly kind: EndpointKind;
   readonly disabled: boolean;
   readonly onChange: (rule: ScopeMappingRule) => void;
 }
@@ -36,6 +37,7 @@ interface MappingRuleFieldsProps {
 /** The fields of one scope mapping rule. */
 export function MappingRuleFields({
   rule,
+  kind,
   disabled,
   onChange,
 }: Readonly<MappingRuleFieldsProps>) {
@@ -44,6 +46,7 @@ export function MappingRuleFields({
       <PatternField
         label="For each granted scope matching"
         value={rule.forEachScope}
+        kind={kind}
         disabled={disabled}
         hint="Fires when the scope shares at least one permission with this pattern - unlike a grant rule, where the scope's permissions must be a subset. So */*.r fires for patient/Observation.rs."
         onChange={(forEachScope) => {
@@ -66,7 +69,11 @@ export function MappingRuleFields({
         value={formatList(rule.values)}
         disabled={disabled}
         rows={3}
-        hint="One template per line, evaluated with `scope` bound to the matching scope. Use {{ scope.resourceTypeSuffix }} to get `:Observation` for a typed scope and nothing for a wildcard, so one template covers both."
+        hint={
+          kind === "smart"
+            ? "One template per line, evaluated with `scope` bound to the matching scope. Use {{ scope.resourceTypeSuffix }} to get `:Observation` for a typed scope and nothing for a wildcard, so one template covers both."
+            : "One template per line. Each is appended to the claim when the scope above is granted."
+        }
         onChange={(text) => {
           onChange({ ...rule, values: parseList(text) });
         }}

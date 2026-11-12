@@ -26,6 +26,7 @@ import { authorizeHandler } from "./authorize.js";
 import {
   clientRegistrationHandler,
   clientRequestStatusHandler,
+  portalEndpointHandler,
   submitClientRequestHandler,
 } from "./developerPortal.js";
 import {
@@ -101,15 +102,7 @@ export function createOAuthRouter(
   // can explain itself.
   // Limited by client address: every request writes a session row, and it is
   // reachable with no credential at all. See `../http/rateLimit.js`.
-  router.use(
-    path("/authorize"),
-    rateLimit(
-      "authorize",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
-  );
+  router.use(path("/authorize"), rateLimit("authorize", context));
   router.get(path("/authorize"), authorizeHandler(context));
   router.post(path("/authorize"), authorizeHandler(context));
 
@@ -118,42 +111,22 @@ export function createOAuthRouter(
   router.use(path("/introspect"), tokenCors);
   router.post(
     path("/token"),
-    rateLimit(
-      "token",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("token", context),
     tokenHandler(context),
   );
   router.post(
     path("/introspect"),
-    rateLimit(
-      "token",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("token", context),
     introspectHandler(context),
   );
   router.post(
     path("/revoke"),
-    rateLimit(
-      "token",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("token", context),
     revokeHandler(context),
   );
   router.post(
     path("/launch-context"),
-    rateLimit(
-      "token",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("token", context),
     launchContextHandler(context),
   );
   router.get(path("/userinfo"), userinfoHandler(context));
@@ -163,12 +136,7 @@ export function createOAuthRouter(
   // limit's own documentation for why that is the number.
   router.post(
     path("/interaction/:sessionId/login"),
-    rateLimit(
-      "signIn",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("signIn", context),
     interactionLoginHandler(context),
   );
   router.post(
@@ -184,22 +152,12 @@ export function createOAuthRouter(
   // browser navigations rather than fetches, so neither gets CORS headers.
   router.get(
     path("/federation/start"),
-    rateLimit(
-      "federation",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("federation", context),
     federationStartHandler(context),
   );
   router.get(
     path("/federation/callback"),
-    rateLimit(
-      "federation",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("federation", context),
     federationCallbackHandler(context),
   );
 
@@ -210,12 +168,7 @@ export function createOAuthRouter(
   // the same address was guessing passwords.
   router.post(
     path("/manage/session"),
-    rateLimit(
-      "signIn",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("signIn", context),
     manageSignInHandler(context),
   );
   router.delete(path("/manage/session"), manageSignOutHandler(context));
@@ -232,16 +185,7 @@ export function createOAuthRouter(
     ["/invitation/details", invitationDetailsHandler(context)],
     ["/invitation/accept", invitationAcceptHandler(context)],
   ] as const) {
-    router.post(
-      path(suffix),
-      rateLimit(
-        "signIn",
-        context.clock,
-        context.rateLimits,
-        context.config.trustedProxyCount,
-      ),
-      handler,
-    );
+    router.post(path(suffix), rateLimit("signIn", context), handler);
   }
 
   // Vouched dynamic client registration. Off unless the endpoint names a trust
@@ -255,24 +199,15 @@ export function createOAuthRouter(
   // way, so nothing is disclosed by limiting first.
   router.post(
     path("/register"),
-    rateLimit(
-      "register",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("register", context),
     registerHandler(context),
   );
 
   // The developer portal. Off unless the endpoint accepts self-serve requests.
+  router.get(path("/apps/endpoint"), portalEndpointHandler);
   router.post(
     path("/apps/requests"),
-    rateLimit(
-      "clientRequest",
-      context.clock,
-      context.rateLimits,
-      context.config.trustedProxyCount,
-    ),
+    rateLimit("clientRequest", context),
     submitClientRequestHandler(context),
   );
   router.get(

@@ -27,35 +27,39 @@
 
 import { useState } from "react";
 
-import { insertVariable, TEMPLATE_VARIABLES } from "./variables.js";
+import { conditionOptions } from "./rules.js";
+import { insertVariable, variablesFor } from "./variables.js";
 import { SelectField, TextField } from "../components/fields.js";
 
-import type { ClaimRule, ContextRule, RuleCondition } from "@signet/core";
+import type { ConditionKind } from "./rules.js";
+import type { TemplateVariable } from "./variables.js";
+import type {
+  ClaimRule,
+  ContextRule,
+  EndpointKind,
+  RuleCondition,
+} from "@signet/core";
 
 /** A rule that emits claims. Both kinds have `emit`; only one has a condition. */
 type EmittingRule = ClaimRule | ContextRule;
 
 interface ClaimRuleFieldsProps {
   readonly rule: EmittingRule;
+  /**
+   * The endpoint's kind. An OAuth endpoint has no launch context, so neither the
+   * context condition nor the context variables are offered there.
+   */
+  readonly kind: EndpointKind;
   readonly disabled: boolean;
   /** Context rules may omit their condition entirely, and usually do. */
   readonly withCondition: boolean;
   readonly onChange: (rule: EmittingRule) => void;
 }
 
-/** The condition shapes the builder offers, in the order they are usually wanted. */
-const CONDITION_KINDS = [
-  { value: "always", label: "Always" },
-  { value: "hasUser", label: "When there is a signed-in user" },
-  { value: "noUser", label: "When there is no user (a backend service)" },
-  { value: "scope", label: "When a granted scope matches a pattern" },
-  { value: "context", label: "When the launch context has a value" },
-] as const;
-
 /** Which of the offered shapes a condition is, or undefined for one that is none. */
 function conditionKind(
   condition: RuleCondition | undefined,
-): (typeof CONDITION_KINDS)[number]["value"] | undefined {
+): ConditionKind | undefined {
   if (condition === undefined || condition.always === true) {
     return "always";
   }
@@ -77,17 +81,18 @@ function conditionKind(
 /** The fields of one claim or context rule. */
 export function ClaimRuleFields({
   rule,
+  kind,
   disabled,
   withCondition,
   onChange,
 }: Readonly<ClaimRuleFieldsProps>) {
   const condition = "when" in rule ? rule.when : undefined;
-  const kind = conditionKind(condition);
+  const shape = conditionKind(condition);
 
   return (
     <>
       {withCondition ? (
-        kind === undefined ? (
+        shape === undefined ? (
           <p className="text-warning text-xs max-sm:text-base">
             This rule&apos;s condition combines fields the builder does not
             offer. Edit it in the code view; nothing here will change it.
@@ -96,28 +101,32 @@ export function ClaimRuleFields({
           <>
             <SelectField
               label="When"
-              value={kind}
+              value={shape}
               disabled={disabled}
-              options={[...CONDITION_KINDS]}
+              options={conditionOptions(kind)}
               onChange={(next) => {
                 onChange({
                   ...rule,
-                  when: conditionFor(next as typeof kind, condition),
+                  when: conditionFor(next as ConditionKind, condition, kind),
                 });
               }}
             />
-            {kind === "scope" ? (
+            {shape === "scope" ? (
               <TextField
-                label="Scope pattern"
+                label={kind === "smart" ? "Scope pattern" : "Scope"}
                 value={condition?.scope ?? ""}
                 disabled={disabled}
-                hint="At least one granted scope must fall within this pattern, e.g. patient/*.rs."
+                hint={
+                  kind === "smart"
+                    ? "At least one granted scope must fall within this pattern, e.g. patient/*.rs."
+                    : "This exact scope must have been granted, e.g. orders:read."
+                }
                 onChange={(scope) => {
                   onChange({ ...rule, when: { scope } });
                 }}
               />
             ) : null}
-            {kind === "context" ? (
+            {shape === "context" ? (
               <TextField
                 label="Launch context keys"
                 value={(condition?.context ?? []).join(" ")}
@@ -142,6 +151,7 @@ export function ClaimRuleFields({
 
       <EmitRows
         emit={rule.emit}
+        variables={variablesFor(kind)}
         disabled={disabled}
         onChange={(emit) => {
           onChange({ ...rule, emit } as EmittingRule);
@@ -153,10 +163,11 @@ export function ClaimRuleFields({
 
 /** Builds the condition for a chosen shape, keeping what still applies. */
 function conditionFor(
-  kind: (typeof CONDITION_KINDS)[number]["value"],
+  shape: ConditionKind,
   previous: RuleCondition | undefined,
+  kind: EndpointKind,
 ): RuleCondition {
-  switch (kind) {
+  switch (shape) {
     case "always": {
       return { always: true };
     }
@@ -167,7 +178,10 @@ function conditionFor(
       return { hasUser: false };
     }
     case "scope": {
-      return { scope: previous?.scope ?? "patient/*.rs" };
+      // A SMART pattern to start from; on an OAuth endpoint the scope is named.
+      return {
+        scope: previous?.scope ?? (kind === "smart" ? "patient/*.rs" : ""),
+      };
     }
     case "context": {
       return { context: previous?.context ?? ["patient"] };
@@ -177,12 +191,19 @@ function conditionFor(
 
 interface EmitRowsProps {
   readonly emit: Readonly<Record<string, unknown>>;
+  /** What the inserter beside each value offers. */
+  readonly variables: readonly TemplateVariable[];
   readonly disabled: boolean;
   readonly onChange: (emit: Readonly<Record<string, unknown>>) => void;
 }
 
 /** The claims a rule emits, as editable rows. */
-function EmitRows({ emit, disabled, onChange }: Readonly<EmitRowsProps>) {
+function EmitRows({
+  emit,
+  variables,
+  disabled,
+  onChange,
+}: Readonly<EmitRowsProps>) {
   const [newName, setNewName] = useState("");
   const entries = Object.entries(emit);
 
@@ -208,6 +229,7 @@ function EmitRows({ emit, disabled, onChange }: Readonly<EmitRowsProps>) {
                   <ValueField
                     name={name}
                     value={value}
+                    variables={variables}
                     disabled={disabled}
                     onChange={(next) => {
                       onChange({ ...emit, [name]: next });
@@ -269,6 +291,7 @@ function EmitRows({ emit, disabled, onChange }: Readonly<EmitRowsProps>) {
 interface ValueFieldProps {
   readonly name: string;
   readonly value: string;
+  readonly variables: readonly TemplateVariable[];
   readonly disabled: boolean;
   readonly onChange: (value: string) => void;
 }
@@ -277,6 +300,7 @@ interface ValueFieldProps {
 function ValueField({
   name,
   value,
+  variables,
   disabled,
   onChange,
 }: Readonly<ValueFieldProps>) {
@@ -314,7 +338,7 @@ function ValueField({
           }}
         >
           <option value="">Insert…</option>
-          {TEMPLATE_VARIABLES.map((variable) => (
+          {variables.map((variable) => (
             <option
               key={variable.path}
               value={variable.path}

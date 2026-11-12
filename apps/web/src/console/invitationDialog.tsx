@@ -14,7 +14,8 @@
  * way out.
  *
  * The email address is used for the `mailto:` link's recipient and nothing else. It
- * is never sent to Signet and never stored.
+ * starts as the account's own address where one is recorded - only an OAuth endpoint
+ * records one - and what is typed here is never sent to Signet and never stored.
  *
  * Author: John Grimes
  */
@@ -40,6 +41,8 @@ interface InvitationDialogProps {
   readonly invitation: IssuedInvitationView;
   readonly username: string;
   readonly endpointName: string;
+  /** The account's recorded email address, or null where it has none. */
+  readonly recipient: string | null;
   readonly onClose: () => void;
 }
 
@@ -49,9 +52,10 @@ export function InvitationDialog({
   username,
   endpointName,
   onClose,
+  recipient,
 }: Readonly<InvitationDialogProps>) {
   const headingId = useId();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(recipient ?? "");
   const [copy, setCopy] = useState<CopyState>({ kind: "idle" });
 
   const copyLink = async () => {

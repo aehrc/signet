@@ -429,7 +429,13 @@ export function ConsentPage() {
 
   const state = interaction.data;
   const scopes =
-    state === undefined ? [] : describeScopes(state.requestedScopes);
+    state === undefined
+      ? []
+      : describeScopes(
+          state.requestedScopes,
+          state.endpointKind,
+          state.scopeDescriptions,
+        );
   const patient =
     state?.resolvedContext === null || state?.resolvedContext === undefined
       ? undefined
@@ -486,7 +492,8 @@ export function ConsentPage() {
         ))}
       </ul>
 
-      {state !== undefined && includesWrites(state.requestedScopes) ? (
+      {state !== undefined &&
+      includesWrites(state.requestedScopes, state.endpointKind) ? (
         <InfoAlert>
           Some of this permits the app to add to, change or delete information
           in your record - not only to read it.

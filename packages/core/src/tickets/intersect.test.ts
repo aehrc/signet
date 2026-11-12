@@ -31,7 +31,7 @@ import type { Scope } from "../scopes/types.js";
 
 /** Parses a space-delimited scope string, throwing on anything unparseable. */
 function scopes(value: string): readonly Scope[] {
-  const parsed = parseScopes(value);
+  const parsed = parseScopes(value, "smart");
   const rejected = parsed.rejected[0];
   if (rejected !== undefined) {
     throw new Error(`the fixture scope "${rejected.raw}" does not parse`);
@@ -60,7 +60,8 @@ function exchangeContext(requested: readonly Scope[]): EvaluationContext {
       tenantSlug: "demo",
       slug: "fhir",
       issuer: "https://signet.test/t/demo/e/fhir",
-      fhirBaseUrl: "https://fhir.test/R4",
+      kind: "smart",
+      audience: "https://fhir.test/R4",
     },
     client: {
       clientId: "app",

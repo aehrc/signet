@@ -35,11 +35,14 @@ import { attributeStringList } from "@signet/core";
 import { changedFields, formatList, parseList } from "./lists.js";
 
 import type { EndUserView } from "../api/types.js";
+import type { EndpointKind } from "@signet/core";
 
 /** The flat, all-text shape the user edit form holds. */
 export interface EndUserFormValues {
   readonly displayName: string;
   readonly fhirUser: string;
+  readonly email: string;
+  readonly emailVerified: boolean;
   /** Roles, one per line. */
   readonly roles: string;
   readonly defaultPatient: string;
@@ -145,6 +148,8 @@ export function endUserFormValues(user: EndUserView): EndUserFormValues {
   return {
     displayName: user.displayName,
     fhirUser: user.fhirUser ?? "",
+    email: user.email ?? "",
+    emailVerified: user.emailVerified,
     roles: formatList(user.roles),
     defaultPatient: contextField("patient"),
     defaultEncounter: contextField("encounter"),
@@ -172,6 +177,7 @@ export function endUserPatch(
   current: EndUserView,
 ): Record<string, unknown> {
   const fhirUser = edited.fhirUser.trim();
+  const email = edited.email.trim();
 
   const patch: Record<string, unknown> = changedFields<Record<string, unknown>>(
     {
@@ -179,11 +185,15 @@ export function endUserPatch(
       // Null rather than "": the API reads the first as "clear this" and refuses
       // the second, which is not a distinction the operator should have to make.
       fhirUserReference: fhirUser.length === 0 ? null : fhirUser,
+      email: email.length === 0 ? null : email,
+      emailVerified: edited.emailVerified,
       roles: parseList(edited.roles),
     },
     {
       displayName: current.displayName,
       fhirUserReference: current.fhirUser,
+      email: current.email,
+      emailVerified: current.emailVerified,
       roles: [...current.roles],
     },
   );
@@ -207,4 +217,66 @@ export function endUserPatch(
   }
 
   return patch;
+}
+
+/** The flat, all-text shape the add-user form holds. */
+export interface EndUserCreateForm {
+  readonly username: string;
+  readonly displayName: string;
+  /** Ignored for a persona, which has none, and for an invited account. */
+  readonly password: string;
+  readonly isPersona: boolean;
+  /** Whether the account's holder chooses its password through an invitation link. */
+  readonly invite: boolean;
+  readonly fhirUser: string;
+  readonly email: string;
+  readonly emailVerified: boolean;
+  /** Roles, one per line. */
+  readonly roles: string;
+  readonly defaultPatient: string;
+}
+
+/**
+ * Builds the request body for a new user on an endpoint of a kind.
+ *
+ * A blank field is left out rather than sent empty. Fields belong to one kind: a
+ * `fhirUser` reference and a default launch context only to a SMART endpoint, and an
+ * email address only to an OAuth one, where the `email` scope releases it. The other
+ * kind's fields are dropped even if the form holds a value for them, because the API
+ * refuses them there and the form never showed them.
+ *
+ * @param form - The form's current values.
+ * @param kind - The endpoint's kind.
+ * @returns The body to POST.
+ * @example
+ * endUserCreateBody({ ...form, email: "jo@example.org" }, "oauth").email;
+ * // "jo@example.org"
+ */
+export function endUserCreateBody(
+  form: EndUserCreateForm,
+  kind: EndpointKind,
+): Record<string, unknown> {
+  const fhirUser = form.fhirUser.trim();
+  const email = form.email.trim();
+  const patient = form.defaultPatient.trim();
+  const roles = parseList(form.roles);
+
+  return {
+    username: form.username,
+    displayName: form.displayName,
+    isPersona: form.isPersona,
+    // An invited account is created without a password: its holder chooses one
+    // through the link.
+    ...(form.isPersona || form.invite ? {} : { password: form.password }),
+    ...(roles.length === 0 ? {} : { roles }),
+    ...(kind === "smart" && fhirUser.length > 0
+      ? { fhirUserReference: fhirUser }
+      : {}),
+    ...(kind === "smart" && form.isPersona && patient.length > 0
+      ? { defaultContext: { patient } }
+      : {}),
+    ...(kind === "oauth" && email.length > 0
+      ? { email, emailVerified: form.emailVerified }
+      : {}),
+  };
 }

@@ -69,7 +69,8 @@ export async function clientCredentialsGrant(
     );
   }
 
-  const parsed = parseScopes(raw);
+  const { kind } = issuerContext.endpoint;
+  const parsed = parseScopes(raw, kind);
   const firstRejected = parsed.rejected[0];
   if (firstRejected !== undefined) {
     return grantRefusal(
@@ -85,7 +86,7 @@ export async function clientCredentialsGrant(
   // backend service never visits `/authorize`, so without this its only ceiling
   // would be the policy - and the allowlist is the per-client ceiling an operator
   // edits, while the policy is shared by the endpoint.
-  const allowed = parseScopes(client.allowedScopes.join(" ")).scopes;
+  const allowed = parseScopes(client.allowedScopes.join(" "), kind).scopes;
   if (!areScopesCoveredBy(parsed.scopes, allowed)) {
     return grantRefusal(
       "invalid_scope",

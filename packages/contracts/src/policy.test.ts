@@ -9,7 +9,9 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { policyDocumentSchema, policyIssuePath } from "./policy.js";
+import { policyDocumentSchemaFor, policyIssuePath } from "./policy.js";
+
+const policyDocumentSchema = policyDocumentSchemaFor("smart");
 
 describe("policyIssuePath", () => {
   it("treats the empty path as the document itself", () => {
@@ -46,7 +48,7 @@ describe("policyIssuePath", () => {
   });
 });
 
-describe("policyDocumentSchema", () => {
+describe("policyDocumentSchemaFor", () => {
   const valid = {
     version: 1,
     scopeGrants: [{ match: "patient/*.rs", allow: true }],
@@ -80,5 +82,16 @@ describe("policyDocumentSchema", () => {
 
   it("refuses a document that is not an object", () => {
     expect(policyDocumentSchema.safeParse("nope").success).toBe(false);
+  });
+
+  it("validates under the scope grammar of the endpoint's kind", () => {
+    const oauth = {
+      ...valid,
+      scopeGrants: [{ match: "orders:read", allow: true }],
+    };
+    expect(policyDocumentSchemaFor("oauth").safeParse(oauth).success).toBe(
+      true,
+    );
+    expect(policyDocumentSchema.safeParse(oauth).success).toBe(false);
   });
 });

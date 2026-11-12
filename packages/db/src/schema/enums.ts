@@ -25,6 +25,12 @@ export const tenantMemberRoleEnum = pgEnum("tenant_member_role", [
   "viewer",
 ]);
 
+/**
+ * What an endpoint secures, fixed at creation: a SMART on FHIR issuer in front of
+ * a FHIR server, or a plain OAuth 2.0 / OpenID Connect issuer for any other API.
+ */
+export const endpointKindEnum = pgEnum("endpoint_kind", ["smart", "oauth"]);
+
 /** How end users authenticate on an endpoint. */
 export const endpointAuthModeEnum = pgEnum("endpoint_auth_mode", [
   "local",

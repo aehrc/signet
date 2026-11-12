@@ -109,16 +109,30 @@ export const DEFAULT_SCOPES_SUPPORTED: readonly string[] =
   formatScopes(DEFAULT_SCOPES).split(" ");
 
 /**
- * The capability profile of a typical Signet endpoint: both launch modes, all
- * three client types, OpenID Connect, and read/search access.
+ * The default `scopes_supported` list of an OAuth / OpenID Connect endpoint: the
+ * scopes the OAuth baseline preset grants. An operator adds the API's own scopes
+ * once there are rules granting them.
+ */
+export const OAUTH_DEFAULT_SCOPES_SUPPORTED: readonly string[] = [
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+];
+
+/**
+ * The capability profile of a typical Signet endpoint: SMART on FHIR, both
+ * launch modes, all three client types, OpenID Connect, and read/search access.
  *
  * Dynamic registration is deliberately off - it is opt-in per tenant - and so
  * is app state, which needs storage that not every deployment provides.
  */
 export const DEFAULT_ENDPOINT_CAPABILITIES: Omit<
   EndpointCapabilityConfig,
-  "issuer" | "fhirBaseUrl"
+  "issuer" | "audience"
 > = {
+  kind: "smart",
+
   supportsEhrLaunch: true,
   supportsStandaloneLaunch: true,
   supportsAuthorizePost: true,
@@ -156,18 +170,18 @@ export const DEFAULT_ENDPOINT_CAPABILITIES: Omit<
  * to state the parts that are genuinely tenant-specific.
  *
  * @param issuer - The tenant's issuer identifier.
- * @param fhirBaseUrl - The FHIR server this endpoint protects.
+ * @param audience - The resource server this endpoint protects.
  * @param overrides - Any flags to change from the defaults.
  */
 export function defaultEndpointCapabilities(
   issuer: string,
-  fhirBaseUrl: string,
+  audience: string,
   overrides: Partial<EndpointCapabilityConfig> = {},
 ): EndpointCapabilityConfig {
   return {
     ...DEFAULT_ENDPOINT_CAPABILITIES,
     issuer,
-    fhirBaseUrl,
+    audience,
     ...overrides,
   };
 }

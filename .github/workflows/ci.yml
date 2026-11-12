@@ -282,7 +282,7 @@ jobs:
     # than been slow.
     timeout-minutes: 20
     # Non-default ports, deliberately. Moving the stack is a documented capability -
-    # a developer whose 3000 is taken exports these three - and the only thing that
+    # a developer whose 3000 is taken exports these four - and the only thing that
     # proves it is a run where every URL in the stack is derived rather than
     # hard-coded. A port left behind in compose, the seed or the suite fails here.
     #
@@ -293,6 +293,7 @@ jobs:
       SIGNET_PORT: "3100"
       PATHLING_PORT: "8180"
       APP_PORT: "4100"
+      PROXY_PORT: "4280"
     steps:
       - uses: actions/checkout@v5
 
@@ -306,8 +307,8 @@ jobs:
         run: bunx playwright install --with-deps chromium
         working-directory: e2e
 
-      # Builds the production image and brings up Postgres, Signet, Pathling and
-      # the stub SMART app. `--wait` blocks on the health checks, so a service
+      # Builds the production image and brings up Postgres, Signet, Pathling, the
+      # stub SMART app and oauth2-proxy in front of the regular app. `--wait` blocks on the health checks, so a service
       # that never becomes healthy fails here with its own logs rather than as a
       # confusing test failure.
       - name: Bring up the stack

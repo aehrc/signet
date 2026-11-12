@@ -33,6 +33,7 @@ import {
   invitationRefusal,
   invitationUrl,
   toLaunchContext,
+  withEmailVerification,
 } from "@signet/core";
 import {
   cancelEndUserInvitation,
@@ -57,6 +58,7 @@ import { requireRole } from "./authentication.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
 import { ENDPOINT_PATH } from "./paths.js";
 import { parseBody } from "./requestBody.js";
+import { refuseSmartOnly, smartOnlyUserFields } from "./smartOnly.js";
 import { endUserView, invitationView } from "./views.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
@@ -143,6 +145,13 @@ export function registerEndUserRoutes(
     if (body instanceof Response) {
       return body;
     }
+    const refusal = refuseSmartOnly(
+      c,
+      smartOnlyUserFields(endpoint.kind, body),
+    );
+    if (refusal !== undefined) {
+      return refusal;
+    }
 
     let user;
     try {
@@ -157,6 +166,10 @@ export function registerEndUserRoutes(
           ...(body.fhirUserReference === undefined
             ? {}
             : { fhirUserReference: body.fhirUserReference }),
+          ...(body.email === undefined ? {} : { email: body.email }),
+          ...(body.emailVerified === undefined
+            ? {}
+            : { emailVerified: body.emailVerified }),
           ...(body.roles === undefined ? {} : { roles: body.roles }),
           ...(body.attributes === undefined
             ? {}
@@ -214,8 +227,20 @@ export function registerEndUserRoutes(
       if (body instanceof Response) {
         return body;
       }
+      const refusal = refuseSmartOnly(
+        c,
+        smartOnlyUserFields(c.get("endpoint").endpoint.kind, body),
+      );
+      if (refusal !== undefined) {
+        return refusal;
+      }
 
-      const { disabled, defaultContext, ...fields } = body;
+      // A changed or cleared address loses its verified flag unless this same edit
+      // vouches for it again; see `withEmailVerification`.
+      const { disabled, defaultContext, ...fields } = withEmailVerification(
+        existing,
+        body,
+      );
       const patch: Record<string, unknown> = Object.fromEntries(
         Object.entries(fields).filter(([, value]) => value !== undefined),
       );

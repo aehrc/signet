@@ -309,3 +309,43 @@ describe.skipIf(testDatabaseUrl === undefined)("the rate limits", () => {
     },
   );
 });
+
+describe.skipIf(testDatabaseUrl === undefined)(
+  "a configured sign-in limit",
+  () => {
+    const CONFIGURED = RATE_LIMITS.signIn.limit + 5;
+    let stack: TestStack;
+
+    beforeAll(async () => {
+      stack = await createTestStack({
+        rateLimits: "enforced",
+        trustedProxyCount: 1,
+        signInRateLimit: CONFIGURED,
+      });
+    });
+
+    afterAll(async () => {
+      await stack.close();
+    });
+
+    it("admits exactly that many console sign-ins per address, then refuses", async () => {
+      const statuses: number[] = [];
+      for (let index = 0; index < CONFIGURED + 1; index += 1) {
+        const response = await stack.app.request("/api/v1/session", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-forwarded-for": "203.0.113.90",
+          },
+          body: JSON.stringify({
+            email: stack.admin.email,
+            password: "not the password",
+          }),
+        });
+        statuses.push(response.status);
+      }
+      expect(statuses.slice(0, CONFIGURED)).not.toContain(429);
+      expect(statuses.at(-1)).toBe(429);
+    });
+  },
+);

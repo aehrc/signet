@@ -27,8 +27,8 @@
  */
 
 import {
-  policySimulationSchema,
-  policyVersionCreateSchema,
+  policySimulationSchemaFor,
+  policyVersionCreateSchemaFor,
 } from "@signet/contracts";
 import { parseScopes, simulateIssuance, toLaunchContext } from "@signet/core";
 import {
@@ -102,11 +102,15 @@ export function registerPolicyRoutes(
    * Creates a version, optionally publishing it.
    *
    * The document has already been validated by the contract, which delegates to the
-   * core validator - so a document that reaches here is one the evaluator accepts.
+   * core validator under the endpoint's own scope grammar - so a document that
+   * reaches here is one the evaluator accepts for this kind of endpoint.
    */
   router.post(`${ENDPOINT_PATH}/policies`, requireRole("admin"), async (c) => {
     const { scope, endpoint } = c.get("endpoint");
-    const body = await parseBody(c, policyVersionCreateSchema);
+    const body = await parseBody(
+      c,
+      policyVersionCreateSchemaFor(endpoint.kind),
+    );
     if (body instanceof Response) {
       return body;
     }
@@ -234,7 +238,7 @@ export function registerPolicyRoutes(
     requireRole("viewer"),
     async (c) => {
       const { scope, endpoint, issuer } = c.get("endpoint");
-      const body = await parseBody(c, policySimulationSchema);
+      const body = await parseBody(c, policySimulationSchemaFor(endpoint.kind));
       if (body instanceof Response) {
         return body;
       }
@@ -290,7 +294,7 @@ export function registerPolicyRoutes(
         simulatedVersion = published?.version ?? null;
       }
 
-      const parsed = parseScopes(body.requestedScopes);
+      const parsed = parseScopes(body.requestedScopes, endpoint.kind);
       const result = simulateIssuance({
         policy: document,
         context: {
@@ -310,7 +314,7 @@ export function registerPolicyRoutes(
       });
 
       return c.json({
-        /** Scopes the request asked for that are not valid SMART scopes at all. */
+        /** Scopes the request asked for that are not valid scopes on this endpoint. */
         rejectedScopes: parsed.rejected,
         scope: result.scope,
         granted: result.evaluation.grantedScopes,

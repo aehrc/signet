@@ -156,7 +156,7 @@ function patientIdsIn(bundle: Record<string, unknown>): readonly string[] {
  * @example
  * ```ts
  * const found = await searchPatientByIdentifier({
- *   fhirBaseUrl: endpoint.fhirBaseUrl,
+ *   fhirBaseUrl: endpoint.audience,
  *   accessToken,
  *   subject: ticket.subject,
  *   allowPrivateAddresses: config.allowPrivateOutboundFetches,
@@ -271,7 +271,9 @@ async function issueResolutionToken(
     issuerContext,
     client: request.client,
     user: null,
-    requested: parseScopes(SUBJECT_RESOLUTION_SCOPE).scopes,
+    // Subject resolution searches a FHIR server, so it exists only for a SMART
+    // endpoint - the token exchange that calls it is refused on any other kind.
+    requested: parseScopes(SUBJECT_RESOLUTION_SCOPE, "smart").scopes,
     launchContext: {},
     // The token acts as the endpoint rather than for a user, which is what a
     // client credentials grant is. Evaluating it as anything else would ask the
@@ -348,7 +350,9 @@ export async function resolveTicketSubject(
   }
 
   return await searchPatientByIdentifier({
-    fhirBaseUrl: request.issuerContext.endpoint.fhirBaseUrl,
+    // Tickets exist only on SMART on FHIR endpoints, where the audience is the
+    // FHIR server's base URL.
+    fhirBaseUrl: request.issuerContext.endpoint.audience,
     accessToken: token.accessToken,
     subject: request.subject,
     allowPrivateAddresses: context.config.allowPrivateOutboundFetches,

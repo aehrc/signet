@@ -20,6 +20,8 @@
 
 import { TEMPLATE_FILTER_NAMES } from "@signet/core";
 
+import type { EndpointKind } from "@signet/core";
+
 /** One thing a template can interpolate. */
 export interface TemplateVariable {
   /** The path as it appears inside `{{ }}`. */
@@ -111,9 +113,9 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     group: "endpoint",
   },
   {
-    path: "endpoint.fhirBaseUrl",
+    path: "endpoint.audience",
     description:
-      "The FHIR server this endpoint fronts, and the audience of every token it mints.",
+      "The audience of every token this endpoint mints. On a SMART endpoint, the FHIR server it fronts.",
     group: "endpoint",
   },
   {
@@ -187,4 +189,32 @@ export function variablesInGroup(
   group: TemplateVariable["group"],
 ): readonly TemplateVariable[] {
   return TEMPLATE_VARIABLES.filter((variable) => variable.group === group);
+}
+
+/** Whether a variable has a value on an OAuth endpoint. */
+function isOAuthVariable(variable: TemplateVariable): boolean {
+  // No launch context, no fhirUser, and a scope is an opaque string with no
+  // resource type or context to take apart.
+  return (
+    variable.group !== "context" &&
+    variable.path !== "user.fhirUser" &&
+    !variable.path.startsWith("scope.")
+  );
+}
+
+/**
+ * The variables an endpoint of a kind can interpolate.
+ *
+ * Offering one that never has a value would put an inserter entry in front of the
+ * operator that renders to nothing in every token.
+ *
+ * @param kind - The endpoint's kind.
+ * @example
+ * variablesFor("oauth").some((variable) => variable.path === "context.patient");
+ * // false
+ */
+export function variablesFor(kind: EndpointKind): readonly TemplateVariable[] {
+  return kind === "smart"
+    ? TEMPLATE_VARIABLES
+    : TEMPLATE_VARIABLES.filter((variable) => isOAuthVariable(variable));
 }

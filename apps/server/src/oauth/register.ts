@@ -161,7 +161,7 @@ function clientInputFrom(
  * @returns The Hono handler.
  * @example
  * ```ts
- * router.post(path("/register"), rateLimit("register", ...), registerHandler(context));
+ * router.post(path("/register"), rateLimit("register", context), registerHandler(context));
  * ```
  */
 export function registerHandler(context: ServerContext) {

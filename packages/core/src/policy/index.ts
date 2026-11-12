@@ -7,6 +7,7 @@
  * Author: John Grimes
  */
 
+export { grantingRuleDescriptions } from "./descriptions.js";
 export { evaluatePolicy } from "./evaluate.js";
 export {
   parseScopePattern,
@@ -16,6 +17,7 @@ export {
 export {
   AIDBOX_PRESET,
   FIRELY_PRESET,
+  OAUTH_BASELINE_PRESET,
   ONTOSERVER_PRESET,
   PATHLING_PRESET,
   POLICY_PRESETS,
@@ -49,6 +51,7 @@ export type {
   EvaluationContext,
   EvaluationEndpoint,
   EvaluationUser,
+  GrantingRule,
   GrantType,
   ParsedScopePattern,
   PolicyDefaults,

@@ -41,6 +41,13 @@ export type IdTokenClaims = RegisteredClaims & {
   /** Relative FHIR reference to the resource representing the user. */
   readonly fhirUser?: string;
   readonly profile?: string;
+  /** The user's display name, for `profile` on an OAuth endpoint. */
+  readonly name?: string;
+  /** The user's username, for `profile` on an OAuth endpoint. */
+  readonly preferred_username?: string;
+  /** For `email` on an OAuth endpoint, when the user has an email address. */
+  readonly email?: string;
+  readonly email_verified?: boolean;
   readonly [claim: string]: unknown;
 };
 

@@ -24,6 +24,7 @@ import { ArrowLeftIcon } from "@primer/octicons-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
+import { EmailFields } from "./emailFields.js";
 import { InvitationPanel } from "./invitationPanel.js";
 import { endpointRoute } from "./routes.js";
 import { roleAllows, useEndpointContext } from "./useConsole.js";
@@ -57,7 +58,7 @@ import { endUserFormValues, endUserPatch } from "../forms/endUserEdit.js";
 
 /** One user's detail page. */
 export function UserDetailPage() {
-  const { tenant, endpointSlug, role } = useEndpointContext();
+  const { tenant, endpointSlug, endpoint, role } = useEndpointContext();
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
 
@@ -72,6 +73,8 @@ export function UserDetailPage() {
   // `edited ?? current` and a save elsewhere on the page shows through immediately.
   const [displayName, setDisplayName] = useState<string | undefined>();
   const [fhirUser, setFhirUser] = useState<string | undefined>();
+  const [email, setEmail] = useState<string | undefined>();
+  const [emailVerified, setEmailVerified] = useState<boolean | undefined>();
   const [roles, setRoles] = useState<string | undefined>();
   const [defaultPatient, setDefaultPatient] = useState<string | undefined>();
   const [defaultEncounter, setDefaultEncounter] = useState<
@@ -98,6 +101,8 @@ export function UserDetailPage() {
   const edited = {
     displayName: displayName ?? loaded.displayName,
     fhirUser: fhirUser ?? loaded.fhirUser,
+    email: email ?? loaded.email,
+    emailVerified: emailVerified ?? loaded.emailVerified,
     roles: roles ?? loaded.roles,
     defaultPatient: defaultPatient ?? loaded.defaultPatient,
     defaultEncounter: defaultEncounter ?? loaded.defaultEncounter,
@@ -111,6 +116,9 @@ export function UserDetailPage() {
   // nothing changed, which is a write nobody asked for and nobody can undo.
   const patch = endUserPatch(edited, current);
   const hasChanges = Object.keys(patch).length > 0;
+  // The SMART identity and launch context fields exist only on a SMART endpoint;
+  // the email address only on an OAuth one, where the `email` scope releases it.
+  const isSmart = endpoint.kind === "smart";
 
   return (
     <>
@@ -195,14 +203,25 @@ export function UserDetailPage() {
           error={issues["displayName"]}
           disabled={!mayWrite}
         />
-        <TextField
-          label="fhirUser reference"
-          value={edited.fhirUser}
-          onChange={setFhirUser}
-          error={issues["fhirUserReference"]}
-          hint="A relative FHIR reference such as Practitioner/123. Released to apps granted the fhirUser scope. Clearing this removes it."
-          disabled={!mayWrite}
-        />
+        {isSmart ? (
+          <TextField
+            label="fhirUser reference"
+            value={edited.fhirUser}
+            onChange={setFhirUser}
+            error={issues["fhirUserReference"]}
+            hint="A relative FHIR reference such as Practitioner/123. Released to apps granted the fhirUser scope. Clearing this removes it."
+            disabled={!mayWrite}
+          />
+        ) : (
+          <EmailFields
+            email={edited.email}
+            emailVerified={edited.emailVerified}
+            onEmail={setEmail}
+            onEmailVerified={setEmailVerified}
+            issues={issues}
+            disabled={!mayWrite}
+          />
+        )}
         <ListField
           label="Roles"
           value={edited.roles}
@@ -213,46 +232,52 @@ export function UserDetailPage() {
           disabled={!mayWrite}
         />
 
-        <TextField
-          label="Default patient"
-          value={edited.defaultPatient}
-          onChange={setDefaultPatient}
-          error={issues["defaultContext.patient"] ?? issues["defaultContext"]}
-          disabled={!mayWrite}
-        />
-        <TextField
-          label="Default encounter"
-          value={edited.defaultEncounter}
-          onChange={setDefaultEncounter}
-          error={issues["defaultContext.encounter"]}
-          disabled={!mayWrite}
-        />
-        <TextField
-          label="Intent"
-          value={edited.intent}
-          onChange={setIntent}
-          error={issues["defaultContext.intent"]}
-          hint="Seeds the launch context when a launch does not supply one. Emptying all three clears it."
-          disabled={!mayWrite}
-        />
+        {isSmart ? (
+          <>
+            <TextField
+              label="Default patient"
+              value={edited.defaultPatient}
+              onChange={setDefaultPatient}
+              error={
+                issues["defaultContext.patient"] ?? issues["defaultContext"]
+              }
+              disabled={!mayWrite}
+            />
+            <TextField
+              label="Default encounter"
+              value={edited.defaultEncounter}
+              onChange={setDefaultEncounter}
+              error={issues["defaultContext.encounter"]}
+              disabled={!mayWrite}
+            />
+            <TextField
+              label="Intent"
+              value={edited.intent}
+              onChange={setIntent}
+              error={issues["defaultContext.intent"]}
+              hint="Seeds the launch context when a launch does not supply one. Emptying all three clears it."
+              disabled={!mayWrite}
+            />
 
-        <ListField
-          label="Patients"
-          value={edited.patients}
-          onChange={setPatients}
-          error={issues["attributes"]}
-          hint="One per line. Offered by the patient picker at authorisation time."
-          rows={3}
-          disabled={!mayWrite}
-        />
-        <ListField
-          label="Encounters"
-          value={edited.encounters}
-          onChange={setEncounters}
-          hint="One per line. Offered by the encounter picker at authorisation time."
-          rows={3}
-          disabled={!mayWrite}
-        />
+            <ListField
+              label="Patients"
+              value={edited.patients}
+              onChange={setPatients}
+              error={issues["attributes"]}
+              hint="One per line. Offered by the patient picker at authorisation time."
+              rows={3}
+              disabled={!mayWrite}
+            />
+            <ListField
+              label="Encounters"
+              value={edited.encounters}
+              onChange={setEncounters}
+              hint="One per line. Offered by the encounter picker at authorisation time."
+              rows={3}
+              disabled={!mayWrite}
+            />
+          </>
+        ) : null}
 
         <SaveOutcome
           error={update.error}

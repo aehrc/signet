@@ -158,3 +158,37 @@ describe("federatedUsername", () => {
     );
   });
 });
+
+describe("mapUpstreamClaims - email", () => {
+  it("maps the email claim and carries a verified flag across", () => {
+    expect(
+      mapUpstreamClaims(
+        { email: "mail" },
+        { mail: "alice@example.org", email_verified: true },
+      ),
+    ).toMatchObject({ email: "alice@example.org", emailVerified: true });
+  });
+
+  it("records anything other than a true email_verified as unverified", () => {
+    for (const verified of [false, "true", 1, undefined]) {
+      expect(
+        mapUpstreamClaims(
+          { email: "email" },
+          { email: "alice@example.org", email_verified: verified },
+        ),
+      ).toMatchObject({ email: "alice@example.org", emailVerified: false });
+    }
+  });
+
+  it("maps no email when none is configured, or none was sent", () => {
+    const unmapped = mapUpstreamClaims(
+      {},
+      { email: "alice@example.org", email_verified: true },
+    );
+    expect(unmapped).not.toHaveProperty("email");
+    expect(unmapped).not.toHaveProperty("emailVerified");
+    const unsent = mapUpstreamClaims({ email: "email" }, {});
+    expect(unsent).not.toHaveProperty("email");
+    expect(unsent).not.toHaveProperty("emailVerified");
+  });
+});

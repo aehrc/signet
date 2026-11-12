@@ -33,6 +33,7 @@ import { useState } from "react";
 import { useParams } from "react-router";
 
 import { readClientRequest, submitClientRequest } from "./api.js";
+import { usePortal } from "./queries.js";
 import { describeError, issuesByField } from "../api/errors.js";
 import { CentredShell } from "../components/appShell.js";
 import {
@@ -48,15 +49,21 @@ import {
   DetailRow,
   ErrorAlert,
   InfoAlert,
+  Loading,
   Panel,
   ShownOnce,
 } from "../components/layout.js";
 import { Chips, StatusBadge } from "../components/table.js";
+import {
+  defaultClientScopes,
+  discoveryLabel,
+} from "../formatting/endpointKind.js";
 import { toneForStatus } from "../formatting/status.js";
 import { formatInstant } from "../formatting/values.js";
-import { parseList, parseScopeList } from "../forms/lists.js";
+import { formatList, parseList, parseScopeList } from "../forms/lists.js";
 
 import type { PortalRequestView } from "./api.js";
+import type { EndpointKind } from "@signet/core";
 
 /** Where the tracking token is kept between the submission and the reload. */
 const TOKEN_STORAGE_KEY = "signet.portal.tracking";
@@ -133,7 +140,7 @@ export function PortalPage() {
           </div>
         )}
 
-        <RequestForm
+        <RequestPanel
           tenant={tenant}
           endpoint={endpoint}
           onSubmitted={(request, token) => {
@@ -157,16 +164,48 @@ export function PortalPage() {
   );
 }
 
-interface RequestFormProps {
+interface RequestPanelProps {
   readonly tenant: string;
   readonly endpoint: string;
   readonly onSubmitted: (request: PortalRequestView, token: string) => void;
+}
+
+/**
+ * The submission form, once the portal knows what kind of endpoint it is on.
+ *
+ * The kind decides which scopes a request starts with and whether a launch URI is
+ * asked for, so the form waits for it rather than starting on SMART defaults and
+ * swapping them under somebody who has started typing.
+ */
+function RequestPanel(props: Readonly<RequestPanelProps>) {
+  const portal = usePortal(props.tenant, props.endpoint);
+
+  if (portal.isPending) {
+    return (
+      <Panel title="Your app">
+        <Loading label="Loading the portal…" />
+      </Panel>
+    );
+  }
+  if (portal.isError) {
+    return (
+      <Panel title="Your app">
+        <ErrorAlert message={describeError(portal.error)} />
+      </Panel>
+    );
+  }
+  return <RequestForm {...props} kind={portal.data.endpointKind} />;
+}
+
+interface RequestFormProps extends RequestPanelProps {
+  readonly kind: EndpointKind;
 }
 
 /** The submission form. */
 function RequestForm({
   tenant,
   endpoint,
+  kind,
   onSubmitted,
 }: Readonly<RequestFormProps>) {
   const [name, setName] = useState("");
@@ -174,9 +213,7 @@ function RequestForm({
   const [clientType, setClientType] = useState("public");
   const [redirectUris, setRedirectUris] = useState("");
   const [launchUri, setLaunchUri] = useState("");
-  const [scopes, setScopes] = useState(
-    "openid\nfhirUser\nlaunch/patient\npatient/*.rs",
-  );
+  const [scopes, setScopes] = useState(formatList(defaultClientScopes(kind)));
   const [note, setNote] = useState("");
   const [failure, setFailure] = useState<unknown>();
   const [pending, setPending] = useState(false);
@@ -258,13 +295,16 @@ function RequestForm({
           error={issues["redirectUris"] ?? issues["redirectUris.0"]}
           hint="One per line. Matched exactly, so list every one your app uses."
         />
-        <TextField
-          label="Launch URI"
-          value={launchUri}
-          onChange={setLaunchUri}
-          error={issues["launchUri"]}
-          hint="Where an EHR should open your app. Leave blank if it is only launched standalone."
-        />
+        {/* An OAuth endpoint has no EHR launch to open an app from. */}
+        {kind === "smart" ? (
+          <TextField
+            label="Launch URI"
+            value={launchUri}
+            onChange={setLaunchUri}
+            error={issues["launchUri"]}
+            hint="Where an EHR should open your app. Leave blank if it is only launched standalone."
+          />
+        ) : null}
         <ListField
           label="Scopes you need"
           value={scopes}
@@ -311,6 +351,10 @@ function StatusPanel({
   onRequestId,
   onTrackingToken,
 }: Readonly<StatusPanelProps>) {
+  // Shared with the request form's query, so this costs no second fetch. Unknown
+  // while it loads, or on an endpoint that takes no requests, and then labelled
+  // generically rather than as a SMART configuration it may not be.
+  const portal = usePortal(tenant, endpoint);
   const [result, setResult] = useState<
     | {
         readonly request: PortalRequestView;
@@ -408,7 +452,7 @@ function StatusPanel({
               </DetailRow>
             )}
             {result.wellKnown === undefined ? null : (
-              <DetailRow label="SMART configuration">
+              <DetailRow label={discoveryLabel(portal.data?.endpointKind)}>
                 <CopyableValue value={result.wellKnown} label="discovery URL" />
               </DetailRow>
             )}

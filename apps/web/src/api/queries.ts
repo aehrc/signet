@@ -561,8 +561,15 @@ export function useTrustAnchorCheck(tenant: string, endpoint: string) {
  *
  * Null rather than an error, as the trust anchor's is: refusing the exchange
  * grant is the default and the normal case, not a failure to unpick.
+ *
+ * Not fetched when `enabled` is false, which is how an OAuth endpoint - where the
+ * API refuses the route, because ticket exchange is SMART-only - avoids asking.
  */
-export function useTicketIssuer(tenant: string, endpoint: string) {
+export function useTicketIssuer(
+  tenant: string,
+  endpoint: string,
+  enabled: boolean,
+) {
   return useQuery({
     queryKey: keys.ticketIssuer(tenant, endpoint),
     queryFn: async ({ signal }) =>
@@ -571,6 +578,7 @@ export function useTicketIssuer(tenant: string, endpoint: string) {
         "ticketIssuer",
         signal,
       ),
+    enabled,
   });
 }
 

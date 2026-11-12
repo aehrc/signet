@@ -13,6 +13,8 @@
  * Author: John Grimes
  */
 
+import type { EndpointKind } from "../endpointKind.js";
+
 /** Every endpoint URL Signet derives from a tenant's issuer. */
 export interface EndpointUrls {
   readonly authorization: string;
@@ -64,4 +66,23 @@ export function endpointUrls(issuer: string): EndpointUrls {
     smartConfiguration: `${base}/.well-known/smart-configuration`,
     openIdConfiguration: `${base}/.well-known/openid-configuration`,
   };
+}
+
+/**
+ * The discovery document an endpoint of a kind publishes, which is the one to hand
+ * anybody configuring an app or a resource server against it.
+ *
+ * A SMART endpoint's is its SMART configuration. An OAuth / OpenID Connect endpoint
+ * publishes no SMART configuration - it answers 404 there - so its OpenID
+ * configuration is the one.
+ *
+ * @param kind - The endpoint's kind.
+ * @param issuer - The endpoint's issuer, with or without a trailing slash.
+ * @example
+ * discoveryUrl("oauth", "https://signet.example.com/t/acme/e/orders");
+ * // "https://signet.example.com/t/acme/e/orders/.well-known/openid-configuration"
+ */
+export function discoveryUrl(kind: EndpointKind, issuer: string): string {
+  const urls = endpointUrls(issuer);
+  return kind === "smart" ? urls.smartConfiguration : urls.openIdConfiguration;
 }

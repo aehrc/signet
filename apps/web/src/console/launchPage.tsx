@@ -39,8 +39,32 @@ import {
 import { formatDuration } from "../formatting/values.js";
 import { withoutBlanks } from "../forms/lists.js";
 
-/** The launch simulator page. */
+/**
+ * The launch simulator page.
+ *
+ * An OAuth endpoint has no EHR launch, so the tab is not offered there; this says
+ * so for anyone who arrives at the address directly, rather than offering a form
+ * whose every submission the API refuses.
+ */
 export function LaunchPage() {
+  const { endpoint } = useEndpointContext();
+
+  if (endpoint.kind === "oauth") {
+    return (
+      <>
+        <PageHeader title="Launch simulator" />
+        <InfoAlert>
+          This is an OAuth / OpenID Connect endpoint, which has no EHR launch.
+          The launch simulator is only available on SMART on FHIR endpoints.
+        </InfoAlert>
+      </>
+    );
+  }
+  return <LaunchSimulator />;
+}
+
+/** Mints a launch handle for a chosen client, on a SMART endpoint. */
+function LaunchSimulator() {
   const { tenant, endpointSlug, endpoint, role } = useEndpointContext();
   const clients = useClients(tenant, endpointSlug);
   const launch = useSimulateLaunch(tenant, endpointSlug);

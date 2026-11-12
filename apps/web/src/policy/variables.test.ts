@@ -14,6 +14,7 @@ import {
   interpolation,
   TEMPLATE_FILTERS,
   TEMPLATE_VARIABLES,
+  variablesFor,
   variablesInGroup,
 } from "./variables.js";
 
@@ -79,5 +80,28 @@ describe("variablesInGroup", () => {
       expect(variable.group).toBe("user");
     }
     expect(variablesInGroup("user").length).toBeGreaterThan(0);
+  });
+});
+
+describe("variablesFor", () => {
+  it("offers every variable on a SMART endpoint", () => {
+    expect(variablesFor("smart")).toEqual(TEMPLATE_VARIABLES);
+  });
+
+  it("offers no launch context, fhirUser or FHIR scope parts on an OAuth endpoint", () => {
+    // None of these has a value there: no launch context, no fhirUser, and a scope
+    // is an opaque string with no resource type or context to take apart.
+    const paths = variablesFor("oauth").map((variable) => variable.path);
+    expect(paths).not.toContain("user.fhirUser");
+    expect(paths.some((path) => path.startsWith("context."))).toBe(false);
+    expect(paths.some((path) => path.startsWith("scope."))).toBe(false);
+  });
+
+  it("keeps the variables that mean the same on both kinds", () => {
+    const paths = variablesFor("oauth").map((variable) => variable.path);
+    expect(paths).toContain("user.id");
+    expect(paths).toContain("client.clientId");
+    expect(paths).toContain("endpoint.audience");
+    expect(paths).toContain("granted");
   });
 });

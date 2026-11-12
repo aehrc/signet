@@ -7,6 +7,7 @@
  * Author: John Grimes
  */
 
+import type { EndpointKind } from "../endpointKind.js";
 import type { LaunchContext } from "../launch/types.js";
 import type { Permission, Scope, ScopeContext } from "../scopes/types.js";
 
@@ -174,9 +175,15 @@ export interface PolicyDocument {
 /** The authenticated end user, absent for a `client_credentials` grant. */
 export interface EvaluationUser {
   readonly id: string;
+  /** The name the user signs in with, released as `preferred_username`. */
+  readonly username: string;
   /** Relative FHIR reference, e.g. `Practitioner/123`. */
   readonly fhirUser: string | null;
   readonly displayName: string | null;
+  /** Released as `email` for the `email` scope on an OAuth endpoint. */
+  readonly email: string | null;
+  /** Released as `email_verified` beside the email. */
+  readonly emailVerified: boolean;
   readonly roles: readonly string[];
   readonly attributes: Readonly<Record<string, unknown>>;
 }
@@ -187,8 +194,15 @@ export interface EvaluationEndpoint {
   readonly slug: string;
   /** Full issuer URL, e.g. `https://signet.example.org/t/demo/e/pathling`. */
   readonly issuer: string;
-  /** The BYO FHIR server's base URL; the expected token `aud`. */
-  readonly fhirBaseUrl: string;
+  /**
+   * Decides the scope grammar, and so how a rule's `match` is compared: as a
+   * SMART pattern on a SMART endpoint, by exact equality on an OAuth one.
+   */
+  readonly kind: EndpointKind;
+  /**
+   * The token `aud`. On a SMART endpoint, the BYO FHIR server's base URL.
+   */
+  readonly audience: string;
 }
 
 /** The client requesting authorization. */
@@ -226,6 +240,17 @@ export interface NarrowedScope {
   readonly ruleId?: string;
 }
 
+/**
+ * The rule that granted one requested scope.
+ *
+ * Keyed by the scope as requested, in canonical form, so the consent screen can
+ * describe each scope the app asked for in the words of the rule that grants it.
+ */
+export interface GrantingRule {
+  readonly scope: string;
+  readonly rule: ScopeGrantRule;
+}
+
 /** The result of evaluating a policy. */
 export interface PolicyEvaluation {
   readonly grantedScopes: readonly Scope[];
@@ -236,6 +261,8 @@ export interface PolicyEvaluation {
    * auditable and the consent screen can be honest about it.
    */
   readonly narrowedScopes: readonly NarrowedScope[];
+  /** The rule that granted each granted scope, in the order requested. */
+  readonly grantingRules: readonly GrantingRule[];
   /** Claims to merge into the signed access token. */
   readonly claims: Readonly<Record<string, unknown>>;
   /** Parameters to merge into the token response body. */

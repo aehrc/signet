@@ -10,11 +10,13 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  endUserCreateBody,
   endUserFormValues,
   endUserPatch,
   mergeCandidateLists,
 } from "./endUserEdit.js";
 
+import type { EndUserCreateForm } from "./endUserEdit.js";
 import type { EndUserView } from "../api/types.js";
 
 /** A user as the API returns them, with the fields a case cares about overridden. */
@@ -24,6 +26,8 @@ function userView(overrides: Partial<EndUserView> = {}): EndUserView {
     username: "johngrimes",
     displayName: "John Grimes",
     fhirUser: "Practitioner/clin-001",
+    email: null,
+    emailVerified: false,
     roles: ["clinician"],
     attributes: {},
     defaultContext: null,
@@ -88,6 +92,19 @@ describe("endUserFormValues", () => {
   it("renders an absent fhirUser reference as an empty field", () => {
     // Not the string "null", which is what a naive `String(value)` would show.
     expect(endUserFormValues(userView({ fhirUser: null })).fhirUser).toBe("");
+  });
+
+  it("renders an email address and whether it is verified", () => {
+    const values = endUserFormValues(
+      userView({ email: "jo@example.org", emailVerified: true }),
+    );
+
+    expect(values.email).toBe("jo@example.org");
+    expect(values.emailVerified).toBe(true);
+  });
+
+  it("renders an absent email address as an empty field", () => {
+    expect(endUserFormValues(userView({ email: null })).email).toBe("");
   });
 
   it("spreads the default context across its three fields", () => {
@@ -177,6 +194,39 @@ describe("endUserPatch", () => {
 
   it("leaves an unchanged blank fhirUser reference out of the patch", () => {
     const current = userView({ fhirUser: null });
+    expect(endUserPatch(endUserFormValues(current), current)).toEqual({});
+  });
+
+  it("sends a new email address, trimmed", () => {
+    const current = userView();
+    const patch = endUserPatch(
+      { ...endUserFormValues(current), email: "  jo@example.org " },
+      current,
+    );
+
+    expect(patch).toEqual({ email: "jo@example.org" });
+  });
+
+  it("clears an email address with null rather than an empty string", () => {
+    // The schema validates an email's shape, so "" would be refused rather than
+    // read as "remove it".
+    const current = userView({ email: "jo@example.org" });
+    const patch = endUserPatch(
+      { ...endUserFormValues(current), email: "" },
+      current,
+    );
+
+    expect(patch).toEqual({ email: null });
+  });
+
+  it("sends the verified flag only when it changed", () => {
+    const current = userView({ email: "jo@example.org" });
+    expect(
+      endUserPatch(
+        { ...endUserFormValues(current), emailVerified: true },
+        current,
+      ),
+    ).toEqual({ emailVerified: true });
     expect(endUserPatch(endUserFormValues(current), current)).toEqual({});
   });
 
@@ -296,5 +346,119 @@ describe("endUserPatch", () => {
     );
 
     expect(Object.keys(patch)).not.toContain("username");
+  });
+});
+
+describe("endUserCreateBody", () => {
+  /** A filled-in create form, with the fields a case cares about overridden. */
+  function createForm(
+    overrides: Partial<EndUserCreateForm> = {},
+  ): EndUserCreateForm {
+    return {
+      username: "jo",
+      displayName: "Jo Bloggs",
+      password: "correct horse",
+      isPersona: false,
+      invite: false,
+      fhirUser: "",
+      email: "",
+      emailVerified: false,
+      roles: "",
+      defaultPatient: "",
+      ...overrides,
+    };
+  }
+
+  it("sends a local account's password, and nothing left blank", () => {
+    expect(endUserCreateBody(createForm(), "smart")).toEqual({
+      username: "jo",
+      displayName: "Jo Bloggs",
+      isPersona: false,
+      password: "correct horse",
+    });
+  });
+
+  it("sends no password for a persona", () => {
+    expect(
+      endUserCreateBody(createForm({ isPersona: true }), "smart"),
+    ).not.toHaveProperty("password");
+  });
+
+  it("sends no password for an account invited to choose its own", () => {
+    expect(
+      endUserCreateBody(createForm({ invite: true }), "smart"),
+    ).not.toHaveProperty("password");
+  });
+
+  it("sends an invited account's email on an OAuth endpoint", () => {
+    // The invitation is only the password; the account it is for is still created
+    // with the fields its endpoint's kind takes.
+    const body = endUserCreateBody(
+      createForm({ invite: true, email: "jo@example.org" }),
+      "oauth",
+    );
+
+    expect(body).toMatchObject({ email: "jo@example.org" });
+    expect(body).not.toHaveProperty("password");
+  });
+
+  it("sends the SMART identity fields on a SMART endpoint", () => {
+    const body = endUserCreateBody(
+      createForm({
+        isPersona: true,
+        fhirUser: " Practitioner/1 ",
+        defaultPatient: " pat-1 ",
+        roles: "clinician\nnurse",
+      }),
+      "smart",
+    );
+
+    expect(body).toMatchObject({
+      fhirUserReference: "Practitioner/1",
+      defaultContext: { patient: "pat-1" },
+      roles: ["clinician", "nurse"],
+    });
+  });
+
+  it("never sends an email on a SMART endpoint", () => {
+    // SMART's scope grammar has no `email` scope, so the field is not offered there.
+    const body = endUserCreateBody(
+      createForm({ email: "jo@example.org", emailVerified: true }),
+      "smart",
+    );
+
+    expect(body).not.toHaveProperty("email");
+    expect(body).not.toHaveProperty("emailVerified");
+  });
+
+  it("sends the email and its verified flag on an OAuth endpoint", () => {
+    expect(
+      endUserCreateBody(
+        createForm({ email: " jo@example.org ", emailVerified: true }),
+        "oauth",
+      ),
+    ).toMatchObject({ email: "jo@example.org", emailVerified: true });
+  });
+
+  it("leaves a blank email out on an OAuth endpoint", () => {
+    const body = endUserCreateBody(createForm(), "oauth");
+    expect(body).not.toHaveProperty("email");
+    expect(body).not.toHaveProperty("emailVerified");
+  });
+
+  it("never sends SMART identity fields on an OAuth endpoint", () => {
+    // The API refuses a fhirUser reference or a default context there, so a value
+    // left in the form from before must not reach it.
+    const body = endUserCreateBody(
+      createForm({
+        isPersona: true,
+        fhirUser: "Practitioner/1",
+        defaultPatient: "pat-1",
+      }),
+      "oauth",
+    );
+
+    expect(body).not.toHaveProperty("fhirUserReference");
+    expect(body).not.toHaveProperty("defaultContext");
   });
 });

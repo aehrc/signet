@@ -20,23 +20,26 @@ describe("resolveStackUrls", () => {
       signet: "http://localhost:3000",
       fhir: "http://localhost:8080/fhir",
       app: "http://localhost:4000",
+      proxy: "http://localhost:4180",
     });
   });
 
   // The bug this exists for: the suite honoured SIGNET_PORT and ignored the
   // other two, so moving the stack meant setting five variables rather than
   // three.
-  test("moves every service when the three port variables are set", () => {
+  test("moves every service when the port variables are set", () => {
     expect(
       resolveStackUrls({
         SIGNET_PORT: "3100",
         PATHLING_PORT: "8180",
         APP_PORT: "4100",
+        PROXY_PORT: "4280",
       }),
     ).toEqual({
       signet: "http://localhost:3100",
       fhir: "http://localhost:8180/fhir",
       app: "http://localhost:4100",
+      proxy: "http://localhost:4280",
     });
   });
 
@@ -47,6 +50,7 @@ describe("resolveStackUrls", () => {
       signet: "http://localhost:3000",
       fhir: "http://localhost:8180/fhir",
       app: "http://localhost:4000",
+      proxy: "http://localhost:4180",
     });
   });
 
@@ -62,11 +66,13 @@ describe("resolveStackUrls", () => {
         SIGNET_BASE_URL: "https://signet.example.org",
         PATHLING_BASE_URL: "https://fhir.example.org/fhir",
         APP_BASE_URL: "https://app.example.org",
+        PROXY_BASE_URL: "https://notes.example.org",
       }),
     ).toEqual({
       signet: "https://signet.example.org",
       fhir: "https://fhir.example.org/fhir",
       app: "https://app.example.org",
+      proxy: "https://notes.example.org",
     });
   });
 
@@ -82,6 +88,7 @@ describe("resolveStackUrls", () => {
       signet: "https://signet.example.org",
       fhir: "http://localhost:8180/fhir",
       app: "http://localhost:4000",
+      proxy: "http://localhost:4180",
     });
   });
 
@@ -98,6 +105,7 @@ describe("resolveStackUrls", () => {
       signet: "http://localhost:3000",
       fhir: "http://localhost:8080/fhir",
       app: "http://localhost:4000",
+      proxy: "http://localhost:4180",
     });
   });
 });

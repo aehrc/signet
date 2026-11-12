@@ -41,9 +41,10 @@ import {
 
 import { moveRule, removeRule, replaceRule, setRuleEnabled } from "./rules.js";
 import { CheckboxField, TextField } from "../components/fields.js";
+import { ruleDescriptionHint } from "../formatting/endpointKind.js";
 
 import type { AnyRule, RuleList } from "./rules.js";
-import type { PolicyDocument } from "@signet/core";
+import type { EndpointKind, PolicyDocument } from "@signet/core";
 import type { ReactNode } from "react";
 
 /**
@@ -61,6 +62,8 @@ const ICON_BUTTON = "btn btn-ghost btn-xs max-sm:min-h-11 max-sm:min-w-11";
 
 interface RuleCardProps {
   readonly list: RuleList;
+  /** The endpoint's kind, which decides who reads the rule's description. */
+  readonly kind: EndpointKind;
   readonly document: PolicyDocument;
   readonly rule: AnyRule;
   /** One-based position, shown because order decides outcomes. */
@@ -79,6 +82,7 @@ interface RuleCardProps {
 /** One rule, collapsed to its summary until expanded for editing. */
 export function RuleCard({
   list,
+  kind,
   document,
   rule,
   position,
@@ -202,7 +206,7 @@ export function RuleCard({
             label="Description"
             value={rule.description ?? ""}
             disabled={disabled}
-            hint="Why this rule exists. The code view has no comments, so this is where the reasoning lives."
+            hint={ruleDescriptionHint(kind, list)}
             onChange={(value) => {
               const next =
                 value.trim().length === 0

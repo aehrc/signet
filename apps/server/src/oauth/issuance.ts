@@ -31,6 +31,7 @@ import {
   describeVouching,
   evaluatePolicy,
   formatScopes,
+  hasIdentityScope,
 } from "@signet/core";
 import {
   generateOpaqueToken,
@@ -152,16 +153,6 @@ export type IssuanceResult =
       /** How many family members the reuse response revoked. Non-zero only on reuse. */
       readonly familyRevoked: number;
     };
-
-/** True when the granted scopes contain the named identity scope. */
-function hasIdentityScope(
-  granted: readonly Scope[],
-  name: "openid" | "fhirUser" | "profile",
-): boolean {
-  return granted.some(
-    (scope) => scope.kind === "identity" && scope.name === name,
-  );
-}
 
 /**
  * The refresh scope the policy granted, if it granted one.
@@ -344,7 +335,7 @@ export async function issueTokens(
       subject: request.subject,
       scope: grantedScopes,
       issuer: issuerContext.issuer,
-      audience: issuerContext.endpoint.fhirBaseUrl,
+      audience: issuerContext.endpoint.audience,
       launchContext: request.launchContext,
       idTokenClaims: idTokenClaims ?? null,
       expiresAt,

@@ -9,18 +9,20 @@
  * Three things live here, in the order an operator needs them.
  *
  * The integration details first: the issuer and the discovery URL, because getting
- * an endpoint working is a matter of pasting one of those into a FHIR server, and
- * the generated HAPI interceptor for the case where the server needs code rather
- * than configuration.
+ * an endpoint working is a matter of pasting one of those into a FHIR server or an
+ * API, and on a SMART endpoint the generated HAPI interceptor for the case where the
+ * server needs code rather than configuration.
  *
  * Then the settings that change behaviour - token lifetimes, how end users
  * authenticate, whether consent is remembered, and whether this is a production
  * endpoint. That last flag is the one that decides whether password-free personas
  * can be selected, so it is stated in words rather than left as a checkbox label.
  *
- * Then the capabilities. Each is a conformance claim published in
- * `.well-known/smart-configuration`, so turning one off is a promise withdrawn -
- * which is why they are edited here rather than being buried in a settings dialog.
+ * Then the capabilities. Each is a conformance claim published in the endpoint's
+ * discovery document, so turning one off is a promise withdrawn - which is why they
+ * are edited here rather than being buried in a settings dialog. An OAuth endpoint
+ * shows only the flags that mean something there: the SMART-only ones are refused by
+ * the API, so offering them would only surface that refusal.
  *
  * Author: John Grimes
  */
@@ -47,7 +49,14 @@ import {
   Panel,
 } from "../components/layout.js";
 import { Chips } from "../components/table.js";
-import { capabilityLabel, formatDuration } from "../formatting/values.js";
+import {
+  audienceWording,
+  capabilityLabelFor,
+  discoveryDocument,
+  endpointKindLabel,
+  visibleCapabilities,
+} from "../formatting/endpointKind.js";
+import { formatDuration } from "../formatting/values.js";
 import {
   capabilityPatch,
   endpointSettingsFormValues,
@@ -59,49 +68,38 @@ import {
 export function EndpointOverviewPage() {
   const { tenant, endpointSlug, endpoint, role } = useEndpointContext();
   const mayEdit = roleAllows(role, "admin");
+  const discovery = discoveryDocument(endpoint);
 
   return (
     <>
       <Panel
         title="Integration"
-        description="What to give your FHIR server so it trusts tokens from this endpoint."
+        description={
+          endpoint.kind === "smart"
+            ? "What to give your FHIR server so it trusts tokens from this endpoint."
+            : "What to give your app or API so it trusts tokens from this endpoint."
+        }
       >
         <DetailList>
+          <DetailRow label="Kind">{endpointKindLabel(endpoint.kind)}</DetailRow>
           <DetailRow label="Issuer">
             <CopyableValue value={endpoint.issuer} label="issuer" />
           </DetailRow>
-          <DetailRow label="SMART configuration">
-            <CopyableValue
-              value={endpoint.smartConfigurationUrl}
-              label="discovery URL"
-            />
+          <DetailRow label={discovery.label}>
+            <CopyableValue value={discovery.url} label="discovery URL" />
           </DetailRow>
           <DetailRow label="JWKS">
             <CopyableValue value={`${endpoint.issuer}/jwks`} label="JWKS URL" />
           </DetailRow>
           <DetailRow label="Expected audience">
-            <code className="font-mono text-xs">{endpoint.fhirBaseUrl}</code>
+            <code className="font-mono text-xs">{endpoint.audience}</code>
           </DetailRow>
           <DetailRow label="Advertised scopes">
             <Chips values={endpoint.scopesSupported} />
           </DetailRow>
-          <DetailRow label="HAPI FHIR">
-            <a
-              className="btn btn-soft btn-primary btn-xs mb-1"
-              href={endpointPath(
-                tenant,
-                endpointSlug,
-                "/integrations/hapi-interceptor",
-              )}
-            >
-              Download interceptor
-            </a>
-            <p className="text-base-content/60 mt-1 text-xs max-sm:text-base">
-              HAPI reads no token by itself - its authorization interceptor is
-              Java you write. This generates that file for this endpoint, so the
-              two sides of the handshake cannot disagree.
-            </p>
-          </DetailRow>
+          {endpoint.kind === "smart" ? (
+            <HapiInterceptorRow tenant={tenant} endpointSlug={endpointSlug} />
+          ) : null}
         </DetailList>
       </Panel>
 
@@ -120,6 +118,37 @@ export function EndpointOverviewPage() {
   );
 }
 
+/**
+ * The HAPI interceptor download, on a SMART endpoint.
+ *
+ * Only there: the interceptor reads SMART scopes for a FHIR server, and the API
+ * refuses to generate one for an OAuth endpoint.
+ */
+function HapiInterceptorRow({
+  tenant,
+  endpointSlug,
+}: Readonly<{ readonly tenant: string; readonly endpointSlug: string }>) {
+  return (
+    <DetailRow label="HAPI FHIR">
+      <a
+        className="btn btn-soft btn-primary btn-xs mb-1"
+        href={endpointPath(
+          tenant,
+          endpointSlug,
+          "/integrations/hapi-interceptor",
+        )}
+      >
+        Download interceptor
+      </a>
+      <p className="text-base-content/60 mt-1 text-xs max-sm:text-base">
+        HAPI reads no token by itself - its authorization interceptor is Java
+        you write. This generates that file for this endpoint, so the two sides
+        of the handshake cannot disagree.
+      </p>
+    </DetailRow>
+  );
+}
+
 /** The settings that change how the endpoint behaves. */
 function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
   const { tenant, endpointSlug, endpoint } = useEndpointContext();
@@ -132,7 +161,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
   // as a change somebody made.
   const [name, setName] = useState<string | undefined>();
   const [description, setDescription] = useState<string | undefined>();
-  const [fhirBaseUrl, setFhirBaseUrl] = useState<string | undefined>();
+  const [audience, setAudience] = useState<string | undefined>();
   const [accessTokenTtl, setAccessTokenTtl] = useState<string | undefined>();
   const [refreshTokenTtl, setRefreshTokenTtl] = useState<string | undefined>();
   const [authMode, setAuthMode] = useState<string | undefined>();
@@ -146,7 +175,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
   const edited = {
     name: name ?? loaded.name,
     description: description ?? loaded.description,
-    fhirBaseUrl: fhirBaseUrl ?? loaded.fhirBaseUrl,
+    audience: audience ?? loaded.audience,
     accessTokenTtl: accessTokenTtl ?? loaded.accessTokenTtl,
     refreshTokenTtl: refreshTokenTtl ?? loaded.refreshTokenTtl,
     authMode: authMode ?? loaded.authMode,
@@ -194,11 +223,11 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
         disabled={disabled}
       />
       <TextField
-        label="FHIR base URL"
+        label={audienceWording(endpoint.kind).label}
         type="url"
-        value={edited.fhirBaseUrl}
-        onChange={setFhirBaseUrl}
-        error={issues["fhirBaseUrl"]}
+        value={edited.audience}
+        onChange={setAudience}
+        error={issues["audience"]}
         hint="Changing this changes the audience of every token issued from now on. Tokens already issued keep the old one."
         disabled={disabled}
       />
@@ -306,9 +335,9 @@ function CapabilitiesPanel({
   // the endpoint as it refetches instead of standing as a change it is not.
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
 
-  // Sorted by name so the order does not depend on how the server happened to
-  // serialise the object.
-  const names = Object.keys(endpoint.capabilities).toSorted();
+  // Only the flags this kind of endpoint has, sorted by name so the order does not
+  // depend on how the server happened to serialise the object.
+  const names = visibleCapabilities(endpoint.kind, endpoint.capabilities);
   const flags = Object.fromEntries(
     names.map((name) => [
       name,
@@ -335,7 +364,7 @@ function CapabilitiesPanel({
         {names.map((name) => (
           <CheckboxField
             key={name}
-            label={capabilityLabel(name)}
+            label={capabilityLabelFor(name, endpoint.kind)}
             checked={flags[name] ?? false}
             disabled={disabled}
             onChange={(checked) => {

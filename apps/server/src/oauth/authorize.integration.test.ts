@@ -73,7 +73,7 @@ describeWithDatabase("the authorization endpoint", () => {
       nonce: "n-1",
       codeChallenge: challenge,
       codeChallengeMethod: "S256",
-      aud: stack.endpoint.fhirBaseUrl,
+      aud: stack.endpoint.audience,
       endUserId: null,
       consentGrantedAt: null,
       resolvedContext: null,
@@ -139,7 +139,7 @@ describeWithDatabase("the authorization endpoint", () => {
         client_id: stack.publicClient.clientId,
         redirect_uri: "https://app.test/cb",
         scope: "openid",
-        aud: stack.endpoint.fhirBaseUrl,
+        aud: stack.endpoint.audience,
       }).toString()}`,
     );
     const url = new URL(response.headers.get("location") ?? "");

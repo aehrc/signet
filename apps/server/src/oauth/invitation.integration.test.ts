@@ -230,7 +230,8 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
         body: {
           slug: "federating",
           name: "Federating endpoint",
-          fhirBaseUrl: "https://federating.test/fhir",
+          kind: "smart",
+          audience: "https://federating.test/fhir",
           authMode: "oidc",
         },
         expect: 201,
@@ -393,6 +394,69 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       expect(event?.actorType).toBe("end-user");
       expect(JSON.stringify(event)).not.toContain(token);
       expect(JSON.stringify(event)).not.toContain("a-chosen-password");
+    });
+
+    it("invites an account on an OAuth endpoint, keeping its email", async () => {
+      // Nothing about an invitation is SMART-specific: it sets a password and no
+      // more, so the account keeps the fields its endpoint's kind gave it.
+      await adminJson(stack, "POST", tenantPath(stack, "/endpoints"), {
+        credential: owner,
+        body: {
+          slug: "invite-oauth",
+          name: "OAuth endpoint",
+          kind: "oauth",
+          audience: "https://api.invite.test/v1",
+        },
+        expect: 201,
+      });
+      const usersPath = tenantPath(stack, "/endpoints/invite-oauth/users");
+      const created = await adminJson<{ user: { id: string } }>(
+        stack,
+        "POST",
+        usersPath,
+        {
+          credential: owner,
+          body: {
+            username: "api-invitee",
+            displayName: "API Invitee",
+            email: "api-invitee@example.org",
+            emailVerified: true,
+          },
+          expect: 201,
+        },
+      );
+      const issued = await adminJson<IssuedInvitation>(
+        stack,
+        "POST",
+        `${usersPath}/${created.user.id}/invitation`,
+        { credential: owner, expect: 201 },
+      );
+      const link = new URL(issued.invitation.url);
+      expect(link.pathname).toContain("/e/invite-oauth/");
+
+      const accepted = await stack.app.request(
+        `/t/${stack.tenant.slug}/e/invite-oauth/invitation/accept`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            token: link.hash.slice(1),
+            password: "a-chosen-password",
+          }),
+        },
+      );
+      expect(accepted.status).toBe(200);
+
+      const after = await adminJson<{
+        user: { hasPassword: boolean; email: string; emailVerified: boolean };
+      }>(stack, "GET", `${usersPath}/${created.user.id}`, {
+        credential: owner,
+      });
+      expect(after.user).toMatchObject({
+        hasPassword: true,
+        email: "api-invitee@example.org",
+        emailVerified: true,
+      });
     });
 
     it("refuses a password outside the bounds without spending the link", async () => {

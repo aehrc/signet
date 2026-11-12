@@ -7,6 +7,8 @@
  * Author: John Grimes
  */
 
+export * from "./endpointKind.js";
+export * from "./audience.js";
 export * from "./scopes/index.js";
 export * from "./launch/index.js";
 export * from "./policy/index.js";
@@ -21,4 +23,5 @@ export * from "./federation/index.js";
 export * from "./limits/index.js";
 export * from "./manage/index.js";
 export * from "./invitations/index.js";
+export * from "./endUsers/index.js";
 export * from "./uris.js";

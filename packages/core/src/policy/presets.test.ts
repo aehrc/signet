@@ -33,7 +33,7 @@ import type { Permission, Scope } from "../scopes/types.js";
 
 /** Parses a space-delimited scope string, failing on anything unparseable. */
 function scopes(raw: string): readonly Scope[] {
-  const result = parseScopes(raw);
+  const result = parseScopes(raw, "smart");
   if (result.rejected.length > 0) {
     throw new Error(
       `Unexpected rejections: ${result.rejected.map((entry) => entry.raw).join(", ")}`,
@@ -45,6 +45,9 @@ function scopes(raw: string): readonly Scope[] {
 const USER: EvaluationUser = {
   id: "u1",
   fhirUser: "Practitioner/abc",
+  username: "user-1",
+  email: null,
+  emailVerified: false,
   displayName: "Dr Example",
   roles: ["clinician"],
   attributes: {},
@@ -66,7 +69,8 @@ function context(overrides: ContextOverrides = {}): EvaluationContext {
       tenantSlug: "demo",
       slug: "pathling",
       issuer: "https://signet.example.org/t/demo/e/pathling",
-      fhirBaseUrl: "https://pathling.example.org/fhir",
+      kind: "smart",
+      audience: "https://pathling.example.org/fhir",
     },
     client: {
       clientId: "client-1",
@@ -1298,6 +1302,7 @@ describe("POLICY_PRESETS", () => {
       "firely",
       "smile-cdr",
       "ontoserver",
+      "oauth-baseline",
     ]);
     expect(new Set(POLICY_PRESETS.map((preset) => preset.id)).size).toBe(
       POLICY_PRESETS.length,

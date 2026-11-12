@@ -24,8 +24,12 @@ export const slugSchema = z
     message: "Must be lower-case alphanumeric with internal hyphens",
   });
 
-/** A FHIR base URL. Must be absolute; used as the expected token `aud`. */
-export const fhirBaseUrlSchema = z.string().url().max(2048);
+/**
+ * The audience every access token from an endpoint carries in `aud`. Must be
+ * absolute. On a SMART on FHIR endpoint this is the FHIR server's base URL; on an
+ * OAuth / OpenID Connect endpoint it identifies the protected API.
+ */
+export const audienceSchema = z.string().url().max(2048);
 
 /**
  * A `fhirUser` reference: a relative FHIR reference to the resource

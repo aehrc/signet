@@ -7,6 +7,7 @@
  * Author: John Grimes
  */
 
+export { hasIdentityScope } from "./identity.js";
 export { parseScope, parseScopes, type ParseScopesResult } from "./parse.js";
 export { formatScope, formatScopes } from "./serialise.js";
 export {

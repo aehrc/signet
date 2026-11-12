@@ -1,0 +1,4 @@
+{
+  "caller": "<!--# echo var='http_x_forwarded_user' default='' -->",
+  "notes": [{ "id": "1", "text": "Signet issued the token that reached this." }]
+}

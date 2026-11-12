@@ -29,6 +29,7 @@ import { invitationRefusal } from "@signet/core";
 import { useState } from "react";
 import { Link } from "react-router";
 
+import { EmailFields } from "./emailFields.js";
 import { InvitationDialog } from "./invitationDialog.js";
 import { endUserRoute } from "./routes.js";
 import { roleAllows, useEndpointContext } from "./useConsole.js";
@@ -55,7 +56,7 @@ import {
 } from "../components/layout.js";
 import { Chips, DataTable, StatusBadge } from "../components/table.js";
 import { countOf, formatInstant } from "../formatting/values.js";
-import { parseList } from "../forms/lists.js";
+import { endUserCreateBody } from "../forms/endUserEdit.js";
 
 import type { EndUserView, IssuedInvitationView } from "../api/types.js";
 import type { Column } from "../components/table.js";
@@ -110,16 +111,34 @@ export function UsersPage() {
           <StatusBadge tone="neutral">local account</StatusBadge>
         ),
     },
-    {
-      key: "fhirUser",
-      header: "fhirUser",
-      cell: (user) =>
-        user.fhirUser === null ? (
-          <span className="text-base-content/50">none</span>
-        ) : (
-          <code className="font-mono text-xs">{user.fhirUser}</code>
-        ),
-    },
+    // The identity column each kind releases: a fhirUser reference on SMART, an
+    // email address on OAuth.
+    endpoint.kind === "smart"
+      ? {
+          key: "fhirUser",
+          header: "fhirUser",
+          cell: (user) =>
+            user.fhirUser === null ? (
+              <span className="text-base-content/50">none</span>
+            ) : (
+              <code className="font-mono text-xs">{user.fhirUser}</code>
+            ),
+        }
+      : {
+          key: "email",
+          header: "Email",
+          cell: (user) =>
+            user.email === null ? (
+              <span className="text-base-content/50">none</span>
+            ) : (
+              <span className="text-xs">
+                {user.email}
+                {user.emailVerified ? null : (
+                  <span className="text-base-content/50"> (unverified)</span>
+                )}
+              </span>
+            ),
+        },
     {
       key: "roles",
       header: "Roles",
@@ -202,6 +221,7 @@ export function UsersPage() {
           invitation={outcome.invitation}
           username={outcome.user.username}
           endpointName={endpoint.name}
+          recipient={outcome.user.email}
           onClose={() => {
             setOutcome(undefined);
           }}
@@ -256,6 +276,8 @@ function EndUserForm({
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [fhirUser, setFhirUser] = useState("");
+  const [email, setEmail] = useState("");
+  const [emailVerified, setEmailVerified] = useState(false);
   const [password, setPassword] = useState("");
   const [roles, setRoles] = useState("");
   const [isPersona, setIsPersona] = useState(false);
@@ -269,6 +291,7 @@ function EndUserForm({
     undefined;
   const inviting = !isPersona && mayInvite && setup === "invite";
   const issues = issuesByField(create.error);
+  const isSmart = endpoint.kind === "smart";
 
   return (
     <Panel title="Add user">
@@ -277,21 +300,21 @@ function EndUserForm({
         onSubmit={(event) => {
           event.preventDefault();
           create.mutate(
-            {
-              username,
-              displayName,
-              isPersona,
-              // An invited account is created without a password: its holder
-              // chooses one through the link.
-              ...(isPersona || inviting ? {} : { password }),
-              ...(fhirUser.trim().length === 0
-                ? {}
-                : { fhirUserReference: fhirUser.trim() }),
-              ...(roles.trim().length === 0 ? {} : { roles: parseList(roles) }),
-              ...(patient.trim().length === 0
-                ? {}
-                : { defaultContext: { patient: patient.trim() } }),
-            },
+            endUserCreateBody(
+              {
+                username,
+                displayName,
+                password,
+                isPersona,
+                invite: inviting,
+                fhirUser,
+                email,
+                emailVerified,
+                roles,
+                defaultPatient: patient,
+              },
+              endpoint.kind,
+            ),
             {
               onSuccess: (user) => {
                 if (!inviting) {
@@ -358,13 +381,23 @@ function EndUserForm({
             required
           />
         )}
-        <TextField
-          label="fhirUser reference"
-          value={fhirUser}
-          onChange={setFhirUser}
-          error={issues["fhirUserReference"]}
-          hint="A relative FHIR reference such as Practitioner/123. Released to apps granted the fhirUser scope."
-        />
+        {isSmart ? (
+          <TextField
+            label="fhirUser reference"
+            value={fhirUser}
+            onChange={setFhirUser}
+            error={issues["fhirUserReference"]}
+            hint="A relative FHIR reference such as Practitioner/123. Released to apps granted the fhirUser scope."
+          />
+        ) : (
+          <EmailFields
+            email={email}
+            emailVerified={emailVerified}
+            onEmail={setEmail}
+            onEmailVerified={setEmailVerified}
+            issues={issues}
+          />
+        )}
         <ListField
           label="Roles"
           value={roles}
@@ -373,7 +406,7 @@ function EndUserForm({
           hint="One per line. A policy rule can require one of these before granting a scope."
           rows={2}
         />
-        {isPersona ? (
+        {isSmart && isPersona ? (
           <TextField
             label="Default patient"
             value={patient}

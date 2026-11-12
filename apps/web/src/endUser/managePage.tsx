@@ -174,15 +174,17 @@ function Authorizations({
               }
             >
               <ul className="flex flex-col gap-1">
-                {describeScopes(authorization.scope).map((described) => (
-                  <li
-                    key={described.scope}
-                    className="text-sm max-sm:text-base"
-                  >
-                    <ScopeMarker writes={described.writes} className="mr-2" />
-                    {described.description}
-                  </li>
-                ))}
+                {describeScopes(authorization.scope, data.endpointKind).map(
+                  (described) => (
+                    <li
+                      key={described.scope}
+                      className="text-sm max-sm:text-base"
+                    >
+                      <ScopeMarker writes={described.writes} className="mr-2" />
+                      {described.description}
+                    </li>
+                  ),
+                )}
               </ul>
             </Panel>
           ))

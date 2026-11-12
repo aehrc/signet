@@ -95,7 +95,8 @@ export function toEvaluationEndpoint(
     tenantSlug,
     slug: endpoint.slug,
     issuer,
-    fhirBaseUrl: endpoint.fhirBaseUrl,
+    kind: endpoint.kind,
+    audience: endpoint.audience,
   };
 }
 
@@ -119,8 +120,11 @@ export function toEvaluationClient(client: Client): EvaluationClient {
 export function toEvaluationUser(user: EndUser): EvaluationUser {
   return {
     id: user.id,
+    username: user.username,
     fhirUser: user.fhirUserReference,
     displayName: user.displayName,
+    email: user.email,
+    emailVerified: user.emailVerified,
     roles: user.roles,
     attributes: user.attributes,
   };
@@ -140,7 +144,8 @@ export function toCapabilityConfig(
 ): EndpointCapabilityConfig {
   return {
     issuer,
-    fhirBaseUrl: endpoint.fhirBaseUrl,
+    kind: endpoint.kind,
+    audience: endpoint.audience,
 
     supportsEhrLaunch: endpoint.supportsEhrLaunch,
     supportsStandaloneLaunch: endpoint.supportsStandaloneLaunch,

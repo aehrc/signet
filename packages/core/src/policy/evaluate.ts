@@ -20,6 +20,7 @@ import type { TemplateScope } from "./template.js";
 import type {
   DeniedScope,
   EvaluationContext,
+  GrantingRule,
   NarrowedScope,
   ParsedScopePattern,
   PolicyDocument,
@@ -39,6 +40,8 @@ type MatchMode = "within" | "intersects";
 type GrantDecision =
   | {
       readonly allow: true;
+      /** The rule that granted it. */
+      readonly rule: ScopeGrantRule;
       /** Present when the scope was granted in reduced form. */
       readonly narrowedTo?: ResourceScope;
       readonly ruleId?: string;
@@ -110,7 +113,8 @@ function buildTemplateScope(
       tenantSlug: context.endpoint.tenantSlug,
       slug: context.endpoint.slug,
       issuer: context.endpoint.issuer,
-      fhirBaseUrl: context.endpoint.fhirBaseUrl,
+      kind: context.endpoint.kind,
+      audience: context.endpoint.audience,
     },
     client: {
       clientId: context.client.clientId,
@@ -123,8 +127,11 @@ function buildTemplateScope(
         ? undefined
         : {
             id: user.id,
+            username: user.username,
             fhirUser: user.fhirUser,
             displayName: user.displayName,
+            email: user.email,
+            emailVerified: user.emailVerified,
             roles: [...user.roles],
             attributes: user.attributes,
           },
@@ -227,10 +234,19 @@ export function evaluatePolicy(
 ): PolicyEvaluation {
   const patterns = new Map<string, ParsedScopePattern | undefined>();
 
-  /** Parses a pattern once per evaluation. */
+  /**
+   * Parses a pattern once per evaluation.
+   *
+   * On an OAuth endpoint nothing is a pattern: every scope is an opaque string,
+   * and a rule names exactly the scope it grants. A SMART wildcard written there
+   * would otherwise grant whatever happened to be shaped like a SMART scope.
+   */
   const patternFor = (
     pattern: ScopePattern,
   ): ParsedScopePattern | undefined => {
+    if (context.endpoint.kind === "oauth") {
+      return undefined;
+    }
     if (!patterns.has(pattern)) {
       patterns.set(pattern, parseScopePattern(pattern));
     }
@@ -304,6 +320,7 @@ export function evaluatePolicy(
       if (narrowed !== undefined) {
         return {
           allow: true,
+          rule,
           narrowedTo: narrowed,
           ...(rule.id === undefined ? {} : { ruleId: rule.id }),
         };
@@ -325,7 +342,7 @@ export function evaluatePolicy(
         continue;
       }
       if (rule.allow) {
-        return { allow: true };
+        return { allow: true, rule };
       }
       const label = rule.id ?? `scopeGrants[${index}]`;
       return {
@@ -345,6 +362,7 @@ export function evaluatePolicy(
   const grantedScopes: Scope[] = [];
   const deniedScopes: DeniedScope[] = [];
   const narrowedScopes: NarrowedScope[] = [];
+  const grantingRules: GrantingRule[] = [];
   const seen = new Set<string>();
 
   for (const scope of context.requested) {
@@ -358,6 +376,7 @@ export function evaluatePolicy(
 
     const decision = decide(scope);
     if (decision.allow) {
+      grantingRules.push({ scope: key, rule: decision.rule });
       if (decision.narrowedTo === undefined) {
         grantedScopes.push(scope);
       } else {
@@ -495,6 +514,7 @@ export function evaluatePolicy(
     grantedScopes,
     deniedScopes,
     narrowedScopes,
+    grantingRules,
     claims,
     contextParams,
     accessTokenTtl: policy.defaults.accessTokenTtl,

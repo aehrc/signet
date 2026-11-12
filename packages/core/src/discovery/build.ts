@@ -17,6 +17,7 @@ import type {
   SmartConfiguration,
   TokenEndpointAuthMethod,
 } from "./types.js";
+import type { EndpointKind } from "../endpointKind.js";
 
 /**
  * The only PKCE challenge method Signet will ever advertise or accept.
@@ -40,23 +41,43 @@ const CODE_CHALLENGE_METHODS: readonly "S256"[] = ["S256"];
  */
 const DEFAULT_ID_TOKEN_SIGNING_ALGS: readonly string[] = ["RS384", "ES384"];
 
-/** The claims Signet puts in an ID token, advertised for OIDC discovery. */
-const CLAIMS_SUPPORTED: readonly string[] = [
+/** The registered claims every ID token carries. */
+const REGISTERED_CLAIMS: readonly string[] = [
   "sub",
   "iss",
   "aud",
   "exp",
   "iat",
-  "fhirUser",
-  "profile",
 ];
+
+/** The claims Signet puts in an ID token, advertised for OIDC discovery. */
+const CLAIMS_SUPPORTED: Readonly<Record<EndpointKind, readonly string[]>> = {
+  smart: [...REGISTERED_CLAIMS, "fhirUser", "profile"],
+  oauth: [
+    ...REGISTERED_CLAIMS,
+    "name",
+    "preferred_username",
+    "email",
+    "email_verified",
+  ],
+};
 
 /** Signet only ever issues authorization codes, never implicit tokens. */
 const RESPONSE_TYPES: readonly string[] = ["code"];
 
-/** True when the endpoint supports at least one interactive launch mode. */
+/**
+ * True when the endpoint issues authorization codes.
+ *
+ * On a SMART endpoint that follows from supporting a launch mode. An OAuth
+ * endpoint has no launch modes, and the authorization code flow is simply how a
+ * user signs in.
+ */
 function supportsAnyLaunch(config: EndpointCapabilityConfig): boolean {
-  return config.supportsEhrLaunch || config.supportsStandaloneLaunch;
+  return (
+    config.kind === "oauth" ||
+    config.supportsEhrLaunch ||
+    config.supportsStandaloneLaunch
+  );
 }
 
 /**
@@ -239,6 +260,6 @@ export function buildOpenIdConfiguration(
         : options.signingAlgorithms,
     token_endpoint_auth_methods_supported: oidcAuthMethods(config),
     code_challenge_methods_supported: CODE_CHALLENGE_METHODS,
-    claims_supported: CLAIMS_SUPPORTED,
+    claims_supported: CLAIMS_SUPPORTED[config.kind],
   };
 }

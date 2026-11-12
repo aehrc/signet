@@ -40,9 +40,10 @@ import {
   ShownOnce,
 } from "../components/layout.js";
 import { Chips, DataTable, StatusBadge } from "../components/table.js";
+import { defaultClientScopes } from "../formatting/endpointKind.js";
 import { toneForStatus } from "../formatting/status.js";
 import { clientTypeLabel, countOf } from "../formatting/values.js";
-import { parseList, parseScopeList } from "../forms/lists.js";
+import { formatList, parseList, parseScopeList } from "../forms/lists.js";
 
 import type { ClientView } from "../api/types.js";
 import type { Column } from "../components/table.js";
@@ -202,7 +203,8 @@ function ClientForm({
   onRegistered,
   onCancel,
 }: Readonly<ClientFormProps>) {
-  const { tenant, endpointSlug } = useEndpointContext();
+  const { tenant, endpointSlug, endpoint } = useEndpointContext();
+  const isSmart = endpoint.kind === "smart";
   const create = useCreateClient(tenant, endpointSlug);
 
   const permitted = [
@@ -228,7 +230,7 @@ function ClientForm({
   const [redirectUris, setRedirectUris] = useState("");
   const [launchUri, setLaunchUri] = useState("");
   const [scopes, setScopes] = useState(
-    "openid\nfhirUser\nlaunch\nlaunch/patient\npatient/*.rs",
+    formatList(defaultClientScopes(endpoint.kind)),
   );
   const [jwksUri, setJwksUri] = useState("");
   const [jwks, setJwks] = useState("");
@@ -333,13 +335,15 @@ function ClientForm({
           error={issues["redirectUris"] ?? issues["redirectUris.0"]}
           hint="One per line. Matched exactly at /authorize - never by prefix."
         />
-        <TextField
-          label="Launch URI"
-          value={launchUri}
-          onChange={setLaunchUri}
-          error={issues["launchUri"]}
-          hint="Where an EHR launch opens the app, with iss and launch appended. Needed for the launch simulator."
-        />
+        {isSmart ? (
+          <TextField
+            label="Launch URI"
+            value={launchUri}
+            onChange={setLaunchUri}
+            error={issues["launchUri"]}
+            hint="Where an EHR launch opens the app, with iss and launch appended. Needed for the launch simulator."
+          />
+        ) : null}
         <ListField
           label="Allowed scopes"
           value={scopes}
@@ -362,13 +366,21 @@ function ClientForm({
             label="Refresh token"
             checked={grantRefresh}
             onChange={setGrantRefresh}
-            hint="Also requires the policy to grant offline_access or online_access."
+            hint={
+              isSmart
+                ? "Also requires the policy to grant offline_access or online_access."
+                : "Also requires the policy to grant offline_access."
+            }
           />
           <CheckboxField
             label="Client credentials"
             checked={grantCredentials}
             onChange={setGrantCredentials}
-            hint="SMART Backend Services. A backend service never receives a refresh token."
+            hint={
+              isSmart
+                ? "SMART Backend Services. A backend service never receives a refresh token."
+                : "For a service calling the API as itself, with no user. It never receives a refresh token."
+            }
           />
         </fieldset>
 

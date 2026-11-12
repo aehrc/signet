@@ -24,7 +24,8 @@ function endpointView(overrides: Partial<EndpointView> = {}): EndpointView {
     slug: "pathling",
     name: "Pathling",
     description: null,
-    fhirBaseUrl: "https://fhir.example.com/fhir",
+    kind: "smart",
+    audience: "https://fhir.example.com/fhir",
     issuer: "https://signet.example.com/t/demo/e/pathling",
     smartConfigurationUrl:
       "https://signet.example.com/t/demo/e/pathling/.well-known/smart-configuration",
@@ -49,7 +50,7 @@ describe("endpointSettingsFormValues", () => {
     expect(endpointSettingsFormValues(endpointView())).toEqual({
       name: "Pathling",
       description: "",
-      fhirBaseUrl: "https://fhir.example.com/fhir",
+      audience: "https://fhir.example.com/fhir",
       accessTokenTtl: "900",
       refreshTokenTtl: "86400",
       authMode: "local",
@@ -158,7 +159,7 @@ describe("endpointSettingsPatch", () => {
         {
           name: "Renamed",
           description: "Now described",
-          fhirBaseUrl: "https://other.example.com/fhir",
+          audience: "https://other.example.com/fhir",
           accessTokenTtl: "600",
           refreshTokenTtl: "3600",
           authMode: "persona",
@@ -171,7 +172,7 @@ describe("endpointSettingsPatch", () => {
     ).toEqual({
       name: "Renamed",
       description: "Now described",
-      fhirBaseUrl: "https://other.example.com/fhir",
+      audience: "https://other.example.com/fhir",
       accessTokenTtl: 600,
       refreshTokenTtl: 3600,
       authMode: "persona",

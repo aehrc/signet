@@ -12,7 +12,21 @@ import { Hono } from "hono";
 
 import { createRateLimitStore, rateLimit, RATE_LIMITS } from "./rateLimit.js";
 
-import type { RateLimitName } from "./rateLimit.js";
+import type { RateLimitName, RateLimitStore } from "./rateLimit.js";
+
+/** What the limiter reads from the server context, at the shipped sign-in limit. */
+function limiterContext(
+  clock: () => Date,
+  store: RateLimitStore,
+  trustedProxyCount: number,
+  signInRateLimit: number = RATE_LIMITS.signIn.limit,
+) {
+  return {
+    clock,
+    rateLimits: store,
+    config: { trustedProxyCount, signInRateLimit },
+  };
+}
 
 /**
  * An app with one limited route, and a clock the test controls.
@@ -26,7 +40,10 @@ function limitedApp(name: RateLimitName) {
   const app = new Hono();
   app.use(
     "/thing",
-    rateLimit(name, () => now, store, 1),
+    rateLimit(
+      name,
+      limiterContext(() => now, store, 1),
+    ),
   );
   app.get("/thing", (c) => c.json({ ok: true }));
 
@@ -45,6 +62,57 @@ function limitedApp(name: RateLimitName) {
 }
 
 describe("rateLimit", () => {
+  it("applies the configured sign-in limit in place of the default", async () => {
+    const now = new Date("2026-01-01T00:00:00Z");
+    const store = createRateLimitStore();
+    const app = new Hono();
+    app.use(
+      "/thing",
+      rateLimit(
+        "signIn",
+        limiterContext(() => now, store, 1, 25),
+      ),
+    );
+    app.get("/thing", (c) => c.json({ ok: true }));
+
+    const statuses: number[] = [];
+    for (let index = 0; index < 26; index += 1) {
+      const response = await app.request("/thing", {
+        headers: { "x-forwarded-for": "203.0.113.7" },
+      });
+      statuses.push(response.status);
+    }
+    expect(statuses.filter((status) => status === 200)).toHaveLength(25);
+    expect(statuses.at(-1)).toBe(429);
+  });
+
+  it("leaves every other limit at its own value", async () => {
+    const now = new Date("2026-01-01T00:00:00Z");
+    const store = createRateLimitStore();
+    const app = new Hono();
+    app.use(
+      "/thing",
+      rateLimit(
+        "clientRequest",
+        limiterContext(() => now, store, 1, 1000),
+      ),
+    );
+    app.get("/thing", (c) => c.json({ ok: true }));
+
+    const statuses: number[] = [];
+    for (
+      let index = 0;
+      index < RATE_LIMITS.clientRequest.limit + 1;
+      index += 1
+    ) {
+      const response = await app.request("/thing", {
+        headers: { "x-forwarded-for": "203.0.113.7" },
+      });
+      statuses.push(response.status);
+    }
+    expect(statuses.at(-1)).toBe(429);
+  });
+
   it("admits up to the limit and then refuses", async () => {
     const harness = limitedApp("signIn");
     const statuses: number[] = [];
@@ -108,11 +176,17 @@ describe("rateLimit", () => {
     const app = new Hono();
     app.use(
       "/sign-in",
-      rateLimit("signIn", () => now, store, 1),
+      rateLimit(
+        "signIn",
+        limiterContext(() => now, store, 1),
+      ),
     );
     app.use(
       "/token",
-      rateLimit("token", () => now, store, 1),
+      rateLimit(
+        "token",
+        limiterContext(() => now, store, 1),
+      ),
     );
     app.get("/sign-in", (c) => c.json({ ok: true }));
     app.get("/token", (c) => c.json({ ok: true }));
@@ -134,7 +208,10 @@ describe("rateLimit", () => {
     const app = new Hono();
     app.use(
       "/thing",
-      rateLimit("signIn", () => now, store, 1),
+      rateLimit(
+        "signIn",
+        limiterContext(() => now, store, 1),
+      ),
     );
     app.get("/thing", (c) => c.json({ ok: true }));
 
@@ -156,7 +233,10 @@ describe("rateLimit", () => {
     const app = new Hono();
     app.use(
       "/thing",
-      rateLimit("signIn", () => now, store, 0),
+      rateLimit(
+        "signIn",
+        limiterContext(() => now, store, 0),
+      ),
     );
     app.get("/thing", (c) => c.json({ ok: true }));
 

@@ -59,7 +59,7 @@ import { parseBody } from "./requestBody.js";
 import { resolveRemoteJwks } from "../oauth/remoteJwks.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
-import type { EndpointUrls } from "@signet/core";
+import type { EndpointKind, EndpointUrls } from "@signet/core";
 import type {
   AuditAction,
   AuditTargetType,
@@ -80,6 +80,11 @@ interface TrustRuleSpec<TRule, TInput> {
   readonly field: string;
   /** What to call the rule when there is none, e.g. `trust anchor`. */
   readonly noun: string;
+  /**
+   * The kinds of endpoint the rule may be configured on. A permission ticket
+   * names a patient on a FHIR server, so its issuer exists only for SMART.
+   */
+  readonly kinds: readonly EndpointKind[];
   readonly schema: ZodType<TInput>;
   readonly read: (scope: BoundEndpoint) => Promise<TRule | undefined>;
   readonly upsert: (
@@ -158,6 +163,15 @@ function registerRuleRoutes<TRule, TInput>(
   /** Sets the endpoint's rule, turning the capability on. */
   router.put(path, requireRole("admin"), async (c) => {
     const { scope, endpoint, urls } = c.get("endpoint");
+    if (!spec.kinds.includes(endpoint.kind)) {
+      return c.json(
+        adminErrorBody(
+          "invalid_request",
+          `A ${spec.noun} can only be configured on a SMART on FHIR endpoint`,
+        ),
+        statusForAdminError("invalid_request"),
+      );
+    }
     const body = await parseBody(c, spec.schema);
     if (body instanceof Response) {
       return body;
@@ -259,6 +273,7 @@ export function registerTrustRoutes(
     segment: "anchor",
     field: "anchor",
     noun: "trust anchor",
+    kinds: ["smart", "oauth"],
     schema: trustAnchorWriteSchema,
     read: getEndpointTrustAnchor,
     upsert: upsertEndpointTrustAnchor,
@@ -279,6 +294,7 @@ export function registerTrustRoutes(
     segment: "ticket-issuer",
     field: "ticketIssuer",
     noun: "permission ticket issuer",
+    kinds: ["smart"],
     schema: ticketIssuerWriteSchema,
     read: getEndpointTicketIssuer,
     upsert: upsertEndpointTicketIssuer,

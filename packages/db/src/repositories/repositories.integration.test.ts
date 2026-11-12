@@ -88,6 +88,7 @@ import {
   getEndUser,
   listSelectablePersonas,
   setEndUserDisabled,
+  upsertFederatedEndUser,
 } from "./endUsers.js";
 import {
   createEndUserSession,
@@ -346,7 +347,8 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       createEndpoint(bound, {
         slug: `e-${unique()}`,
         name: "Endpoint",
-        fhirBaseUrl: "https://fhir.example.org/fhir",
+        kind: "smart",
+        audience: "https://fhir.example.org/fhir",
         isProduction: options.isProduction ?? true,
       }),
     );
@@ -416,6 +418,65 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     );
   }
 
+  describe("endpoint kind and end-user email", () => {
+    it("stores the kind an endpoint is created with", async () => {
+      const tenantScope = await newTenant();
+      const endpoint = await withTenantScope(db, tenantScope, (bound) =>
+        createEndpoint(bound, {
+          slug: `oauth-${unique()}`,
+          name: "Orders API",
+          kind: "oauth",
+          audience: "https://api.example.org/v1",
+        }),
+      );
+      expect(endpoint.kind).toBe("oauth");
+      expect(endpoint.audience).toBe("https://api.example.org/v1");
+    });
+
+    it("stores an end user's email, unverified unless told otherwise", async () => {
+      const fixture = await newFixture();
+      const user = await withTenantScope(db, fixture.endpointScope, (bound) =>
+        createEndUser(bound, {
+          username: `alice-${unique()}`,
+          displayName: "Alice",
+          email: "alice@example.org",
+        }),
+      );
+      expect(user.email).toBe("alice@example.org");
+      expect(user.emailVerified).toBe(false);
+    });
+
+    it("refreshes a federated user's email on every sign-in", async () => {
+      const fixture = await newFixture();
+      const identity = {
+        username: `https://idp.example.org#${unique()}`,
+        displayName: "Alice",
+        fhirUserReference: null,
+        roles: [],
+        attributes: {},
+      };
+      await withTenantScope(db, fixture.endpointScope, (bound) =>
+        upsertFederatedEndUser(bound, {
+          ...identity,
+          email: "old@example.org",
+          emailVerified: true,
+        }),
+      );
+      const refreshed = await withTenantScope(
+        db,
+        fixture.endpointScope,
+        (bound) =>
+          upsertFederatedEndUser(bound, {
+            ...identity,
+            email: "new@example.org",
+            emailVerified: false,
+          }),
+      );
+      expect(refreshed.email).toBe("new@example.org");
+      expect(refreshed.emailVerified).toBe(false);
+    });
+  });
+
   describe("tenant isolation", () => {
     it("lists only the scope's own endpoints", async () => {
       const mine = await newFixture();
@@ -442,9 +503,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       );
 
       expect(resolved?.scope.endpointId).toBe(fixture.endpointScope.endpointId);
-      expect(resolved?.endpoint.fhirBaseUrl).toBe(
-        "https://fhir.example.org/fhir",
-      );
+      expect(resolved?.endpoint.audience).toBe("https://fhir.example.org/fhir");
       expect(
         await resolveIssuer(db, fixture.tenantScope.tenantSlug, "no-such"),
       ).toBeUndefined();
@@ -1968,7 +2027,8 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         createEndpoint(bound, {
           slug: `e-${unique()}`,
           name: "Other endpoint",
-          fhirBaseUrl: "https://fhir.example.org/fhir",
+          kind: "smart",
+          audience: "https://fhir.example.org/fhir",
         }),
       );
       const otherScope = endpointScopeFromRow(fixture.tenantScope, other);

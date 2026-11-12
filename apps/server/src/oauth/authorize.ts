@@ -30,6 +30,7 @@ import {
 } from "@signet/db";
 
 import { validateAuthorizeRequest } from "./authorizeRequest.js";
+import { formValues } from "./grants/types.js";
 import { interactionUrl } from "./interactionState.js";
 import { authorizeErrorRedirect } from "../http/oauthErrors.js";
 import { requestMetadata } from "../http/requestMeta.js";
@@ -62,9 +63,15 @@ const LAUNCH_REFUSAL_DESCRIPTIONS: Readonly<
   "client-mismatch": "This launch context was issued to a different app",
 };
 
-/** Reads the authorize parameters from a query string or a form body. */
+/**
+ * Reads the authorize parameters from a query string or a form body.
+ *
+ * `resource` is the one parameter RFC 8707 lets a client repeat, so it is read as
+ * a list; every other parameter is read once.
+ */
 function toAuthorizeParams(
   read: (name: string) => string | undefined,
+  resources: readonly string[],
 ): AuthorizeParams {
   return {
     responseType: read("response_type"),
@@ -73,6 +80,7 @@ function toAuthorizeParams(
     scope: read("scope"),
     state: read("state"),
     aud: read("aud"),
+    resources,
     launch: read("launch"),
     codeChallenge: read("code_challenge"),
     codeChallengeMethod: read("code_challenge_method"),
@@ -164,10 +172,21 @@ export function authorizeHandler(context: ServerContext) {
       );
     }
 
-    const params =
-      c.req.method === "POST"
-        ? toAuthorizeParams(formReader(await c.req.parseBody()))
-        : toAuthorizeParams((name) => c.req.query(name));
+    let params: AuthorizeParams;
+    if (c.req.method === "POST") {
+      // Every value of a repeated field, so that `formReader` sees the
+      // repetition it refuses and `resource` keeps every value it was sent.
+      const body = await c.req.parseBody({ all: true });
+      params = toAuthorizeParams(
+        formReader(body),
+        formValues(body, "resource"),
+      );
+    } else {
+      params = toAuthorizeParams(
+        (name) => c.req.query(name),
+        c.req.queries("resource") ?? [],
+      );
+    }
 
     /** Records a refusal and produces the response it calls for. */
     const deny = async (refusal: AuthorizeRefusal) => {

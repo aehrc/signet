@@ -241,6 +241,38 @@ test.describe("an authenticated operator", () => {
     ).toBeVisible({ timeout: 20_000 });
   });
 
+  test("offers each endpoint only the presets of its own kind", async ({
+    page,
+  }) => {
+    /** The preset picker on an endpoint's policy page. */
+    const presetsOn = async (slug: string): Promise<Locator> => {
+      await page.goto(`${SIGNET}/console/t/demo/e/${slug}/policy`);
+      return page.locator("section").filter({
+        has: page.getByRole("heading", { name: "Start from a preset" }),
+      });
+    };
+
+    // A SMART endpoint is offered the SMART presets and not the OAuth baseline,
+    // whose rules would be refused there.
+    const smart = await presetsOn("pathling");
+    await expect(
+      smart.getByText("SMART baseline", { exact: true }),
+    ).toBeVisible();
+    await expect(smart.getByText("Pathling", { exact: true })).toBeVisible();
+    await expect(
+      smart.getByText("OAuth / OpenID Connect baseline", { exact: true }),
+    ).toHaveCount(0);
+
+    // And the reverse on an OAuth endpoint.
+    const oauth = await presetsOn("notes");
+    await expect(
+      oauth.getByText("OAuth / OpenID Connect baseline", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      oauth.getByText("SMART baseline", { exact: true }),
+    ).toHaveCount(0);
+  });
+
   test("edits a user from their detail page", async ({ page }) => {
     const user = uniqueUser("edit-target");
     await createUser(page, user);

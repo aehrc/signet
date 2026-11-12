@@ -136,6 +136,8 @@ export async function submitConsent(
 
 /** What the management page shows. */
 export interface ManagementView {
+  /** What the endpoint secures, which decides how a scope is phrased. */
+  readonly endpointKind: "smart" | "oauth";
   readonly user: {
     readonly displayName: string;
     readonly username: string;
@@ -257,6 +259,25 @@ export interface PortalRequestView {
   readonly submittedAt: string;
   readonly decidedAt: string | null;
   readonly decisionNote: string | null;
+}
+
+/** What the developer portal needs to know about its endpoint before a request. */
+export interface PortalView {
+  /** Decides which scopes a request starts with. */
+  readonly endpointKind: "smart" | "oauth";
+}
+
+/**
+ * Reads the portal's endpoint. Refused with a 404 when the endpoint takes no
+ * self-serve requests. Not `{iss}/apps` itself, which is the portal page.
+ */
+export async function readPortal(
+  tenant: string,
+  endpoint: string,
+): Promise<PortalView> {
+  return await request<PortalView>(
+    `${issuerBase(tenant, endpoint)}/apps/endpoint`,
+  );
 }
 
 /** Files a registration request. The tracking token is returned once. */

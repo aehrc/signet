@@ -31,7 +31,7 @@ function minimal(): Record<string, unknown> {
 
 /** Validates and returns the issues, failing if the document was accepted. */
 function issues(input: unknown): readonly PolicyIssue[] {
-  const result = validatePolicy(input);
+  const result = validatePolicy(input, "smart");
   if (result.ok) {
     throw new Error("Expected the document to be rejected");
   }
@@ -45,7 +45,7 @@ function paths(input: unknown): readonly string[] {
 
 /** The issues reported for a document, empty when it was accepted. */
 function report(input: unknown): readonly PolicyIssue[] {
-  const result = validatePolicy(input);
+  const result = validatePolicy(input, "smart");
   return result.ok ? [] : result.issues;
 }
 
@@ -76,7 +76,7 @@ describe("validatePolicy - document shape", () => {
 
   it("returns the document itself on success", () => {
     const input = minimal();
-    const result = validatePolicy(input);
+    const result = validatePolicy(input, "smart");
     // Identity, not equality: a caller holds the object it passed in, and a
     // validator that returned a copy would leave it holding the wrong one. Widened
     // to `unknown` because the comparison is of references, and the two sides are
@@ -607,12 +607,13 @@ describe("validatePolicy - reporting", () => {
 });
 
 describe("validatePolicy - presets", () => {
-  it.each(POLICY_PRESETS.map((preset) => [preset.id, preset.policy] as const))(
-    "accepts the %s preset",
-    (_id, document) => {
-      expect(report(document)).toEqual([]);
-    },
-  );
+  it.each(
+    POLICY_PRESETS.filter((preset) => preset.kind === "smart").map(
+      (preset) => [preset.id, preset.policy] as const,
+    ),
+  )("accepts the %s preset", (_id, document) => {
+    expect(report(document)).toEqual([]);
+  });
 
   it("accepts both presets after a JSON round trip", () => {
     for (const document of [SMART_BASELINE_PRESET, PATHLING_PRESET]) {

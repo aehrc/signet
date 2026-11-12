@@ -30,7 +30,7 @@ import {
   assembleIdTokenClaims,
 } from "./assemble.js";
 import { evaluatePolicy } from "../policy/evaluate.js";
-import { formatScopes } from "../scopes/index.js";
+import { formatScopes, hasIdentityScope } from "../scopes/index.js";
 
 import type {
   AccessTokenClaims,
@@ -42,7 +42,6 @@ import type {
   PolicyDocument,
   PolicyEvaluation,
 } from "../policy/types.js";
-import type { Scope } from "../scopes/types.js";
 
 /** What a simulation needs beyond the policy and the context. */
 export interface SimulationInput {
@@ -80,16 +79,6 @@ export interface SimulationResult {
   readonly refreshTokenTtl: number;
   /** Whether a refresh token would accompany the access token. */
   readonly wouldIssueRefreshToken: boolean;
-}
-
-/** True when the granted scopes include the named identity scope. */
-function hasIdentityScope(
-  granted: readonly Scope[],
-  name: "openid" | "fhirUser" | "profile",
-): boolean {
-  return granted.some(
-    (scope) => scope.kind === "identity" && scope.name === name,
-  );
 }
 
 /**

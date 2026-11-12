@@ -27,7 +27,7 @@ import type { Scope } from "../scopes/types.js";
 
 /** Parses a scope string, failing the test if anything was unparseable. */
 function scopes(raw: string): readonly Scope[] {
-  const result = parseScopes(raw);
+  const result = parseScopes(raw, "smart");
   expect(result.rejected).toEqual([]);
   return result.scopes;
 }
@@ -35,6 +35,9 @@ function scopes(raw: string): readonly Scope[] {
 const PRACTITIONER: EvaluationUser = {
   id: "user-1",
   fhirUser: "Practitioner/abc",
+  username: "user-1",
+  email: null,
+  emailVerified: false,
   displayName: "Dr Alice Chen",
   roles: ["clinician"],
   attributes: {},
@@ -49,7 +52,8 @@ function context(
       tenantSlug: "demo",
       slug: "pathling",
       issuer: "https://signet.example.org/t/demo/e/pathling",
-      fhirBaseUrl: "https://fhir.example.org/fhir",
+      kind: "smart",
+      audience: "https://fhir.example.org/fhir",
     },
     client: {
       clientId: "client-abc",
@@ -73,6 +77,7 @@ function evaluation(
     grantedScopes: scopes("patient/Observation.rs"),
     deniedScopes: [],
     narrowedScopes: [],
+    grantingRules: [],
     claims: {},
     contextParams: {},
     accessTokenTtl: 300,

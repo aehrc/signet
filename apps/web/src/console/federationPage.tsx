@@ -40,65 +40,12 @@ import {
   Panel,
 } from "../components/layout.js";
 import { formatInstant } from "../formatting/values.js";
-import { parseList, withoutBlanks } from "../forms/lists.js";
+import {
+  federationFormValues,
+  federationRequestBody,
+} from "../forms/federationEdit.js";
 
-import type { IdpConfigView } from "../api/types.js";
-
-/** The form's fields, as text. */
-interface FederationForm {
-  readonly issuer: string;
-  readonly displayName: string;
-  readonly clientId: string;
-  readonly clientSecret: string;
-  readonly scopes: string;
-  readonly fhirUser: string;
-  readonly roles: string;
-  readonly displayNameClaim: string;
-  readonly attributes: string;
-}
-
-/** The form as it starts, from whatever is already configured. */
-function initialForm(config: IdpConfigView | null | undefined): FederationForm {
-  return {
-    issuer: config?.issuer ?? "",
-    displayName: config?.displayName ?? "",
-    clientId: config?.clientId ?? "",
-    // Always blank. See the module header: a stored secret is never sent back, and
-    // an empty field means "leave it alone" rather than "clear it".
-    clientSecret: "",
-    scopes: (config?.scopes ?? ["openid", "profile"]).join(" "),
-    fhirUser: config?.claimMappings.fhirUser ?? "",
-    roles: config?.claimMappings.roles ?? "",
-    displayNameClaim: config?.claimMappings.displayName ?? "",
-    attributes: (config?.claimMappings.attributes ?? []).join("\n"),
-  };
-}
-
-/**
- * The request body for a form.
- *
- * `clientSecret` is omitted when blank rather than sent as an empty string, which
- * is the difference between keeping the stored secret and clearing it.
- */
-function requestBody(form: FederationForm): Record<string, unknown> {
-  const attributes = parseList(form.attributes);
-  return {
-    issuer: form.issuer.trim(),
-    displayName:
-      form.displayName.trim() === "" ? null : form.displayName.trim(),
-    clientId: form.clientId.trim(),
-    ...(form.clientSecret === "" ? {} : { clientSecret: form.clientSecret }),
-    scopes: form.scopes.split(/\s+/).filter((scope) => scope.length > 0),
-    claimMappings: {
-      ...withoutBlanks({
-        fhirUser: form.fhirUser,
-        roles: form.roles,
-        displayName: form.displayNameClaim,
-      }),
-      ...(attributes.length === 0 ? {} : { attributes }),
-    },
-  };
-}
+import type { FederationForm } from "../forms/federationEdit.js";
 
 /** The federation settings page. */
 export function FederationPage() {
@@ -113,7 +60,7 @@ export function FederationPage() {
   // Derived during render rather than synced by an effect: the loaded configuration
   // is the form's starting point until somebody types, and after that their edits
   // are what the form shows.
-  const values = form ?? initialForm(current);
+  const values = form ?? federationFormValues(current, endpoint.kind);
   const issues = issuesByField(act.error);
 
   /** Updates one field. */
@@ -152,7 +99,10 @@ export function FederationPage() {
           className="flex flex-col gap-3"
           onSubmit={(event) => {
             event.preventDefault();
-            act.mutate({ kind: "save", config: requestBody(values) });
+            act.mutate({
+              kind: "save",
+              config: federationRequestBody(values, endpoint.kind),
+            });
           }}
         >
           <TextField
@@ -228,6 +178,13 @@ export function FederationPage() {
           {act.error === null ? null : (
             <ErrorAlert message={describeError(act.error)} />
           )}
+          {act.isSuccess ? (
+            <InfoAlert>
+              {act.variables.kind === "save"
+                ? "Identity provider saved."
+                : "Identity provider removed."}
+            </InfoAlert>
+          ) : null}
         </form>
       </Panel>
 
@@ -236,14 +193,25 @@ export function FederationPage() {
         description="Which of the provider's claims become the identity Signet issues tokens about. A claim not named here is not copied - an upstream provider can put anything in a token, and only what you name reaches a policy."
       >
         <div className="flex flex-col gap-3">
-          <TextField
-            label="FHIR user claim"
-            value={values.fhirUser}
-            onChange={set("fhirUser")}
-            placeholder="fhirUser"
-            hint="Yields a relative reference such as Practitioner/123."
-            disabled={!mayEdit}
-          />
+          {endpoint.kind === "smart" ? (
+            <TextField
+              label="FHIR user claim"
+              value={values.fhirUser}
+              onChange={set("fhirUser")}
+              placeholder="fhirUser"
+              hint="Yields a relative reference such as Practitioner/123."
+              disabled={!mayEdit}
+            />
+          ) : (
+            <TextField
+              label="Email claim"
+              value={values.email}
+              onChange={set("email")}
+              placeholder="email"
+              hint="Yields the user's email address. The provider's email_verified claim is carried across with it; anything other than true is recorded as unverified."
+              disabled={!mayEdit}
+            />
+          )}
           <TextField
             label="Roles claim"
             value={values.roles}

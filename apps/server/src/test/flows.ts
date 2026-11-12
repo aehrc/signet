@@ -45,20 +45,31 @@ export function issuerPath(stack: TestStack): string {
   return `/t/${stack.tenant.slug}/e/${stack.endpoint.slug}`;
 }
 
-/** Posts a form-encoded body, the way a token endpoint client does. */
+/**
+ * Posts a form-encoded body, the way a token endpoint client does.
+ *
+ * A field given as an array is repeated, which is how RFC 8707 sends several
+ * `resource` values.
+ */
 export async function postForm(
   stack: TestStack,
   path: string,
-  fields: Readonly<Record<string, string>>,
+  fields: Readonly<Record<string, string | readonly string[]>>,
   headers: Readonly<Record<string, string>> = {},
 ): Promise<Response> {
+  const body = new URLSearchParams();
+  for (const [name, value] of Object.entries(fields)) {
+    for (const each of typeof value === "string" ? [value] : value) {
+      body.append(name, each);
+    }
+  }
   return await stack.app.request(`${issuerPath(stack)}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/x-www-form-urlencoded",
       ...headers,
     },
-    body: new URLSearchParams(fields).toString(),
+    body: body.toString(),
   });
 }
 
@@ -94,7 +105,13 @@ export interface AuthorizeOptions {
   readonly challenge: string;
   readonly redirectUri?: string;
   readonly state?: string;
-  readonly aud?: string;
+  /**
+   * The `aud` parameter. Defaults to the endpoint's audience; null omits it, as a
+   * plain OAuth client does.
+   */
+  readonly aud?: string | null;
+  /** RFC 8707 `resource` parameters, each sent as its own field. */
+  readonly resources?: readonly string[];
   readonly launch?: string;
   readonly nonce?: string;
   readonly responseType?: string;
@@ -113,10 +130,15 @@ function authorizeParameters(
     client_id: options.clientId,
     redirect_uri: options.redirectUri ?? "https://app.test/cb",
     scope: options.scope,
-    aud: options.aud ?? stack.endpoint.fhirBaseUrl,
     code_challenge: options.challenge,
     code_challenge_method: options.codeChallengeMethod ?? "S256",
   });
+  if (options.aud !== null) {
+    parameters.set("aud", options.aud ?? stack.endpoint.audience);
+  }
+  for (const resource of options.resources ?? []) {
+    parameters.append("resource", resource);
+  }
   if (options.state !== undefined) {
     parameters.set("state", options.state);
   }
@@ -340,6 +362,7 @@ export async function backendToken(
   stack: TestStack,
   scope: string,
   options: AssertionOptions = {},
+  fields: Readonly<Record<string, string | readonly string[]>> = {},
 ): Promise<Response> {
   return await postForm(stack, "/token", {
     grant_type: "client_credentials",
@@ -351,6 +374,7 @@ export async function backendToken(
       stack.backendClient,
       options,
     ),
+    ...fields,
   });
 }
 

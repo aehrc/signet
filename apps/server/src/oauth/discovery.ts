@@ -55,6 +55,8 @@ const CACHE_CONTROL = "public, max-age=300";
  * anchor row advertises no registration endpoint, and there is nothing at
  * `/register` for it to advertise; an endpoint with no ticket issuer row
  * advertises no ticket types, and its token endpoint refuses the exchange grant.
+ * Nor does an OAuth / OpenID Connect endpoint, which refuses the exchange grant
+ * whatever rows it has.
  */
 async function discoveryRules(
   context: ServerContext,
@@ -63,13 +65,16 @@ async function discoveryRules(
   readonly acceptsVouchedRegistration: boolean;
   readonly permissionTicketTypes: readonly string[];
 }> {
-  const { scope } = c.get("issuer");
+  const { scope, endpoint } = c.get("issuer");
   const anchor = await withTenantScope(context.db, scope, (bound) =>
     getEndpointTrustAnchor(bound),
   );
-  const ticketIssuer = await withTenantScope(context.db, scope, (bound) =>
-    getEndpointTicketIssuer(bound),
-  );
+  const ticketIssuer =
+    endpoint.kind === "smart"
+      ? await withTenantScope(context.db, scope, (bound) =>
+          getEndpointTicketIssuer(bound),
+        )
+      : undefined;
   return {
     acceptsVouchedRegistration: anchor !== undefined,
     permissionTicketTypes: ticketIssuer?.acceptedTicketTypes ?? [],
@@ -83,11 +88,25 @@ async function discoveryRules(
  * `registration_endpoint` follows the endpoint's trust anchor rule rather than one
  * of its capability columns - and a rule lives in a table of its own.
  *
+ * An OAuth / OpenID Connect endpoint answers 404, the same answer as an endpoint
+ * that does not exist: it is not a SMART authorization server, and a document
+ * saying what SMART capabilities it lacks would invite an app to try anyway.
+ *
  * @param context - The server's dependencies.
  */
 export function smartConfigurationHandler(context: ServerContext) {
   return async (c: Context<SignetEnvironment>) => {
     const { endpoint, issuer } = c.get("issuer");
+    if (endpoint.kind !== "smart") {
+      return c.json(
+        {
+          error: "not_found",
+          error_description:
+            "This endpoint is not a SMART on FHIR authorization server",
+        },
+        404,
+      );
+    }
     const rules = await discoveryRules(context, c);
     c.header("Cache-Control", CACHE_CONTROL);
     return c.json(

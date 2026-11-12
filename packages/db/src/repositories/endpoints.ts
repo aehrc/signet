@@ -49,6 +49,13 @@ export type EndpointInput = Omit<
   "id" | "tenantId" | "createdAt" | "updatedAt"
 >;
 
+/**
+ * What an update may change: everything an endpoint was created with except its
+ * kind, which decides how every stored scope, policy and registration on the
+ * endpoint is read and so is fixed for the endpoint's life.
+ */
+export type EndpointUpdate = Partial<Omit<EndpointInput, "kind">>;
+
 /** Creates an endpoint in the scoped tenant. */
 export async function createEndpoint(
   scope: BoundTenantScope,
@@ -130,7 +137,7 @@ export async function getScopedEndpoint(
  */
 export async function updateEndpoint(
   scope: BoundEndpointScope,
-  patch: Partial<EndpointInput>,
+  patch: EndpointUpdate,
   now?: Date,
 ): Promise<Endpoint | undefined> {
   const [row] = await executorFor(scope)

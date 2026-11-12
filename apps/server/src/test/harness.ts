@@ -25,7 +25,12 @@
  * Author: John Grimes
  */
 
-import { SMART_BASELINE_PRESET } from "@signet/core";
+import {
+  OAUTH_BASELINE_PRESET,
+  OAUTH_DEFAULT_SCOPES_SUPPORTED,
+  SMART_BASELINE_PRESET,
+  SMART_ONLY_CAPABILITY_FLAGS,
+} from "@signet/core";
 import {
   applyMigrationsWithLock,
   createAdminUser,
@@ -59,12 +64,13 @@ import { createApp } from "../app.js";
 import {
   createRateLimitStore,
   createUnlimitedStore,
+  RATE_LIMITS,
 } from "../http/rateLimit.js";
 import { generateEndpointKey } from "../keys/material.js";
 import { createRemoteJwksCache } from "../oauth/remoteJwks.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
-import type { PolicyDocument } from "@signet/core";
+import type { EndpointKind, PolicyDocument } from "@signet/core";
 import type {
   AdminUser,
   Client,
@@ -85,6 +91,12 @@ export const TEST_PUBLIC_URL = "https://signet.test";
 
 /** The FHIR server the test endpoint fronts, and every token's `aud`. */
 export const TEST_FHIR_BASE_URL = "https://fhir.test/R4";
+
+/** The API an OAuth / OpenID Connect test endpoint fronts, and its tokens' `aud`. */
+export const TEST_API_AUDIENCE = "https://api.test/v1";
+
+/** The email address of the fixture's local account. */
+export const TEST_USER_EMAIL = "clinician@signet.test";
 
 /** Thirty-two characters, the minimum the configuration accepts. */
 export const TEST_MASTER_KEY = "0123456789abcdef0123456789abcdef";
@@ -157,9 +169,16 @@ export interface TestStack {
 
 /** How a stack should differ from the default. */
 export interface TestStackOptions {
+  /**
+   * The kind of endpoint to build. Defaults to SMART on FHIR. An OAuth / OpenID
+   * Connect stack fronts {@link TEST_API_AUDIENCE}, has every SMART-only flag off,
+   * publishes the OAuth baseline preset, and permits its clients the scopes in
+   * {@link OAUTH_ALLOWED_SCOPES}.
+   */
+  readonly kind?: EndpointKind;
   /** Overrides on the `endpoints` row. */
   readonly endpoint?: Partial<Parameters<typeof createEndpoint>[1]>;
-  /** The policy to publish. Defaults to the SMART baseline preset. */
+  /** The policy to publish. Defaults to the baseline preset for the kind. */
   readonly policy?: PolicyDocument;
   /** Omits the active signing key, to exercise the misconfigured-endpoint path. */
   readonly withoutSigningKey?: boolean;
@@ -169,6 +188,8 @@ export interface TestStackOptions {
   readonly rateLimits?: "enforced" | "unlimited";
   /** How many proxies the stack believes stand in front of it. */
   readonly trustedProxyCount?: number;
+  /** What `SIGNET_SIGN_IN_RATE_LIMIT` would have set. Defaults to the shipped limit. */
+  readonly signInRateLimit?: number;
 }
 
 /** Every scope the fixture clients are permitted to request. */
@@ -185,6 +206,32 @@ const ALLOWED_SCOPES = [
   "user/*.cruds",
   "system/*.cruds",
 ];
+
+/** Every scope the fixture clients of an OAuth stack are permitted to request. */
+export const OAUTH_ALLOWED_SCOPES = [
+  ...OAUTH_DEFAULT_SCOPES_SUPPORTED,
+  "orders:read",
+  "orders:write",
+];
+
+/** The endpoint row settings that make a stack one kind or the other. */
+function kindSettings(kind: EndpointKind) {
+  if (kind === "smart") {
+    return {
+      kind,
+      audience: TEST_FHIR_BASE_URL,
+      scopesSupported: ALLOWED_SCOPES,
+    };
+  }
+  return {
+    kind,
+    audience: TEST_API_AUDIENCE,
+    scopesSupported: [...OAUTH_DEFAULT_SCOPES_SUPPORTED],
+    ...Object.fromEntries(
+      SMART_ONLY_CAPABILITY_FLAGS.map((flag) => [flag, false]),
+    ),
+  };
+}
 
 let migrated = false;
 let sequence = 0;
@@ -268,17 +315,19 @@ export async function createTestStack(
   });
   const tenantScope = tenantScopeFromRow(tenant);
 
+  const kind = options.kind ?? "smart";
+  const allowedScopes =
+    kind === "smart" ? ALLOWED_SCOPES : OAUTH_ALLOWED_SCOPES;
   const endpoint = await withTenantScope(db, tenantScope, (bound) =>
     createEndpoint(bound, {
       slug: "fhir",
       name: "Test endpoint",
-      fhirBaseUrl: TEST_FHIR_BASE_URL,
+      ...kindSettings(kind),
       // Non-production so personas are selectable and the picker accepts an
       // identifier that is not on a user's list.
       isProduction: false,
       consentMode: "always",
       supportsAuthorizePost: true,
-      scopesSupported: ALLOWED_SCOPES,
       ...options.endpoint,
     }),
   );
@@ -310,7 +359,9 @@ export async function createTestStack(
 
   const version = await withTenantScope(db, scope, (bound) =>
     createPolicyVersion(bound, {
-      document: options.policy ?? SMART_BASELINE_PRESET,
+      document:
+        options.policy ??
+        (kind === "smart" ? SMART_BASELINE_PRESET : OAUTH_BASELINE_PRESET),
       createdBy: null,
       note: "harness",
     }),
@@ -332,7 +383,7 @@ export async function createTestStack(
       clientType: "public",
       redirectUris: ["https://app.test/cb"],
       grantTypes: ["authorization_code", "refresh_token"],
-      allowedScopes: ALLOWED_SCOPES,
+      allowedScopes,
       status: "active",
     }),
   );
@@ -346,7 +397,7 @@ export async function createTestStack(
       secretHash: symmetricSecretHash,
       redirectUris: ["https://app.test/cb"],
       grantTypes: ["authorization_code", "refresh_token"],
-      allowedScopes: ALLOWED_SCOPES,
+      allowedScopes,
       status: "active",
     }),
   );
@@ -360,7 +411,7 @@ export async function createTestStack(
       jwks: { keys: [asymmetricKey.publicJwk] },
       redirectUris: ["https://app.test/cb"],
       grantTypes: ["authorization_code", "refresh_token"],
-      allowedScopes: ALLOWED_SCOPES,
+      allowedScopes,
       status: "active",
     }),
   );
@@ -373,7 +424,7 @@ export async function createTestStack(
       clientType: "confidential-asymmetric",
       jwks: { keys: [backendKey.publicJwk] },
       grantTypes: ["client_credentials"],
-      allowedScopes: ALLOWED_SCOPES,
+      allowedScopes,
       status: "active",
     }),
   );
@@ -382,7 +433,9 @@ export async function createTestStack(
     createEndUser(bound, {
       username: "clinician",
       passwordHash: await hashPassword(TEST_PASSWORD),
-      fhirUserReference: "Practitioner/prac-1",
+      fhirUserReference: kind === "smart" ? "Practitioner/prac-1" : null,
+      email: TEST_USER_EMAIL,
+      emailVerified: true,
       displayName: "Test Clinician",
       roles: ["practitioner"],
       attributes: { patients: ["pat-1", "pat-2"] },
@@ -392,10 +445,10 @@ export async function createTestStack(
   const persona = await withTenantScope(db, scope, (bound) =>
     createEndUser(bound, {
       username: "persona-patient",
-      fhirUserReference: "Patient/pat-9",
+      fhirUserReference: kind === "smart" ? "Patient/pat-9" : null,
       displayName: "Persona Patient",
       isPersona: true,
-      defaultContext: { patient: "pat-9" },
+      defaultContext: kind === "smart" ? { patient: "pat-9" } : null,
     }),
   );
 
@@ -433,6 +486,7 @@ export async function createTestStack(
       // refuse exactly that.
       allowPrivateOutboundFetches: options.allowPrivateOutboundFetches ?? false,
       trustedProxyCount: options.trustedProxyCount ?? 0,
+      signInRateLimit: options.signInRateLimit ?? RATE_LIMITS.signIn.limit,
     },
     db,
     // Audit failures are surfaced rather than swallowed: a suite that silently lost

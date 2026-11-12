@@ -17,10 +17,23 @@ import {
   type ScopeParseResult,
 } from "./types.js";
 
+import type { EndpointKind } from "../endpointKind.js";
+
 const SCOPE_CONTEXTS = new Set<string>(["patient", "user", "system"]);
 const IDENTITY_SCOPES = new Set<string>(["openid", "fhirUser", "profile"]);
 const REFRESH_SCOPES = new Set<string>(["offline_access", "online_access"]);
 const PERMISSION_LETTERS = new Set<string>(PERMISSION_ORDER);
+
+/** The scopes an OAuth / OpenID Connect endpoint gives a meaning to. */
+const OAUTH_IDENTITY_SCOPES = new Set<string>(["openid", "profile", "email"]);
+
+/**
+ * An RFC 6749 `scope-token`: one or more printable ASCII characters, excluding
+ * space, double quote and backslash.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc6749#section-3.3
+ */
+const SCOPE_TOKEN_PATTERN = /^[\u0021\u0023-\u005B\u005D-\u007E]+$/u;
 
 /**
  * A FHIR resource type name: upper camel case, letters only.
@@ -224,17 +237,49 @@ function isCustomScope(raw: string): boolean {
 }
 
 /**
- * Parses a single SMART scope string into a structured {@link Scope}.
+ * Parses a scope on an OAuth / OpenID Connect endpoint.
  *
- * SMART v1 permission suffixes (`.read`, `.write`, `.*`) are normalised to
- * their v2 equivalents, so downstream code only ever sees `cruds` letters.
+ * Only the OpenID Connect scopes and `offline_access` mean anything; every other
+ * well-formed scope-token is an opaque custom scope that a policy grants by
+ * naming it exactly. A SMART-shaped string such as `patient/Observation.rs` is
+ * therefore just a string here, which is what stops a SMART wildcard rule written
+ * by mistake from granting anything on an API that never heard of FHIR.
+ */
+function parseOAuthScope(raw: string): ScopeParseResult {
+  if (!SCOPE_TOKEN_PATTERN.test(raw)) {
+    return fail("malformed", `Scope "${raw}" is not an RFC 6749 scope-token`);
+  }
+  if (OAUTH_IDENTITY_SCOPES.has(raw)) {
+    return {
+      ok: true,
+      scope: { kind: "identity", name: raw as "openid" | "profile" | "email" },
+    };
+  }
+  if (raw === "offline_access") {
+    return { ok: true, scope: { kind: "refresh", name: "offline_access" } };
+  }
+  return { ok: true, scope: { kind: "custom", value: raw } };
+}
+
+/**
+ * Parses a single scope string into a structured {@link Scope}, under the
+ * grammar of the kind of endpoint it was sent to.
+ *
+ * On a SMART endpoint, SMART v1 permission suffixes (`.read`, `.write`, `.*`)
+ * are normalised to their v2 equivalents, so downstream code only ever sees
+ * `cruds` letters. On an OAuth endpoint, see {@link parseOAuthScope}.
  *
  * @param raw - One scope string, with no surrounding whitespace.
+ * @param kind - The kind of endpoint whose grammar applies.
  * @returns The parsed scope, or a failure describing why it was rejected.
  */
-export function parseScope(raw: string): ScopeParseResult {
+export function parseScope(raw: string, kind: EndpointKind): ScopeParseResult {
   if (raw.length === 0) {
     return fail("empty", "Scope is empty");
+  }
+
+  if (kind === "oauth") {
+    return parseOAuthScope(raw);
   }
 
   if (isCustomScope(raw)) {
@@ -347,8 +392,12 @@ export interface ParseScopesResult {
  * still needs to audit what it dropped.
  *
  * @param raw - The raw `scope` parameter value.
+ * @param kind - The kind of endpoint whose grammar applies.
  */
-export function parseScopes(raw: string): ParseScopesResult {
+export function parseScopes(
+  raw: string,
+  kind: EndpointKind,
+): ParseScopesResult {
   const scopes: Scope[] = [];
   const rejected: {
     raw: string;
@@ -357,7 +406,7 @@ export function parseScopes(raw: string): ParseScopesResult {
   }[] = [];
 
   for (const entry of raw.split(/\s+/).filter((value) => value.length > 0)) {
-    const result = parseScope(entry);
+    const result = parseScope(entry, kind);
     if (result.ok) {
       scopes.push(result.scope);
     } else {

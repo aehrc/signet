@@ -61,6 +61,7 @@ import {
 import { ENDPOINT_PATH } from "./paths.js";
 import { principalAdminUserId } from "./principal.js";
 import { definedFields, parseBody } from "./requestBody.js";
+import { oauthClientIssues, refuseOauthClient } from "./smartOnly.js";
 import { clientRequestView, clientView } from "./views.js";
 
 import type { AdminEndpointContext } from "../context.js";
@@ -237,6 +238,13 @@ export function registerClientRoutes(
           statusForAdminError("invalid_request"),
         );
       }
+      const unfit = refuseOauthClient(
+        c,
+        oauthClientIssues(endpoint.kind, body),
+      );
+      if (unfit !== undefined) {
+        return unfit;
+      }
 
       const prepared = await prepareClient(body);
       let client;
@@ -319,6 +327,13 @@ export function registerClientRoutes(
       const body = await parseBody(c, clientPatchSchema);
       if (body instanceof Response) {
         return body;
+      }
+      const unfit = refuseOauthClient(
+        c,
+        oauthClientIssues(endpointContext.endpoint.kind, body),
+      );
+      if (unfit !== undefined) {
+        return unfit;
       }
 
       const patch = definedFields(body);
@@ -554,6 +569,13 @@ export function registerClientRoutes(
           ),
           statusForAdminError("invalid_request"),
         );
+      }
+      const unfit = refuseOauthClient(
+        c,
+        oauthClientIssues(endpoint.kind, checked.data),
+      );
+      if (unfit !== undefined) {
+        return unfit;
       }
 
       const prepared = await prepareClient(checked.data);

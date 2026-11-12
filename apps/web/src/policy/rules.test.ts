@@ -11,9 +11,11 @@ import { describe, expect, it } from "bun:test";
 
 import {
   appendRule,
+  conditionOptions,
   generateRuleId,
   isRuleEnabled,
   moveRule,
+  newRule,
   removeRule,
   replaceRule,
   rulesIn,
@@ -215,5 +217,69 @@ describe("appendRule", () => {
     const emptied = removeRule(appended, "scopeMappings", "only");
     expect(Object.keys(emptied)).not.toContain("scopeMappings");
     expect(rulesIn(emptied, "scopeMappings")).toEqual([]);
+  });
+});
+
+describe("newRule", () => {
+  it("starts a SMART grant on narrowing patient reads", () => {
+    expect(newRule("scopeGrants", "smart")).toEqual({
+      match: "patient/*.rs",
+      allow: true,
+      narrow: true,
+    });
+  });
+
+  it("starts an OAuth grant with no scope named", () => {
+    // An OAuth scope is matched exactly, so there is nothing to narrow and no
+    // sensible scope to guess: the operator names the one being granted.
+    expect(newRule("scopeGrants", "oauth")).toEqual({ match: "", allow: true });
+  });
+
+  it("starts a SMART scope mapping on every read", () => {
+    expect(newRule("scopeMappings", "smart")).toEqual({
+      forEachScope: "*/*.r",
+      appendTo: "authorities",
+      values: [""],
+    });
+  });
+
+  it("starts an OAuth scope mapping with no scope named", () => {
+    expect(newRule("scopeMappings", "oauth")).toEqual({
+      forEachScope: "",
+      appendTo: "authorities",
+      values: [""],
+    });
+  });
+
+  it("starts claim and context rules the same on both kinds", () => {
+    for (const kind of ["smart", "oauth"] as const) {
+      expect(newRule("claimRules", kind)).toEqual({
+        when: { always: true },
+        emit: {},
+      });
+      expect(newRule("contextRules", kind)).toEqual({ emit: {} });
+    }
+  });
+});
+
+describe("conditionOptions", () => {
+  it("offers a launch context condition on a SMART endpoint", () => {
+    expect(conditionOptions("smart").map((option) => option.value)).toEqual([
+      "always",
+      "hasUser",
+      "noUser",
+      "scope",
+      "context",
+    ]);
+  });
+
+  it("does not offer one on an OAuth endpoint", () => {
+    // There is no launch context there, and the server refuses the condition.
+    expect(conditionOptions("oauth").map((option) => option.value)).toEqual([
+      "always",
+      "hasUser",
+      "noUser",
+      "scope",
+    ]);
   });
 });

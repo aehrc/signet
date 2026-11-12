@@ -51,19 +51,20 @@ import {
 } from "../components/layout.js";
 import { DataTable, StatusBadge } from "../components/table.js";
 import { roleAllows, useEndpointContext } from "../console/useConsole.js";
+import { presetsFor } from "../formatting/endpointKind.js";
 import { formatInstant } from "../formatting/values.js";
 
 import type { DocumentIssue } from "./document.js";
 import type { PolicyView } from "../api/types.js";
 import type { Column } from "../components/table.js";
-import type { PolicyDocument } from "@signet/core";
+import type { EndpointKind, PolicyDocument } from "@signet/core";
 
 /** Which mode the editor is in. */
 type Mode = "builder" | "code";
 
 /** The policy editor page. */
 export function PolicyPage() {
-  const { tenant, endpointSlug, role } = useEndpointContext();
+  const { tenant, endpointSlug, endpoint, role } = useEndpointContext();
   const versions = usePolicies(tenant, endpointSlug);
 
   if (versions.isPending) {
@@ -83,6 +84,7 @@ export function PolicyPage() {
       key={`${String(starting?.version ?? 0)}-${String(published?.version ?? 0)}`}
       tenant={tenant}
       endpointSlug={endpointSlug}
+      kind={endpoint.kind}
       versions={versions.data ?? []}
       starting={starting}
       mayEdit={roleAllows(role, "admin")}
@@ -93,6 +95,8 @@ export function PolicyPage() {
 interface PolicyEditorProps {
   readonly tenant: string;
   readonly endpointSlug: string;
+  /** The endpoint's kind, which decides how the document is validated and built. */
+  readonly kind: EndpointKind;
   readonly versions: readonly PolicyView[];
   readonly starting: PolicyView | undefined;
   readonly mayEdit: boolean;
@@ -102,6 +106,7 @@ interface PolicyEditorProps {
 function PolicyEditor({
   tenant,
   endpointSlug,
+  kind,
   versions,
   starting,
   mayEdit,
@@ -109,8 +114,10 @@ function PolicyEditor({
   const create = useCreatePolicy(tenant, endpointSlug);
   const publish = usePublishPolicy(tenant, endpointSlug);
   const presets = usePresets();
+  const offered =
+    presets.data === undefined ? undefined : presetsFor(kind, presets.data);
 
-  const loaded = startingDocument(starting);
+  const loaded = startingDocument(starting, kind);
   const [mode, setMode] = useState<Mode>("builder");
   const [document, setDocument] = useState<PolicyDocument | undefined>(loaded);
   const [text, setText] = useState(
@@ -134,7 +141,7 @@ function PolicyEditor({
   /** Applies a textual edit, keeping the document in step when it parses. */
   const applyText = (next: string) => {
     setText(next);
-    const parsed = parsePolicy(next);
+    const parsed = parsePolicy(next, kind);
     if (parsed.ok) {
       setDocument(parsed.document);
       setIssues([]);
@@ -222,6 +229,7 @@ function PolicyEditor({
             ) : (
               <BuilderPane
                 document={document}
+                kind={kind}
                 onChange={applyDocument}
                 disabled={!mayEdit}
               />
@@ -238,7 +246,7 @@ function PolicyEditor({
                 {changed && document !== undefined && starting !== undefined ? (
                   <PolicyDiff
                     before={formatPolicy(
-                      startingDocument(starting) ?? document,
+                      startingDocument(starting, kind) ?? document,
                     )}
                     after={formatPolicy(document)}
                   />
@@ -288,7 +296,7 @@ function PolicyEditor({
             </div>
           ) : null}
 
-          {mayEdit && presets.data !== undefined ? (
+          {mayEdit && offered !== undefined ? (
             <div className="order-4">
               <Panel
                 title="Start from a preset"
@@ -298,7 +306,7 @@ function PolicyEditor({
                     Load button centres vertically against the variable-height
                     text block beside it. */}
                 <ul className="flex flex-col">
-                  {presets.data.map((preset) => (
+                  {offered.map((preset) => (
                     <li
                       key={preset.id}
                       className="flex items-center gap-4 py-3 first:pt-0 last:pb-0"
@@ -348,6 +356,7 @@ function PolicyEditor({
                           }
                           const parsed = parsePolicy(
                             JSON.stringify(preset.policy),
+                            kind,
                           );
                           if (parsed.ok) {
                             applyDocument(withRuleIds(parsed.document));
@@ -373,6 +382,7 @@ function PolicyEditor({
             <SimulatePanel
               tenant={tenant}
               endpointSlug={endpointSlug}
+              kind={kind}
               document={document}
             />
           </div>
@@ -435,10 +445,12 @@ function DraftStatus({
  */
 function BuilderPane({
   document,
+  kind,
   onChange,
   disabled,
 }: Readonly<{
   readonly document: PolicyDocument | undefined;
+  readonly kind: EndpointKind;
   readonly onChange: (document: PolicyDocument) => void;
   readonly disabled: boolean;
 }>) {
@@ -454,18 +466,24 @@ function BuilderPane({
     );
   }
   return (
-    <RuleBuilder document={document} onChange={onChange} disabled={disabled} />
+    <RuleBuilder
+      document={document}
+      kind={kind}
+      onChange={onChange}
+      disabled={disabled}
+    />
   );
 }
 
 /** Reads a stored version's document, giving every rule an identifier. */
 function startingDocument(
   version: PolicyView | undefined,
+  kind: EndpointKind,
 ): PolicyDocument | undefined {
   if (version === undefined) {
     return undefined;
   }
-  const parsed = parsePolicy(JSON.stringify(version.document));
+  const parsed = parsePolicy(JSON.stringify(version.document), kind);
   return parsed.ok ? withRuleIds(parsed.document) : undefined;
 }
 

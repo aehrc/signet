@@ -30,6 +30,15 @@ export const FHIR = urls.fhir;
 /** The stub SMART app. */
 export const APP = urls.app;
 
+/** oauth2-proxy, in front of the regular app and its API. */
+export const PROXY = urls.proxy;
+
+/** The OAuth / OpenID Connect endpoint's issuer identifier. */
+export const NOTES_ISSUER = `${SIGNET}/t/demo/e/notes`;
+
+/** The notes endpoint's audience, which is the API's URL behind oauth2-proxy. */
+export const NOTES_AUDIENCE = `${PROXY}/api`;
+
 /**
  * Where the console's signed-in session is saved.
  *
@@ -122,4 +131,17 @@ export const SEED = {
    * client list the other suites assert against exactly as it was.
    */
   refusedRequestName: "Population Analytics Extract Scheduler",
+} as const;
+
+/** What the seed creates on the notes endpoint. */
+export const NOTES_SEED = {
+  /** A local account with a verified email address. */
+  username: "nora",
+  password: "nora-password",
+  email: "nora@example.org",
+  /** The client oauth2-proxy signs people in as. */
+  proxyClientId: "notes-proxy",
+  /** Holds `notes:read`, for the client credentials grant only. */
+  serviceClientId: "notes-service",
+  serviceSecret: "notes-service-secret-value-0000",
 } as const;

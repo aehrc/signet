@@ -246,7 +246,7 @@ describeWithDatabase("an endpoint that remembers consent", () => {
       endpoint: {
         slug: "fhir",
         name: "Remembering",
-        fhirBaseUrl: "https://fhir.test/R4",
+        audience: "https://fhir.test/R4",
         isProduction: false,
         consentMode: "remember",
       },
@@ -308,7 +308,7 @@ describeWithDatabase("an endpoint that approves automatically", () => {
       endpoint: {
         slug: "fhir",
         name: "Auto",
-        fhirBaseUrl: "https://fhir.test/R4",
+        audience: "https://fhir.test/R4",
         isProduction: false,
         consentMode: "auto",
       },

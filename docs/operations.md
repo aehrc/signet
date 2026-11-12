@@ -6,17 +6,18 @@ something is wrong.
 
 ## Configuration
 
-| Variable                                | Required           | What it does                                                                                                                                                                                                                                                |
-| --------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                                  | no                 | Listen port. Defaults to 3000.                                                                                                                                                                                                                              |
-| `SIGNET_PUBLIC_URL`                     | yes                | The origin Signet is reached on. **Every issuer identifier is derived from it**, so changing it invalidates every issuer already published to FHIR servers and registered with apps.                                                                        |
-| `SIGNET_DATABASE_URL`                   | yes                | Postgres connection string, naming the **serving role** - which must own none of Signet's tables. `SIGNET_DATABASE_HOST`/`_PORT`/`_NAME`/`_USER`/`_PASSWORD` are accepted instead, which is what the Helm chart uses when it wires up the bundled subchart. |
-| `SIGNET_DATABASE_OWNER_URL`             | `migrate`, `sweep` | The **owning identity**, read by those two commands and by nothing else. See [the two database identities](#the-two-database-identities).                                                                                                                   |
-| `SIGNET_SWEEP_ACCESS_TOKEN_GRACE`       | no                 | How far the `sweep` command's access token cut-off lags the present, as a whole number and a unit - `24h`, `30m`, `7d`. Defaults to `24h`. See [the expiry sweep](#the-expiry-sweep).                                                                       |
-| `SIGNET_MASTER_KEY`                     | yes                | Encrypts endpoint signing keys and upstream client secrets at rest. At least 32 characters. See below.                                                                                                                                                      |
-| `SIGNET_LOG_LEVEL`                      | no                 | `debug`, `info`, `warn` or `error`. Defaults to `info`.                                                                                                                                                                                                     |
-| `SIGNET_WEB_ROOT`                       | no                 | Directory of the built console. Set in the image; unset in development, where Vite serves it.                                                                                                                                                               |
-| `SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES` | no                 | Turns off the SSRF guard on outbound fetches. For a development or connectathon stack whose identity provider is on a private address. **Never set this in production** - see `apps/server/src/security/outboundFetch.ts` for exactly what it disables.     |
+| Variable                                | Required           | What it does                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                  | no                 | Listen port. Defaults to 3000.                                                                                                                                                                                                                                                                                                                                                     |
+| `SIGNET_PUBLIC_URL`                     | yes                | The origin Signet is reached on. **Every issuer identifier is derived from it**, so changing it invalidates every issuer already published to FHIR servers and registered with apps.                                                                                                                                                                                               |
+| `SIGNET_DATABASE_URL`                   | yes                | Postgres connection string, naming the **serving role** - which must own none of Signet's tables. `SIGNET_DATABASE_HOST`/`_PORT`/`_NAME`/`_USER`/`_PASSWORD` are accepted instead, which is what the Helm chart uses when it wires up the bundled subchart.                                                                                                                        |
+| `SIGNET_DATABASE_OWNER_URL`             | `migrate`, `sweep` | The **owning identity**, read by those two commands and by nothing else. See [the two database identities](#the-two-database-identities).                                                                                                                                                                                                                                          |
+| `SIGNET_SWEEP_ACCESS_TOKEN_GRACE`       | no                 | How far the `sweep` command's access token cut-off lags the present, as a whole number and a unit - `24h`, `30m`, `7d`. Defaults to `24h`. See [the expiry sweep](#the-expiry-sweep).                                                                                                                                                                                              |
+| `SIGNET_MASTER_KEY`                     | yes                | Encrypts endpoint signing keys and upstream client secrets at rest. At least 32 characters. See below.                                                                                                                                                                                                                                                                             |
+| `SIGNET_LOG_LEVEL`                      | no                 | `debug`, `info`, `warn` or `error`. Defaults to `info`.                                                                                                                                                                                                                                                                                                                            |
+| `SIGNET_WEB_ROOT`                       | no                 | Directory of the built console. Set in the image; unset in development, where Vite serves it.                                                                                                                                                                                                                                                                                      |
+| `SIGNET_ALLOW_PRIVATE_OUTBOUND_FETCHES` | no                 | Turns off the SSRF guard on outbound fetches. For a development or connectathon stack whose identity provider is on a private address. **Never set this in production** - see `apps/server/src/security/outboundFetch.ts` for exactly what it disables.                                                                                                                            |
+| `SIGNET_SIGN_IN_RATE_LIMIT`             | no                 | Sign-in attempts one client address may make per minute on each sign-in surface - the end-user login, the management page and the console - counted separately. Defaults to 10; zero or anything that is not a whole number fails startup. **Raising it widens online password guessing by the same factor**; it exists for a test stack that signs in faster than a person would. |
 
 Commands, all on the same image:
 
@@ -185,7 +186,7 @@ select routine_name from information_schema.routines
 ```
 
 Each takes an identifier and returns identifiers only. None returns
-configuration, so a tenant's FHIR base URL, TTLs and capability flags stay out of
+configuration, so an endpoint's audience, TTLs and capability flags stay out of
 reach of an unbound caller. The suite asserts that what the serving role may
 execute equals that declared set exactly, so a fourth routine fails a test rather
 than widening the exemption quietly.
@@ -427,7 +428,8 @@ endpoint signs with.
 
 Two capabilities let an endpoint act on something a third party signed: dynamic
 client registration vouched by a **trust anchor**, and access granted by a
-**permission ticket** from a ticket issuer. Neither is on anywhere until an
+**permission ticket** from a ticket issuer. Permission tickets are a SMART
+capability, so an OAuth / OpenID Connect endpoint offers only the trust anchor. Neither is on anywhere until an
 administrator names the issuer, and naming it is the whole of turning it on -
 there is no separate switch, and removing the rule turns the capability off.
 
@@ -647,12 +649,18 @@ Signet expects to be behind something that terminates TLS. Two consequences:
 endpoint, or its secret is wrong, or it is suspended. The audit trail records
 `token.denied` with the reason; the console's audit browser filters by action.
 
-**A FHIR server rejects every token.** Compare three things: the `iss` in the
-token against the issuer the FHIR server is configured with (exact string match,
+**A FHIR server or an API rejects every token.** Compare three things: the `iss`
+in the token against the issuer the server is configured with (exact string match,
 trailing slash included), the `aud` against its expected audience, and the
 algorithm in the token header against what its verifier accepts. The conformance
 suite asserts the first two are consistent within Signet; the third is the RS256
-case above.
+case above. On an OAuth / OpenID Connect endpoint the `aud` is always the
+endpoint's audience - see [OAuth and OpenID Connect endpoints](oauth-endpoints.md).
+
+**A token request is refused with `invalid_target`.** The client named a
+`resource` (or an `aud` on `/authorize`) that is not the endpoint's audience. An
+OAuth / OpenID Connect endpoint mints tokens for one audience only; leave the
+parameter out, or create an endpoint for the other API.
 
 **A federated sign-in fails.** Console → the endpoint → Identity → _Check the
 provider_. It fetches the discovery document through the same guard the sign-in
