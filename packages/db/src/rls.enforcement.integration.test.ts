@@ -50,6 +50,7 @@ import { createClient } from "./repositories/clients.js";
 import { recordConsent } from "./repositories/consents.js";
 import { insertEndpointKey } from "./repositories/endpointKeys.js";
 import { createEndpoint, upsertIdpConfig } from "./repositories/endpoints.js";
+import { issueEndUserInvitation } from "./repositories/endUserInvitations.js";
 import { createEndUser } from "./repositories/endUsers.js";
 import { createEndUserSession } from "./repositories/endUserSessions.js";
 import { sqlStateOf } from "./repositories/errors.js";
@@ -377,6 +378,14 @@ describeWithDatabase("row-level security as the serving role", () => {
     );
     await withTenantScope(owner, clientScope, (bound) =>
       recordJti(bound, `assertion-${unique()}`, soon()),
+    );
+
+    await withTenantScope(owner, endpointScope, (bound) =>
+      issueEndUserInvitation(bound, {
+        endUserId: endUser.id,
+        tokenHash: `invitation-${unique()}`,
+        expiresAt: soon(),
+      }),
     );
 
     // Non-fatal by design, so a failure here would leave `audit_events` empty

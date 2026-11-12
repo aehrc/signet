@@ -92,6 +92,7 @@ export type AuditAction =
   | "admin.passkey-removed"
   | "end-user.login"
   | "end-user.login-failed"
+  | "end-user.invitation-accepted"
   // Authorization.
   | "authorize.requested"
   | "authorize.denied"
@@ -143,7 +144,9 @@ export type AuditAction =
   | "client-request.rejected"
   | "end-user.created"
   | "end-user.updated"
-  | "end-user.disabled";
+  | "end-user.disabled"
+  | "end-user.invited"
+  | "end-user.invitation-cancelled";
 
 /**
  * Human-readable description of each action.
@@ -165,6 +168,8 @@ export const AUDIT_ACTION_DESCRIPTIONS: Readonly<Record<AuditAction, string>> =
     "admin.passkey-removed": "Passkey removed from an administrator account",
     "end-user.login": "End user signed in on an endpoint",
     "end-user.login-failed": "End user sign-in was refused",
+    "end-user.invitation-accepted":
+      "End user chose a password through an invitation link",
 
     "authorize.requested": "Authorization request received",
     "authorize.denied": "Authorization request refused",
@@ -225,6 +230,9 @@ export const AUDIT_ACTION_DESCRIPTIONS: Readonly<Record<AuditAction, string>> =
     "end-user.created": "End user created",
     "end-user.updated": "End user changed",
     "end-user.disabled": "End user disabled",
+    "end-user.invited":
+      "Invitation link issued for an end user to choose a password",
+    "end-user.invitation-cancelled": "End user's invitation link withdrawn",
   };
 
 /** Which broad group each action belongs to. */
@@ -241,6 +249,7 @@ export const AUDIT_ACTION_CATEGORIES: Readonly<
   "admin.passkey-removed": "authentication",
   "end-user.login": "authentication",
   "end-user.login-failed": "authentication",
+  "end-user.invitation-accepted": "authentication",
 
   "authorize.requested": "authorization",
   "authorize.denied": "authorization",
@@ -293,6 +302,8 @@ export const AUDIT_ACTION_CATEGORIES: Readonly<
   "end-user.created": "configuration",
   "end-user.updated": "configuration",
   "end-user.disabled": "configuration",
+  "end-user.invited": "configuration",
+  "end-user.invitation-cancelled": "configuration",
 };
 
 /**

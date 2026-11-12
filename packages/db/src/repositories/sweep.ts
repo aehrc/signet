@@ -47,6 +47,7 @@ import {
   VOUCHED_CLIENT_RETENTION_DAYS,
 } from "./clients.js";
 import { deleteExpiredConsents } from "./consents.js";
+import { deleteExpiredEndUserInvitations } from "./endUserInvitations.js";
 import { deleteExpiredEndUserSessions } from "./endUserSessions.js";
 import { deleteExpiredJtis } from "./jtiReplay.js";
 import { deleteExpiredLaunchContexts } from "./launchContexts.js";
@@ -71,6 +72,11 @@ export interface SweepCounts {
   readonly adminSessions: number;
   /** End users' management-page sessions, for the same reason. */
   readonly endUserSessions: number;
+  /**
+   * Invitation links nobody opened before they expired. A link that was used is
+   * deleted when it is redeemed, so only the unused ones reach the sweep.
+   */
+  readonly endUserInvitations: number;
   /**
    * Passkey ceremony challenges that were issued and never completed.
    *
@@ -144,6 +150,7 @@ export async function sweepExpiredRuntimeRows(
   const jtiReplay = await deleteExpiredJtis(db, now);
   const adminSessions = await deleteExpiredAdminSessions(db, now);
   const endUserSessions = await deleteExpiredEndUserSessions(db, now);
+  const endUserInvitations = await deleteExpiredEndUserInvitations(db, now);
   const passkeyChallenges = await deleteExpiredAdminPasskeyChallenges(db, now);
   const lapsedVouchedClients = await deleteLapsedVouchedClients(
     db,
@@ -160,6 +167,7 @@ export async function sweepExpiredRuntimeRows(
     jtiReplay,
     adminSessions,
     endUserSessions,
+    endUserInvitations,
     passkeyChallenges,
     lapsedVouchedClients,
   };
