@@ -194,7 +194,7 @@ function VariantRow({
           id={inputId}
           type="file"
           accept={ACCEPTED_FILES}
-          className="file-input file-input-sm max-sm:file-input-md w-full max-w-xs"
+          className="file-input w-full max-w-xs max-sm:min-h-11 max-sm:text-base"
           disabled={pending || disabledReason !== undefined}
           onChange={(event) => {
             const file = event.target.files?.[0];
