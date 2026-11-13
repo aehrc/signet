@@ -425,6 +425,40 @@ test.describe("an authenticated operator", () => {
     ).toBeEnabled();
   });
 
+  test("shows the endpoint's login message on its sign-in page", async ({
+    page,
+  }) => {
+    // Unique per run, so the assertion cannot be satisfied by a message an earlier
+    // run left behind.
+    const address = `accounts-${String(Date.now())}@example.org`;
+    const message = `Contact ${address} if you want an account.`;
+    const form = panelForm(page, "Settings");
+    const field = form.getByLabel("Sign-in page message");
+
+    /** Saves the message field through the console, as an operator would. */
+    async function saveMessage(text: string): Promise<void> {
+      await page.goto(OVERVIEW);
+      await field.fill(text);
+      await form.getByRole("button", { name: "Save settings" }).click();
+      await expect(page.getByText("Settings saved.")).toBeVisible();
+    }
+
+    await saveMessage(message);
+    try {
+      await startLaunch(page);
+      await expect(
+        page.getByRole("heading", { name: "Sign in" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: address, exact: true }),
+      ).toHaveAttribute("href", `mailto:${address}`);
+    } finally {
+      // The launch and grant suites sign in on this endpoint, so the message is
+      // removed again whether or not the assertions held.
+      await saveMessage("");
+    }
+  });
+
   test("sends nothing when endpoint capabilities are saved unchanged", async ({
     page,
   }) => {
