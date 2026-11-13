@@ -161,7 +161,7 @@ Before publishing a release, bump the chart to the version being released:
 in seconds if the chart would install some other image:
 
 ```sh
-node scripts/checkReleaseVersion.mjs 1.0.0 ghcr.io/aehrc/signet
+node scripts/checkReleaseVersion.mjs 2.0.0 ghcr.io/aehrc/signet
 ```
 
 ## Legal
