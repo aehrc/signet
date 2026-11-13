@@ -28,7 +28,9 @@ import { PasskeyDialog } from "./passkeyDialog.js";
 import { SIGN_IN_ROUTE, tenantRoute } from "./routes.js";
 import { useSession, useSignOut } from "../api/queries.js";
 import { AppShell, CentredShell } from "../components/appShell.js";
+import { BrandingContext } from "../components/brandingContext.js";
 import { EmptyState, ErrorAlert, Loading } from "../components/layout.js";
+import { useTenantBranding } from "../endUser/queries.js";
 
 import type { SessionView } from "../api/types.js";
 
@@ -56,6 +58,9 @@ export function ConsoleLayout() {
   const signOut = useSignOut();
   const { tenant } = useParams<{ tenant?: string }>();
   const [passkeysOpen, setPasskeysOpen] = useState(false);
+  // Read before anybody is known to be a member, but provided only once they are:
+  // the sidebar of a tenant the caller cannot see stays Signet's.
+  const branding = useTenantBranding(tenant);
 
   if (session.isPending) {
     return (
@@ -103,68 +108,75 @@ export function ConsoleLayout() {
   };
 
   return (
-    <AppShell
-      title={membership.name ?? tenant}
-      navbarEnd={
-        <>
-          {tenants.length > 1 ? (
-            <TenantSwitcher tenant={tenant} tenants={tenants} />
-          ) : null}
-          <AccountMenu
-            label={
-              session.data.user?.email ?? session.data.token?.name ?? "Account"
-            }
-            signingOut={signOut.isPending}
-            // Absent for a personal access token: it is not a person, holds no
-            // password, and has no passkeys to manage.
-            {...(session.data.user === undefined
-              ? {}
-              : {
-                  onManagePasskeys: () => {
-                    setPasskeysOpen(true);
+    <BrandingContext value={branding}>
+      <AppShell
+        title={membership.name ?? tenant}
+        navbarEnd={
+          <>
+            {tenants.length > 1 ? (
+              <TenantSwitcher tenant={tenant} tenants={tenants} />
+            ) : null}
+            <AccountMenu
+              label={
+                session.data.user?.email ??
+                session.data.token?.name ??
+                "Account"
+              }
+              signingOut={signOut.isPending}
+              // Absent for a personal access token: it is not a person, holds no
+              // password, and has no passkeys to manage.
+              {...(session.data.user === undefined
+                ? {}
+                : {
+                    onManagePasskeys: () => {
+                      setPasskeysOpen(true);
+                    },
+                  })}
+              onSignOut={() => {
+                signOut.mutate(undefined, {
+                  onSuccess: () => {
+                    globalThis.location.assign(SIGN_IN_ROUTE);
                   },
-                })}
-            onSignOut={() => {
-              signOut.mutate(undefined, {
-                onSuccess: () => {
-                  globalThis.location.assign(SIGN_IN_ROUTE);
-                },
-              });
-            }}
-          />
-          <PasskeyDialog
-            open={passkeysOpen}
-            onClose={() => {
-              setPasskeysOpen(false);
-            }}
-          />
-        </>
-      }
-      navigation={
-        <>
-          <li>
-            <NavLink end to={tenantRoute(tenant)} className={navClass}>
-              <ServerIcon />
-              Endpoints
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to={tenantRoute(tenant, "/audit")} className={navClass}>
-              <LogIcon />
-              Audit
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to={tenantRoute(tenant, "/settings")} className={navClass}>
-              <GearIcon />
-              Tenant settings
-            </NavLink>
-          </li>
-        </>
-      }
-    >
-      <Outlet context={context} />
-    </AppShell>
+                });
+              }}
+            />
+            <PasskeyDialog
+              open={passkeysOpen}
+              onClose={() => {
+                setPasskeysOpen(false);
+              }}
+            />
+          </>
+        }
+        navigation={
+          <>
+            <li>
+              <NavLink end to={tenantRoute(tenant)} className={navClass}>
+                <ServerIcon />
+                Endpoints
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to={tenantRoute(tenant, "/audit")} className={navClass}>
+                <LogIcon />
+                Audit
+              </NavLink>
+            </li>
+            <li>
+              <NavLink
+                to={tenantRoute(tenant, "/settings")}
+                className={navClass}
+              >
+                <GearIcon />
+                Tenant settings
+              </NavLink>
+            </li>
+          </>
+        }
+      >
+        <Outlet context={context} />
+      </AppShell>
+    </BrandingContext>
   );
 }
 

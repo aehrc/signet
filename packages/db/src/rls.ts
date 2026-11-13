@@ -134,6 +134,7 @@ const TENANT_PREDICATES: Readonly<Record<string, string>> = {
   tenants: `id = ${CURRENT_TENANT}`,
   tenant_members: `tenant_id = ${CURRENT_TENANT}`,
   api_tokens: `tenant_id = ${CURRENT_TENANT}`,
+  tenant_logos: `tenant_id = ${CURRENT_TENANT}`,
   audit_events: `tenant_id = ${CURRENT_TENANT}`,
   endpoints: `tenant_id = ${CURRENT_TENANT}`,
 

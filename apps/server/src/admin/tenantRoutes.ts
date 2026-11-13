@@ -27,14 +27,17 @@ import {
   memberRoleSchema,
   tenantPatchSchema,
 } from "@signet/contracts";
+import { describeLogoProblem, inspectLogo, isLogoVariant } from "@signet/core";
 import {
   createApiToken,
+  deleteTenantLogo,
   findAdminUserByEmail,
   generateOpaqueToken,
   getTenant,
   hashToken,
   listApiTokens,
   listTenantMembers,
+  putTenantLogo,
   removeTenantMember,
   revokeApiToken,
   roleAtLeast,
@@ -50,6 +53,7 @@ import { TENANT_PATH } from "./paths.js";
 import { principalAdminUserId } from "./principal.js";
 import { definedFields, parseBody } from "./requestBody.js";
 import { apiTokenView, memberView } from "./views.js";
+import { readTenantBranding } from "../branding/router.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { Hono } from "hono";
@@ -98,6 +102,111 @@ export function registerTenantRoutes(
 
     return c.json({ tenant: { slug: updated.slug, name: updated.name } });
   });
+
+  /**
+   * Uploads or replaces one of the tenant's logos.
+   *
+   * The body is the image itself rather than JSON, so a script can upload one with
+   * `curl --data-binary @logo.svg`. Its `Content-Type` is ignored: the stored type
+   * is the one `inspectLogo` sniffs from the bytes, because it is what the logo is
+   * later served as. Answers with the branding the pages will now show.
+   */
+  router.put(
+    `${TENANT_PATH}/logo/:variant`,
+    requireRole("admin"),
+    async (c) => {
+      const { scope } = c.get("tenant");
+      const variant = c.req.param("variant");
+      if (!isLogoVariant(variant)) {
+        return c.json(
+          adminErrorBody("not_found", "No such logo variant"),
+          statusForAdminError("not_found"),
+        );
+      }
+
+      const content = new Uint8Array(await c.req.arrayBuffer());
+      const inspection = inspectLogo(content);
+      if (!inspection.ok) {
+        return c.json(
+          adminErrorBody(
+            "invalid_request",
+            describeLogoProblem(inspection.problem),
+          ),
+          statusForAdminError("invalid_request"),
+        );
+      }
+
+      const branding = await withTenantScope(
+        context.db,
+        scope,
+        async (bound) => {
+          const stored = await putTenantLogo(
+            bound,
+            { variant, mediaType: inspection.mediaType, content },
+            context.clock(),
+          );
+          return stored === undefined
+            ? undefined
+            : await readTenantBranding(bound);
+        },
+      );
+      if (branding === undefined) {
+        return c.json(
+          adminErrorBody(
+            "conflict",
+            "Upload the logo before its dark-scheme variant.",
+          ),
+          statusForAdminError("conflict"),
+        );
+      }
+
+      await recordAdminEvent(context, c, {
+        action: "tenant-logo.updated",
+        target: { type: "tenant", id: scope.tenantId },
+        detail: {
+          variant,
+          mediaType: inspection.mediaType,
+          bytes: content.length,
+        },
+      });
+
+      return c.json({ branding });
+    },
+  );
+
+  /**
+   * Removes one of the tenant's logos. Removing the logo removes its dark-scheme
+   * variant too, and the pages return to the Signet wordmark.
+   */
+  router.delete(
+    `${TENANT_PATH}/logo/:variant`,
+    requireRole("admin"),
+    async (c) => {
+      const { scope } = c.get("tenant");
+      const variant = c.req.param("variant");
+      const branding = isLogoVariant(variant)
+        ? await withTenantScope(context.db, scope, async (bound) =>
+            (await deleteTenantLogo(bound, variant))
+              ? await readTenantBranding(bound)
+              : undefined,
+          )
+        : undefined;
+      if (branding === undefined) {
+        return c.json(
+          adminErrorBody("not_found", "There is no such logo to remove"),
+          statusForAdminError("not_found"),
+        );
+      }
+
+      await recordAdminEvent(context, c, {
+        action: "tenant-logo.removed",
+        target: { type: "tenant", id: scope.tenantId },
+        detail: { variant },
+      });
+
+      return c.json({ branding });
+    },
+  );
 
   /** Lists the tenant's members. */
   router.get(`${TENANT_PATH}/members`, requireRole("viewer"), async (c) => {

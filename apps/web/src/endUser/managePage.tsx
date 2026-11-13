@@ -40,6 +40,7 @@ import { describeScopes } from "./scopeDescriptions.js";
 import { ScopeMarker } from "./scopeMarker.js";
 import { describeError, isUnauthenticated } from "../api/errors.js";
 import { CentredShell } from "../components/appShell.js";
+import { BrandMark } from "../components/brandMark.js";
 import { SubmitButton, TextField } from "../components/fields.js";
 import {
   EmptyState,
@@ -110,7 +111,7 @@ function Authorizations({
       <div className="mx-auto max-w-3xl">
         <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xl font-bold">Signet</p>
+            <BrandMark />
             <h1 className="mt-2 text-2xl font-semibold tracking-tight">
               Your app access
             </h1>

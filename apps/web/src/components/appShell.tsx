@@ -31,10 +31,12 @@
 import { ThreeBarsIcon } from "@primer/octicons-react";
 import { useRef } from "react";
 
+import { BrandMark } from "./brandMark.js";
+
 import type { ReactNode } from "react";
 
 interface AppShellProps {
-  /** Shown in the navbar beside the Signet mark. */
+  /** Shown in the navbar; the sidebar carries the brand mark. */
   readonly title: string;
   /** Navigation entries rendered in the sidebar. */
   readonly navigation?: ReactNode;
@@ -92,7 +94,7 @@ export function AppShell({
           className="drawer-overlay"
         />
         <nav className="bg-base-100 border-base-300 min-h-full w-64 border-r p-4">
-          <div className="px-2 pb-4 text-xl font-bold">Signet</div>
+          <BrandMark className="mb-4 px-2" />
           <ul
             className="menu w-full max-sm:[&_a]:min-h-11 max-sm:[&_a]:text-base"
             // Below `lg` the drawer is an overlay laid over the page it
@@ -124,8 +126,6 @@ interface CentredShellProps {
   /** One sentence saying where the reader is and what is being asked of them. */
   readonly subtitle?: ReactNode;
   readonly children: ReactNode;
-  /** Rendered under the card: links out, or a way to start again. */
-  readonly footer?: ReactNode;
 }
 
 /** A single card on an empty page, for a surface with one thing to do. */
@@ -133,14 +133,11 @@ export function CentredShell({
   title,
   subtitle,
   children,
-  footer,
 }: Readonly<CentredShellProps>) {
   return (
     <div className="bg-base-200 flex min-h-screen items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <p className="text-xl font-bold">Signet</p>
-        </div>
+        <BrandMark className="mb-6 justify-center" />
         <div className="card bg-base-100 border-base-300 border shadow-sm">
           <div className="card-body max-sm:p-4 max-sm:[--card-fs:1rem] gap-4 max-sm:[&_.btn]:min-h-11 max-sm:[&_.btn]:text-base">
             <div>
@@ -154,11 +151,6 @@ export function CentredShell({
             {children}
           </div>
         </div>
-        {footer === undefined ? null : (
-          <div className="text-base-content/70 mt-4 text-center text-sm max-sm:text-base">
-            {footer}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -96,11 +96,7 @@ describe("AppShell", () => {
 
 describe("CentredShell", () => {
   const markup = renderToStaticMarkup(
-    <CentredShell
-      title="Sign in"
-      subtitle="To continue"
-      footer={<a href="/apps">Register an app</a>}
-    >
+    <CentredShell title="Sign in" subtitle="To continue">
       <p>content</p>
     </CentredShell>,
   );
@@ -124,10 +120,6 @@ describe("CentredShell", () => {
     // The sentence saying what is being asked of the reader, on the surfaces
     // where mobile is the normal case rather than the exception.
     expect(markup).toContain("mt-1 text-sm max-sm:text-base");
-  });
-
-  it("reads its footer at 16px below sm", () => {
-    expect(markup).toContain("text-center text-sm max-sm:text-base");
   });
 
   it("reads the card's buttons at 16px below sm", () => {

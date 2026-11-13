@@ -113,6 +113,8 @@ export type AuditAction =
   // Configuration.
   | "tenant.created"
   | "tenant.updated"
+  | "tenant-logo.updated"
+  | "tenant-logo.removed"
   | "tenant-member.added"
   | "tenant-member.removed"
   | "tenant-member.role-changed"
@@ -193,6 +195,8 @@ export const AUDIT_ACTION_DESCRIPTIONS: Readonly<Record<AuditAction, string>> =
 
     "tenant.created": "Tenant created",
     "tenant.updated": "Tenant settings changed",
+    "tenant-logo.updated": "Tenant logo uploaded or replaced",
+    "tenant-logo.removed": "Tenant logo removed",
     "tenant-member.added": "Member added to the tenant",
     "tenant-member.removed": "Member removed from the tenant",
     "tenant-member.role-changed": "Member's role within the tenant changed",
@@ -270,6 +274,8 @@ export const AUDIT_ACTION_CATEGORIES: Readonly<
 
   "tenant.created": "configuration",
   "tenant.updated": "configuration",
+  "tenant-logo.updated": "configuration",
+  "tenant-logo.removed": "configuration",
   "tenant-member.added": "configuration",
   "tenant-member.removed": "configuration",
   "tenant-member.role-changed": "configuration",

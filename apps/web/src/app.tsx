@@ -40,6 +40,7 @@ import { TenantSettingsPage } from "./console/tenantSettingsPage.js";
 import { TrustPage } from "./console/trustPage.js";
 import { UserDetailPage } from "./console/userDetailPage.js";
 import { UsersPage } from "./console/usersPage.js";
+import { EndUserLayout } from "./endUser/endUserLayout.js";
 import {
   ConsentPage,
   LoginPage,
@@ -98,24 +99,14 @@ export function App() {
             what `/authorize` redirects to and what the discovery document advertises as
             the management endpoint, so they are fixed rather than ours to choose.
           */}
-          <Route path="/t/:tenant/e/:endpoint/login" element={<LoginPage />} />
-          <Route
-            path="/t/:tenant/e/:endpoint/picker"
-            element={<PickerPage />}
-          />
-          <Route
-            path="/t/:tenant/e/:endpoint/consent"
-            element={<ConsentPage />}
-          />
-          <Route
-            path="/t/:tenant/e/:endpoint/manage"
-            element={<ManagePage />}
-          />
-          <Route
-            path="/t/:tenant/e/:endpoint/invitation"
-            element={<InvitationPage />}
-          />
-          <Route path="/t/:tenant/e/:endpoint/apps" element={<PortalPage />} />
+          <Route path="/t/:tenant/e/:endpoint" element={<EndUserLayout />}>
+            <Route path="login" element={<LoginPage />} />
+            <Route path="picker" element={<PickerPage />} />
+            <Route path="consent" element={<ConsentPage />} />
+            <Route path="manage" element={<ManagePage />} />
+            <Route path="invitation" element={<InvitationPage />} />
+            <Route path="apps" element={<PortalPage />} />
+          </Route>
 
           {/* Anything else lands on the console, which decides where to go. */}
           <Route path="*" element={<Navigate to={CONSOLE_BASE} replace />} />

@@ -121,3 +121,12 @@ export const auditActorTypeEnum = pgEnum("audit_actor_type", [
   "client",
   "system",
 ]);
+
+/**
+ * Which of a tenant's two logos a row holds. Mirrors `LogoVariant` in
+ * `@signet/core`, and is in the same order as its `LOGO_VARIANTS`.
+ */
+export const tenantLogoVariantEnum = pgEnum("tenant_logo_variant", [
+  "light",
+  "dark",
+]);

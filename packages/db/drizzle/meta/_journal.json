@@ -85,6 +85,13 @@
       "when": 1794517553559,
       "tag": "0011_oauth_endpoints",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794526192659,
+      "tag": "0012_tenant_logos",
+      "breakpoints": true
     }
   ]
 }
