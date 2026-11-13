@@ -42,6 +42,17 @@ describe("LoginMessage", () => {
     expect(markup).toContain("&lt;img");
   });
 
+  it("lets a long address wrap rather than widen the card", () => {
+    // A form URL or a long email address is one word with nothing to break at, and
+    // `break-words` does not shrink the alert's min-content width, so on a phone
+    // the whole sign-in page would scroll sideways.
+    const markup = renderToStaticMarkup(
+      <LoginMessage message={`https://example.org/${"x".repeat(120)}`} />,
+    );
+
+    expect(markup).toContain("wrap-anywhere");
+  });
+
   it("keeps the operator's line breaks", () => {
     const markup = renderToStaticMarkup(
       <LoginMessage message={"Line one.\nLine two."} />,

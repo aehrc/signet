@@ -21,7 +21,9 @@
  * so the form has to make that distinction rather than sending an empty string the
  * schema would store.
  *
- * A login message of only whitespace is likewise sent as `null`, which removes it.
+ * A login message is trimmed before it is compared, as the API trims it before storing
+ * it, so a trailing newline does not count as a change; one of only whitespace is sent
+ * as `null`, which removes it.
  *
  * A lifetime that is not a positive integer is left out of the patch entirely. It
  * cannot be carried as `undefined`: that counts as a change here and then disappears
@@ -136,12 +138,12 @@ export function endpointSettingsPatch(
   edited: EndpointSettingsFormValues,
   current: EndpointView,
 ): Record<string, unknown> {
+  const loginMessage = edited.loginMessage.trim();
   const patch = changedFields<Record<string, unknown>>(
     {
       name: edited.name,
       description: edited.description.length === 0 ? null : edited.description,
-      loginMessage:
-        edited.loginMessage.trim().length === 0 ? null : edited.loginMessage,
+      loginMessage: loginMessage.length === 0 ? null : loginMessage,
       audience: edited.audience,
       authMode: edited.authMode,
       consentMode: edited.consentMode,

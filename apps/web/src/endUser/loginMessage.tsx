@@ -33,7 +33,9 @@ export function LoginMessage({
   }
   return (
     <InfoAlert>
-      <p className="whitespace-pre-line">
+      {/* `wrap-anywhere` lets a long URL or address break, where `break-words` alone
+          leaves the alert as wide as the longest word. */}
+      <p className="whitespace-pre-line wrap-anywhere">
         {linkifyText(message).map((segment, index) =>
           segment.kind === "text" ? (
             segment.text

@@ -123,6 +123,22 @@ describe("endpointSettingsPatch", () => {
     ).toEqual({});
   });
 
+  it("is empty when a saved login message gains only surrounding whitespace", () => {
+    // The API trims the message, so a textarea ending in a newline would otherwise
+    // differ from what was saved forever, and every Save would write it again.
+    const current = endpointView({ loginMessage: "Contact us." });
+
+    expect(
+      endpointSettingsPatch(
+        {
+          ...endpointSettingsFormValues(current),
+          loginMessage: "Contact us.\n",
+        },
+        current,
+      ),
+    ).toEqual({});
+  });
+
   it("carries a new login message", () => {
     const current = endpointView();
 
