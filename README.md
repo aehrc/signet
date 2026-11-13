@@ -21,8 +21,9 @@ Signet is one of two kinds, chosen when it is created:
 Stand up an endpoint in a minute, seed personas, invite users by email, let app
 developers request a client registration, and simulate an EHR launch without an
 EHR. Each endpoint has its own signing keys with rotation, an append-only audit
-trail, and can federate to an existing identity provider. An endpoint can also
-show a message on its sign-in page, such as who to contact for an account.
+trail, and can federate to an existing identity provider. A tenant can put its own
+logo on the sign-in, consent and other pages its end users see, and an endpoint
+can show a message on its sign-in page, such as who to contact for an account.
 
 ## Claims mapping
 

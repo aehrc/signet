@@ -293,6 +293,42 @@ the old password may hold one of those too. Issuing, cancelling and accepting ar
 recorded in the audit trail as `end-user.invited`, `end-user.invitation-cancelled` and
 `end-user.invitation-accepted`; the token never is.
 
+## Branding a tenant's pages
+
+A tenant can upload a logo, which replaces the Signet wordmark on every end-user page
+under its endpoints - sign in, the patient picker, consent, the management page, the
+developer portal and the invitation page - and in the console's sidebar. While a tenant
+has a logo, those end-user pages are titled with the tenant's name and the logo's
+alternative text is that name. Without one, they carry the Signet wordmark and title,
+and the tenant's name is not shown. The console's own sign-in page belongs to no tenant
+and always says Signet.
+
+An owner or admin uploads it from the console's tenant settings, or with the admin API:
+
+```sh
+curl -X PUT --data-binary @logo.svg \
+  -H "Authorization: Bearer $SIGNET_TOKEN" \
+  https://signet.example.org/api/v1/tenants/acme/logo/light
+```
+
+The logo is a PNG, JPEG, WebP or SVG of at most 256 KB. An optional second logo,
+uploaded as `dark`, is shown instead when the reader's system prefers a dark colour
+scheme; it can only be added once there is a `light` logo, and removing the `light` logo
+with `DELETE .../logo/light` removes both. Uploads and removals are recorded in the audit
+trail as `tenant-logo.updated` and `tenant-logo.removed`.
+
+The pages read `/t/{tenant}/branding` and load the image from
+`/t/{tenant}/logo/{light|dark}?v={version}`; both answer without a credential. The
+version changes with every upload, so a browser caches each logo URL indefinitely and
+still sees a replacement on the next page load.
+
+A logo is served from the same origin as the console, so it is served defensively. Its
+media type is decided from the file's bytes rather than from the upload's
+`Content-Type`, and it is served with `X-Content-Type-Options: nosniff` and
+`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`. An
+SVG containing script is accepted, but the script does not run - not inside the pages'
+`<img>`, and not when the logo's URL is opened directly.
+
 ## Passkeys on console accounts
 
 A console user may register up to ten WebAuthn passkeys and thereafter sign in with

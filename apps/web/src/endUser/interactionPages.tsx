@@ -199,15 +199,7 @@ function InteractionShell({
     );
   }
   return (
-    <CentredShell
-      title={title}
-      subtitle={subtitle}
-      footer={
-        <span>
-          {state.client.name} is asking. Signet is checking that you agree.
-        </span>
-      }
-    >
+    <CentredShell title={title} subtitle={subtitle}>
       {children}
     </CentredShell>
   );

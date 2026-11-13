@@ -36,6 +36,7 @@ import { readClientRequest, submitClientRequest } from "./api.js";
 import { usePortal } from "./queries.js";
 import { describeError, issuesByField } from "../api/errors.js";
 import { CentredShell } from "../components/appShell.js";
+import { BrandMark } from "../components/brandMark.js";
 import {
   ListField,
   SelectField,
@@ -123,7 +124,7 @@ export function PortalPage() {
     <div className="bg-base-200 min-h-screen p-6 max-sm:p-4">
       <div className="mx-auto max-w-3xl">
         <header className="mb-6">
-          <p className="text-xl font-bold">Signet</p>
+          <BrandMark />
           <h1 className="mt-2 text-2xl font-semibold tracking-tight break-words">
             Register an app
           </h1>

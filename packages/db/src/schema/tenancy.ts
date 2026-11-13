@@ -16,6 +16,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  customType,
   index,
   pgTable,
   primaryKey,
@@ -26,7 +27,9 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { createdAt, sessionLifecycle, timestamps } from "./columns.js";
-import { tenantMemberRoleEnum } from "./enums.js";
+import { tenantLogoVariantEnum, tenantMemberRoleEnum } from "./enums.js";
+
+import type { LogoMediaType } from "@signet/core";
 
 /** An isolation boundary owning endpoints, clients, policies and audit. */
 export const tenants = pgTable(
@@ -39,6 +42,49 @@ export const tenants = pgTable(
     ...timestamps(),
   },
   (table) => [uniqueIndex("tenants_slug_unique").on(table.slug)],
+);
+
+/**
+ * A `bytea` column, read and written as a `Uint8Array`.
+ *
+ * Drizzle has no built-in builder for the type. The driver already returns a
+ * `Buffer`, which is a `Uint8Array`, so the mapping is the identity both ways.
+ * Defined here rather than in `./columns.js` because that module imports this one,
+ * and a value built at load time cannot cross the cycle.
+ */
+const bytea = customType<{
+  data: Uint8Array<ArrayBuffer>;
+  driverData: Uint8Array<ArrayBuffer>;
+}>({
+  dataType: () => "bytea",
+});
+
+/**
+ * A logo shown in place of the Signet wordmark on the tenant's end-user pages.
+ *
+ * A table of its own rather than columns on `tenants`, because the tenant row is
+ * read on every OAuth request and the image is read only when somebody asks for it.
+ * `updated_at` is the image's version: the URL it is served from carries it, so a
+ * browser can cache one indefinitely and still see a replacement straight away.
+ */
+export const tenantLogos = pgTable(
+  "tenant_logos",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    variant: tenantLogoVariantEnum("variant").notNull(),
+    /** Decided by `inspectLogo` from the bytes, never taken from the upload. */
+    mediaType: text("media_type").$type<LogoMediaType>().notNull(),
+    content: bytea("content").notNull(),
+    ...timestamps(),
+  },
+  (table) => [
+    primaryKey({
+      name: "tenant_logos_pk",
+      columns: [table.tenantId, table.variant],
+    }),
+  ],
 );
 
 /** A person who signs in to the Signet console. */
@@ -242,6 +288,11 @@ export const adminPasskeyChallenges = pgTable(
 export type Tenant = typeof tenants.$inferSelect;
 /** Values required to insert a tenant. */
 export type NewTenant = typeof tenants.$inferInsert;
+
+/** A tenant logo row as selected. */
+export type TenantLogo = typeof tenantLogos.$inferSelect;
+/** Values required to insert a tenant logo. */
+export type NewTenantLogo = typeof tenantLogos.$inferInsert;
 
 /** An admin user row as selected. */
 export type AdminUser = typeof adminUsers.$inferSelect;

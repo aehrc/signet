@@ -1,5 +1,5 @@
 {
-  "id": "fe18e021-6785-42a2-98b3-302522048f85",
+  "id": "e20466d9-0ac3-4edb-ac77-0d5eb641ff1f",
   "prevId": "7e70c044-a60f-4b28-b513-15181e511fb4",
   "version": "7",
   "dialect": "postgresql",
@@ -997,12 +997,6 @@
         },
         "description": {
           "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "login_message": {
-          "name": "login_message",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -3774,6 +3768,80 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.tenant_logos": {
+      "name": "tenant_logos",
+      "schema": "",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "variant": {
+          "name": "variant",
+          "type": "tenant_logo_variant",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tenant_logos_tenant_id_tenants_id_fk": {
+          "name": "tenant_logos_tenant_id_tenants_id_fk",
+          "tableFrom": "tenant_logos",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tenant_logos_pk": {
+          "name": "tenant_logos_pk",
+          "columns": [
+            "tenant_id",
+            "variant"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.tenant_members": {
       "name": "tenant_members",
       "schema": "",
@@ -4165,6 +4233,14 @@
         "authorization_code",
         "client_credentials",
         "refresh_token"
+      ]
+    },
+    "public.tenant_logo_variant": {
+      "name": "tenant_logo_variant",
+      "schema": "public",
+      "values": [
+        "light",
+        "dark"
       ]
     },
     "public.tenant_member_role": {
