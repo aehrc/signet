@@ -98,6 +98,7 @@ const SETTING_FIELDS = [
   "scopesSupported",
   "userAccessBrandBundle",
   "userAccessBrandIdentifier",
+  "loginMessage",
   "accessTokenTtl",
   "refreshTokenTtl",
   "authMode",

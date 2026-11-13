@@ -78,6 +78,8 @@ export const endpoints = pgTable(
     slug: text("slug").notNull(),
     name: text("name").notNull(),
     description: text("description"),
+    /** Plain text shown on the end-user sign-in page. */
+    loginMessage: text("login_message"),
     /**
      * Fixed at creation, and with no column default: every insert names its
      * kind, so a forgotten value fails rather than quietly becoming SMART.

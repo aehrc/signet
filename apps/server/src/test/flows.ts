@@ -201,6 +201,7 @@ export interface InteractionState {
   readonly requestedScopes: readonly string[];
   readonly patients: readonly string[];
   readonly personas: readonly { readonly id: string }[];
+  readonly loginMessage: string | null;
 }
 
 /** Reads the current interaction state. */

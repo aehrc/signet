@@ -21,6 +21,8 @@
  * so the form has to make that distinction rather than sending an empty string the
  * schema would store.
  *
+ * A login message of only whitespace is likewise sent as `null`, which removes it.
+ *
  * A lifetime that is not a positive integer is left out of the patch entirely. It
  * cannot be carried as `undefined`: that counts as a change here and then disappears
  * in `JSON.stringify`, so Save would light up and send a body with nothing in it -
@@ -40,6 +42,7 @@ import type { CapabilityFlags, EndpointView } from "../api/types.js";
 export interface EndpointSettingsFormValues {
   readonly name: string;
   readonly description: string;
+  readonly loginMessage: string;
   readonly audience: string;
   /** Seconds, as typed. */
   readonly accessTokenTtl: string;
@@ -65,6 +68,7 @@ export function endpointSettingsFormValues(
   return {
     name: endpoint.name,
     description: endpoint.description ?? "",
+    loginMessage: endpoint.loginMessage ?? "",
     audience: endpoint.audience,
     accessTokenTtl: String(endpoint.accessTokenTtl),
     refreshTokenTtl: String(endpoint.refreshTokenTtl),
@@ -136,6 +140,8 @@ export function endpointSettingsPatch(
     {
       name: edited.name,
       description: edited.description.length === 0 ? null : edited.description,
+      loginMessage:
+        edited.loginMessage.trim().length === 0 ? null : edited.loginMessage,
       audience: edited.audience,
       authMode: edited.authMode,
       consentMode: edited.consentMode,
@@ -145,6 +151,7 @@ export function endpointSettingsPatch(
     {
       name: current.name,
       description: current.description,
+      loginMessage: current.loginMessage,
       audience: current.audience,
       authMode: current.authMode,
       consentMode: current.consentMode,

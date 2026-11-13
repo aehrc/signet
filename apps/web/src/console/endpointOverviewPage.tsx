@@ -39,6 +39,7 @@ import {
   SaveOutcome,
   SaveRow,
   SelectField,
+  TextAreaField,
   TextField,
 } from "../components/fields.js";
 import {
@@ -161,6 +162,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
   // as a change somebody made.
   const [name, setName] = useState<string | undefined>();
   const [description, setDescription] = useState<string | undefined>();
+  const [loginMessage, setLoginMessage] = useState<string | undefined>();
   const [audience, setAudience] = useState<string | undefined>();
   const [accessTokenTtl, setAccessTokenTtl] = useState<string | undefined>();
   const [refreshTokenTtl, setRefreshTokenTtl] = useState<string | undefined>();
@@ -175,6 +177,7 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
   const edited = {
     name: name ?? loaded.name,
     description: description ?? loaded.description,
+    loginMessage: loginMessage ?? loaded.loginMessage,
     audience: audience ?? loaded.audience,
     accessTokenTtl: accessTokenTtl ?? loaded.accessTokenTtl,
     refreshTokenTtl: refreshTokenTtl ?? loaded.refreshTokenTtl,
@@ -275,6 +278,16 @@ function SettingsPanel({ disabled }: Readonly<{ readonly disabled: boolean }>) {
           ]}
         />
       </div>
+
+      <TextAreaField
+        label="Sign-in page message"
+        value={edited.loginMessage}
+        onChange={setLoginMessage}
+        error={issues["loginMessage"]}
+        rows={3}
+        hint="Shown to end users below the sign-in form, e.g. who to contact for an account. Plain text; email and web addresses become links. Up to 1000 characters."
+        disabled={disabled}
+      />
 
       <SelectField
         label="Status"

@@ -25,3 +25,4 @@ export * from "./manage/index.js";
 export * from "./invitations/index.js";
 export * from "./endUsers/index.js";
 export * from "./uris.js";
+export * from "./linkify.js";

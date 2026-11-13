@@ -310,6 +310,7 @@ async function buildView(
     },
     requestedScopes: session.requestedScopes,
     authMode: endpoint.authMode,
+    loginMessage: endpoint.loginMessage,
     allowsPersonas: !endpoint.isProduction,
     personas: personas.map((persona) => ({
       id: persona.id,

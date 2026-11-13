@@ -39,6 +39,7 @@ import {
 
 import { issuerBase } from "./api.js";
 import { ChoiceList } from "./choiceList.js";
+import { LoginMessage } from "./loginMessage.js";
 import { useAdvanceInteraction, useInteractionState } from "./queries.js";
 import { describeScopes, includesWrites } from "./scopeDescriptions.js";
 import { ScopeMarker } from "./scopeMarker.js";
@@ -329,6 +330,10 @@ export function LoginPage() {
             </p>
           </div>
         </ChoiceList>
+      )}
+
+      {state === undefined ? null : (
+        <LoginMessage message={state.loginMessage} />
       )}
     </InteractionShell>
   );

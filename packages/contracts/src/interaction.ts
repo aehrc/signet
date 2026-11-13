@@ -65,6 +65,8 @@ export interface InteractionView {
    */
   readonly scopeDescriptions: Readonly<Record<string, string>>;
   readonly authMode: string;
+  /** The operator's plain-text message for the sign-in page, or null for none. */
+  readonly loginMessage: string | null;
   readonly allowsPersonas: boolean;
   readonly personas: readonly InteractionPersona[];
   readonly requirements: InteractionRequirements;

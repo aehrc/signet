@@ -31,6 +31,11 @@ import {
   endpointPath,
   tenantPath,
 } from "../test/adminApi.js";
+import {
+  interactionState,
+  pkcePair,
+  startAuthorization,
+} from "../test/flows.js";
 import { createTestStack, testDatabaseUrl } from "../test/harness.js";
 
 import type { AdminCredential } from "../test/adminApi.js";
@@ -143,6 +148,49 @@ describe.skipIf(testDatabaseUrl === undefined)(
           credential: owner,
           body: { supportsAuthorizePost: true },
         });
+      });
+
+      it("shows a login message on the sign-in step until it is removed", async () => {
+        const message =
+          "Contact us at pathling@csiro.au if you want an account.";
+        const patched = await adminJson<{
+          endpoint: { loginMessage: string | null };
+        }>(stack, "PATCH", endpointPath(stack), {
+          credential: owner,
+          body: { loginMessage: message },
+        });
+        expect(patched.endpoint.loginMessage).toBe(message);
+
+        /** The login message an authorization started now would be shown. */
+        async function shownMessage(): Promise<string | null> {
+          const session = await startAuthorization(stack, {
+            clientId: stack.publicClient.clientId,
+            scope: "openid fhirUser",
+            challenge: (await pkcePair()).challenge,
+          });
+          return (await interactionState(stack, session)).loginMessage;
+        }
+        expect(await shownMessage()).toBe(message);
+
+        // Removing it takes it off the page, rather than leaving the last value.
+        await adminJson(stack, "PATCH", endpointPath(stack), {
+          credential: owner,
+          body: { loginMessage: null },
+        });
+        expect(await shownMessage()).toBeNull();
+      });
+
+      it("refuses a login message longer than 1000 characters", async () => {
+        const response = await adminRequest(
+          stack,
+          "PATCH",
+          endpointPath(stack),
+          {
+            credential: owner,
+            body: { loginMessage: "x".repeat(1001) },
+          },
+        );
+        expect(response.status).toBe(400);
       });
 
       it("records who changed what", async () => {
