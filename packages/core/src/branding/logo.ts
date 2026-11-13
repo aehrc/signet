@@ -64,9 +64,17 @@ const WEBP_FORM_TYPE = [0x57, 0x45, 0x42, 0x50];
  * Anchored to the root element rather than searching for `<svg` anywhere, because an
  * HTML page containing an inline SVG is not an SVG document and must not be stored
  * as one. Case-sensitive, as XML is: `<SVG>` is not an SVG element.
+ *
+ * Every part of the prolog can end in exactly one place - a comment at its first
+ * `-->`, a declaration at its first `?>`, a doctype at its first `>` or, with an
+ * internal subset, the first `>` after its first `]` - and the alternatives begin
+ * differently. That is what keeps a failed match linear. A lazy `[\s\S]*?` would let
+ * each part end at any later terminator, and a few hundred bytes of comments with no
+ * root element after them would then be retried in exponentially many ways, holding
+ * the server's only thread for as long as that takes.
  */
 const SVG_DOCUMENT =
-  /^\uFEFF?(?:\s|<\?xml[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>[]*(?:\[[\s\S]*?\])?\s*>)*<svg[\s/>]/;
+  /^\uFEFF?(?:\s|<\?xml(?:(?!\?>)[\s\S])*\?>|<!--(?:(?!-->)[\s\S])*-->|<!DOCTYPE[^>[]*(?:\[[^\]]*\]\s*)?>)*<svg[\s/>]/;
 
 /** Whether `bytes` holds `signature` starting at `offset`. */
 function hasBytesAt(

@@ -155,6 +155,61 @@ describe("inspectLogo", () => {
     });
   });
 
+  describe("pathological prologs", () => {
+    /**
+     * Inspects a file and reports how long it took.
+     *
+     * The bound is loose enough for a slow CI runner and still orders of magnitude
+     * below what backtracking costs: each of these inputs is a prolog with no root
+     * element after it, which a pattern able to end a comment, declaration or doctype
+     * at more than one place retries in exponentially many ways.
+     */
+    function timedInspection(text: string): {
+      readonly problem: string | undefined;
+      readonly milliseconds: number;
+    } {
+      const started = performance.now();
+      const inspection = inspectLogo(bytesOf(text));
+      return {
+        problem: inspection.ok ? undefined : inspection.problem,
+        milliseconds: performance.now() - started,
+      };
+    }
+
+    it.each([
+      ["comments", "<!---->"],
+      ["XML declarations", "<?xml?>"],
+      ["doctypes with internal subsets", "<!DOCTYPE[]>"],
+      ["doctypes with trailing whitespace", "<!DOCTYPE svg   >"],
+    ])(
+      "refuses thirty %s with no root element without backtracking",
+      (_name, fragment) => {
+        const { problem, milliseconds } = timedInspection(
+          `${fragment.repeat(30)}x`,
+        );
+        expect(problem).toBe("unsupported");
+        expect(milliseconds).toBeLessThan(1000);
+      },
+    );
+
+    it.each([
+      ["comments", "<!---->"],
+      ["XML declarations", "<?xml?>"],
+      ["doctypes with internal subsets", "<!DOCTYPE[]>"],
+      ["whitespace", " "],
+    ])(
+      "refuses a prolog of %s filling the size limit in linear time",
+      (_name, fragment) => {
+        const count = Math.floor((MAX_LOGO_BYTES - 1) / fragment.length);
+        const { problem, milliseconds } = timedInspection(
+          `${fragment.repeat(count)}x`,
+        );
+        expect(problem).toBe("unsupported");
+        expect(milliseconds).toBeLessThan(1000);
+      },
+    );
+  });
+
   describe("size", () => {
     it("refuses an empty file", () => {
       expect(inspectLogo(new Uint8Array(0))).toEqual({
