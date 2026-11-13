@@ -71,6 +71,17 @@ const endpointSettingsSchema = z.object({
   userAccessBrandBundle: z.string().url().max(2048).nullish(),
   userAccessBrandIdentifier: z.string().max(256).nullish(),
   /**
+   * Plain text shown on the end-user sign-in page, such as who to contact for an
+   * account. Trimmed, and a message of only whitespace is stored as none, so the
+   * page never shows an empty box.
+   */
+  loginMessage: z
+    .string()
+    .trim()
+    .max(1000)
+    .transform((message) => (message.length === 0 ? null : message))
+    .nullish(),
+  /**
    * Bounded well below a day. An access token is a bearer credential a resource
    * server cannot revoke, and its lifetime is the window in which a leaked one
    * still works; SMART's own examples sit in the minutes.

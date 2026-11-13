@@ -101,6 +101,7 @@ export function endpointView(
     scopesSupported: endpoint.scopesSupported,
     userAccessBrandBundle: endpoint.userAccessBrandBundle,
     userAccessBrandIdentifier: endpoint.userAccessBrandIdentifier,
+    loginMessage: endpoint.loginMessage,
     capabilities: capabilityFlags(endpoint, issuer),
     createdAt: endpoint.createdAt,
     updatedAt: endpoint.updatedAt,

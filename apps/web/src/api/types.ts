@@ -84,6 +84,7 @@ export interface EndpointView {
   readonly scopesSupported: readonly string[];
   readonly userAccessBrandBundle: string | null;
   readonly userAccessBrandIdentifier: string | null;
+  readonly loginMessage: string | null;
   readonly capabilities: CapabilityFlags;
   readonly createdAt: string;
   readonly updatedAt: string;

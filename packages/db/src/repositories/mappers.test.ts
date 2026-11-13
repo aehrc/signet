@@ -32,6 +32,7 @@ const endpoint: Endpoint = {
   slug: "pathling",
   name: "Pathling",
   description: null,
+  loginMessage: null,
   kind: "smart",
   audience: "https://fhir.example.org/fhir",
   supportsEhrLaunch: true,

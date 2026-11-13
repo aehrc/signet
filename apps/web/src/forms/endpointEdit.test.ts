@@ -38,6 +38,7 @@ function endpointView(overrides: Partial<EndpointView> = {}): EndpointView {
     scopesSupported: ["patient/*.rs"],
     userAccessBrandBundle: null,
     userAccessBrandIdentifier: null,
+    loginMessage: null,
     capabilities: { supportsEhrLaunch: true, allowsPublicClients: false },
     createdAt: "2026-08-03T14:02:11.000Z",
     updatedAt: "2026-08-03T14:02:11.000Z",
@@ -50,6 +51,7 @@ describe("endpointSettingsFormValues", () => {
     expect(endpointSettingsFormValues(endpointView())).toEqual({
       name: "Pathling",
       description: "",
+      loginMessage: "",
       audience: "https://fhir.example.com/fhir",
       accessTokenTtl: "900",
       refreshTokenTtl: "86400",
@@ -111,6 +113,61 @@ describe("endpointSettingsPatch", () => {
     ).toEqual({ description: null });
   });
 
+  it("is empty for a form nobody touched when a login message is set", () => {
+    const current = endpointView({
+      loginMessage: "Contact us at pathling@csiro.au if you want an account.",
+    });
+
+    expect(
+      endpointSettingsPatch(endpointSettingsFormValues(current), current),
+    ).toEqual({});
+  });
+
+  it("is empty when a saved login message gains only surrounding whitespace", () => {
+    // The API trims the message, so a textarea ending in a newline would otherwise
+    // differ from what was saved forever, and every Save would write it again.
+    const current = endpointView({ loginMessage: "Contact us." });
+
+    expect(
+      endpointSettingsPatch(
+        {
+          ...endpointSettingsFormValues(current),
+          loginMessage: "Contact us.\n",
+        },
+        current,
+      ),
+    ).toEqual({});
+  });
+
+  it("carries a new login message", () => {
+    const current = endpointView();
+
+    expect(
+      endpointSettingsPatch(
+        {
+          ...endpointSettingsFormValues(current),
+          loginMessage: "Ask your administrator for an account.",
+        },
+        current,
+      ),
+    ).toEqual({ loginMessage: "Ask your administrator for an account." });
+  });
+
+  it("sends a cleared login message as null, which removes it from the sign-in page", () => {
+    // Whitespace alone counts as cleared: a message of spaces would put an empty
+    // box on the page.
+    const current = endpointView({ loginMessage: "Contact us." });
+
+    for (const text of ["", "  \n "]) {
+      expect(
+        endpointSettingsPatch(
+          { ...endpointSettingsFormValues(current), loginMessage: text },
+          current,
+        ),
+      ).toEqual({ loginMessage: null });
+    }
+  });
+
   it("parses a changed lifetime into a number", () => {
     const current = endpointView();
 
@@ -159,6 +216,7 @@ describe("endpointSettingsPatch", () => {
         {
           name: "Renamed",
           description: "Now described",
+          loginMessage: "Contact us.",
           audience: "https://other.example.com/fhir",
           accessTokenTtl: "600",
           refreshTokenTtl: "3600",
@@ -172,6 +230,7 @@ describe("endpointSettingsPatch", () => {
     ).toEqual({
       name: "Renamed",
       description: "Now described",
+      loginMessage: "Contact us.",
       audience: "https://other.example.com/fhir",
       accessTokenTtl: 600,
       refreshTokenTtl: 3600,
