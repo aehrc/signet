@@ -140,14 +140,14 @@ function Preview({ branding }: Readonly<{ branding: TenantBranding | null }>) {
           data-theme={scheme.theme}
           className="bg-base-200 text-base-content border-base-300 flex min-w-48 flex-1 flex-col items-center gap-2 rounded-box border p-4"
         >
-          <div className="flex h-10 items-center">
+          <div className="flex h-20 items-center">
             {scheme.url === undefined ? (
               <span className="text-xl font-bold">Signet</span>
             ) : (
               <img
                 src={scheme.url}
                 alt={`${branding?.name ?? ""} in the ${scheme.label.toLowerCase()}`}
-                className="h-10 w-auto max-w-full object-contain"
+                className="h-20 w-auto max-w-full object-contain"
               />
             )}
           </div>

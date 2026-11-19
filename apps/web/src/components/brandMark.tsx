@@ -28,7 +28,7 @@ interface BrandMarkProps {
  */
 export function BrandMark({ className = "" }: Readonly<BrandMarkProps>) {
   const branding = use(BrandingContext);
-  const box = `flex h-10 items-center ${className}`;
+  const box = `flex h-20 items-center ${className}`;
 
   if (branding === undefined) {
     return <div className={box} aria-hidden="true" />;
@@ -52,7 +52,7 @@ export function BrandMark({ className = "" }: Readonly<BrandMarkProps>) {
         <img
           src={branding.logoUrl}
           alt={branding.name}
-          className="h-10 w-auto max-w-full object-contain"
+          className="h-20 w-auto max-w-full object-contain"
         />
       </picture>
     </div>
