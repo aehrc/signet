@@ -155,6 +155,20 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
     });
   }
 
+  describe("links issued before invitations moved to the tenant", () => {
+    it("redirects the endpoint's old invitation page to the tenant's", async () => {
+      // Links already emailed point at `{iss}/invitation#token`. The browser keeps
+      // the fragment across a redirect, so the token reaches the tenant page.
+      const response = await stack.app.request(
+        `${issuerPath(stack)}/invitation`,
+      );
+      expect(response.status).toBe(308);
+      expect(response.headers.get("location")).toBe(
+        `/t/${stack.tenant.slug}/invitation`,
+      );
+    });
+  });
+
   describe("issuing from the admin API", () => {
     it("creates a local account that cannot sign in until it has a password", async () => {
       const account = await newAccount();

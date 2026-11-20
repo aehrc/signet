@@ -207,19 +207,13 @@ function endpointAccessView(access: EndpointAccess): Record<string, unknown> {
  * A tenant's end user or persona, with the endpoints they have access to.
  *
  * @param user - The account.
- * @param access - The account's access rows, from `listEndpointAccess`. Rows for other
- *   accounts are ignored, so a caller may pass the tenant's whole list.
+ * @param access - The account's own access rows, from `listEndpointAccess`.
  */
 export function endUserView(
   user: EndUser,
   access: readonly EndpointAccess[],
 ): Record<string, unknown> {
-  return {
-    ...accountFields(user),
-    endpoints: access
-      .filter((row) => row.endUserId === user.id)
-      .map(endpointAccessView),
-  };
+  return { ...accountFields(user), endpoints: access.map(endpointAccessView) };
 }
 
 /** An end user or persona as one endpoint sees them, with that endpoint's fields. */

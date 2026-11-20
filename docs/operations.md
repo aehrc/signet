@@ -290,10 +290,11 @@ that endpoint's FHIR server. One account can be `Practitioner/1` at one endpoint
 refused on an OAuth / OpenID Connect endpoint.
 
 Withdrawing an account's access to an endpoint deletes its consents, management-page
-sessions and in-flight authorizations there, and refuses its refresh tokens there with
-`invalid_grant`. Access tokens already issued there run to their expiry. Its access to
-the tenant's other endpoints is untouched. Disabling or deleting the account acts at
-every endpoint at once.
+sessions and in-flight authorizations there, and revokes its refresh tokens there, so a
+refresh is answered with `invalid_grant`. The tokens stay revoked if access is given
+back later: each app has to be authorised again. Access tokens already issued there run
+to their expiry. Its access to the tenant's other endpoints is untouched. Disabling or
+deleting the account acts at every endpoint at once.
 
 A federated sign-in creates the account, named `{issuer}#{sub}`, or refreshes it, and
 gives it access to the endpoint it signed in at. A sign-in at another endpoint of the
@@ -310,6 +311,18 @@ there. Nobody is merged: where two endpoints of one tenant held the same usernam
 oldest account keeps it and each later one is renamed `{username}@{endpoint-slug}`. A
 person whose account was renamed signs in with the new name; tell them before you
 upgrade.
+
+Federated accounts follow the same rule. Where two endpoints of one tenant trusted the
+same identity provider, the person held an `{issuer}#{sub}` account at each; the older
+keeps the name and the other becomes `{issuer}#{sub}@{endpoint-slug}`. Their next
+federated sign-in at either endpoint lands on the older account and gives it access
+there, so at the second endpoint they consent again and apps see a different `sub`. The
+renamed account can no longer be signed in to and can be deleted once nothing refers to
+it.
+
+Invitation links issued before the upgrade point at `{issuer}/invitation`. That path now
+redirects to the tenant's invitation page, carrying the token, so outstanding links keep
+working until they expire.
 
 This is a breaking change to the admin API. The account routes moved from
 `/api/v1/tenants/{tenant}/endpoints/{endpoint}/users` to

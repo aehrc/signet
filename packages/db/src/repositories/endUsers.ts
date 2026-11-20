@@ -39,6 +39,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { isPersonaSelectable } from "./predicates.js";
+import { revokeRefreshTokensForSubject } from "./refreshTokens.js";
 import { requireRow } from "./rows.js";
 import { executorFor, TenantScopeViolationError } from "./scope.js";
 import { nowValue } from "./time.js";
@@ -146,7 +147,7 @@ const endpointEndUserColumns = {
  */
 async function selectEndpointEndUsers(
   scope: BoundEndpointScope,
-  identifies: SQL | undefined,
+  identifies?: SQL,
 ): Promise<EndpointEndUser[]> {
   return await executorFor(scope)
     .select(endpointEndUserColumns)
@@ -168,6 +169,14 @@ export async function getEndUser(
 ): Promise<EndpointEndUser | undefined> {
   const [row] = await selectEndpointEndUsers(scope, eq(endUsers.id, endUserId));
   return row;
+}
+
+/** Lists the users with access to the scoped endpoint, by username. */
+export async function listEndpointEndUsers(
+  scope: BoundEndpointScope,
+): Promise<readonly EndpointEndUser[]> {
+  const rows = await selectEndpointEndUsers(scope);
+  return rows.toSorted((a, b) => a.username.localeCompare(b.username));
 }
 
 /**
@@ -342,15 +351,24 @@ export async function grantEndpointAccess(
  * Withdraws a user's access to the scoped endpoint.
  *
  * Their consents, management sessions and in-flight authorizations there cascade
- * away through the composite foreign keys on those tables, and a refresh at this
- * endpoint is refused from then on because {@link getEndUser} no longer finds them.
- * Access to the tenant's other endpoints is untouched.
+ * away through the composite foreign keys on those tables, and their refresh tokens
+ * there are revoked in the same transaction. Revoked rather than merely refused while
+ * the access row is missing: giving access back, or a federated sign-in that grants
+ * it again, must not revive the app delegations the withdrawal ended. Access tokens
+ * already issued run to their expiry. Access to the tenant's other endpoints is
+ * untouched.
  *
+ * Must run inside one bound transaction, which `withTenantScope` provides.
+ *
+ * @param scope - The endpoint to withdraw access to.
+ * @param endUserId - The account.
+ * @param now - The revocation instant; the database's own by default.
  * @returns Whether the user had access to withdraw.
  */
 export async function revokeEndpointAccess(
   scope: BoundEndpointScope,
   endUserId: string,
+  now?: Date,
 ): Promise<boolean> {
   const rows = await executorFor(scope)
     .delete(endUserEndpoints)
@@ -361,7 +379,12 @@ export async function revokeEndpointAccess(
       ),
     )
     .returning({ endUserId: endUserEndpoints.endUserId });
-  return rows.length > 0;
+  if (rows.length === 0) {
+    return false;
+  }
+  // A refresh token's subject is the account's id.
+  await revokeRefreshTokensForSubject(scope, endUserId, now);
+  return true;
 }
 
 /**

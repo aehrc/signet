@@ -17,7 +17,8 @@
  * OpenID Connect endpoint refuses them.
  *
  * Withdrawing access ends the account's consents, management sessions and in-flight
- * authorizations at this endpoint, and nothing anywhere else.
+ * authorizations at this endpoint and revokes its refresh tokens there, and touches
+ * nothing anywhere else.
  *
  * Author: John Grimes
  */
@@ -26,8 +27,7 @@ import { endpointAccessSchema } from "@signet/contracts";
 import { toLaunchContext } from "@signet/core";
 import {
   grantEndpointAccess,
-  listEndpointAccess,
-  listTenantEndUsers,
+  listEndpointEndUsers,
   revokeEndpointAccess,
   withTenantScope,
 } from "@signet/db";
@@ -42,7 +42,7 @@ import { refuseSmartOnly, smartOnlyUserFields } from "./smartOnly.js";
 import { endpointEndUserView } from "./views.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
-import type { EndpointAccessFields, EndpointEndUser } from "@signet/db";
+import type { EndpointAccessFields } from "@signet/db";
 import type { Hono } from "hono";
 
 /**
@@ -63,32 +63,10 @@ export function registerEndpointAccessRoutes(
    */
   router.get(`${ENDPOINT_PATH}/users`, requireRole("viewer"), async (c) => {
     const { scope } = c.get("endpoint");
-    const { users, access } = await withTenantScope(
-      context.db,
-      scope,
-      async (bound) => ({
-        users: await listTenantEndUsers(bound),
-        access: await listEndpointAccess(bound),
-      }),
+    const users = await withTenantScope(context.db, scope, (bound) =>
+      listEndpointEndUsers(bound),
     );
-    const here = new Map(
-      access
-        .filter((row) => row.endpointId === scope.endpointId)
-        .map((row) => [row.endUserId, row]),
-    );
-    const visible: EndpointEndUser[] = users.flatMap((user) => {
-      const row = here.get(user.id);
-      return row === undefined
-        ? []
-        : [
-            {
-              ...user,
-              fhirUserReference: row.fhirUserReference,
-              defaultContext: row.defaultContext,
-            },
-          ];
-    });
-    return c.json({ users: visible.map(endpointEndUserView) });
+    return c.json({ users: users.map(endpointEndUserView) });
   });
 
   /**
@@ -168,7 +146,7 @@ export function registerEndpointAccessRoutes(
       const revoked =
         user !== undefined &&
         (await withTenantScope(context.db, scope, (bound) =>
-          revokeEndpointAccess(bound, userId),
+          revokeEndpointAccess(bound, userId, context.clock()),
         ));
       if (user === undefined || !revoked) {
         return c.json(

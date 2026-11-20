@@ -174,6 +174,13 @@ export function createOAuthRouter(
   );
   router.post(path("/manage/revoke"), manageRevokeHandler(context));
 
+  // Invitation links issued before accounts moved to the tenant point at the
+  // endpoint's old page. The browser keeps the `#token` fragment across a redirect,
+  // so sending it to the tenant's page keeps those links working until they expire.
+  router.get(path("/invitation"), (c) =>
+    c.redirect(`/t/${c.get("issuer").tenant.slug}/invitation`, 308),
+  );
+
   // Vouched dynamic client registration. Off unless the endpoint names a trust
   // anchor, in which case the handler answers 404 - see `./register.js`.
   //

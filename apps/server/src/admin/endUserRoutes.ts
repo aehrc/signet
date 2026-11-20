@@ -65,7 +65,7 @@ import { endUserView, invitationView } from "./views.js";
 import { tenantUrlFor } from "../oauth/issuer.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
-import type { EndUser, TenantScope } from "@signet/db";
+import type { EndpointAccess, EndUser, TenantScope } from "@signet/db";
 import type { Context, Hono } from "hono";
 
 /** A tenant route acting on one existing account. */
@@ -157,7 +157,19 @@ export function registerEndUserRoutes(
         access: await listEndpointAccess(bound),
       }),
     );
-    return c.json({ users: users.map((user) => endUserView(user, access)) });
+    // Grouped once, rather than filtering the tenant's whole list per account.
+    const byUser = new Map<string, EndpointAccess[]>();
+    for (const row of access) {
+      const rows = byUser.get(row.endUserId);
+      if (rows === undefined) {
+        byUser.set(row.endUserId, [row]);
+      } else {
+        rows.push(row);
+      }
+    }
+    return c.json({
+      users: users.map((user) => endUserView(user, byUser.get(user.id) ?? [])),
+    });
   });
 
   /**

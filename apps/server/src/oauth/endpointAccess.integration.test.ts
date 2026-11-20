@@ -241,6 +241,15 @@ describe.skipIf(testDatabaseUrl === undefined)("access to an endpoint", () => {
     } finally {
       await grant(second, stack.user.id);
     }
+
+    // Giving access back does not revive what the withdrawal ended: the token was
+    // revoked, not merely refused while access was missing, so the app must be
+    // authorised again.
+    const revived = await refresh(second, atSecond.refresh_token ?? "");
+    expect(revived.status).toBe(400);
+    expect(((await revived.json()) as TokenResponseBody).error).toBe(
+      "invalid_grant",
+    );
   });
 
   it("refuses a disabled account at every endpoint it has access to", async () => {
