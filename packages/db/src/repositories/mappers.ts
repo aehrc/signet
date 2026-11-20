@@ -28,7 +28,7 @@
  */
 
 import type { Client } from "../schema/clients.js";
-import type { Endpoint, EndUser } from "../schema/endpoints.js";
+import type { Endpoint, EndpointEndUser } from "../schema/endpoints.js";
 import type { AccessToken } from "../schema/runtime.js";
 import type {
   EndpointCapabilityConfig,
@@ -111,13 +111,13 @@ export function toEvaluationClient(client: Client): EvaluationClient {
 }
 
 /**
- * Shapes an end user for policy evaluation.
+ * Shapes an end user, as one endpoint sees them, for policy evaluation.
  *
  * No credential material crosses this boundary. `EvaluationUser` has no field
  * for a password hash, which is what stops a policy template from being able to
  * emit one into a token.
  */
-export function toEvaluationUser(user: EndUser): EvaluationUser {
+export function toEvaluationUser(user: EndpointEndUser): EvaluationUser {
   return {
     id: user.id,
     username: user.username,
@@ -197,6 +197,6 @@ export function toCapabilityConfig(
  * Returning `{}` rather than null keeps the caller from having to decide what
  * "no default context" means every time it resolves one.
  */
-export function toDefaultLaunchContext(user: EndUser): LaunchContext {
+export function toDefaultLaunchContext(user: EndpointEndUser): LaunchContext {
   return user.defaultContext ?? {};
 }

@@ -26,54 +26,65 @@ import {
 
 const LOCAL = { authMode: "local" };
 const FEDERATED = { authMode: "oidc" };
+const PERSONA_MODE = { authMode: "persona" };
 const ACCOUNT = { isPersona: false, disabledAt: null };
 
 describe("invitationRefusal", () => {
-  it("admits an enabled local account on an endpoint that checks passwords", () => {
-    expect(invitationRefusal(LOCAL, ACCOUNT)).toBeUndefined();
+  it("admits an enabled local account with access to an endpoint that checks passwords", () => {
+    expect(invitationRefusal(ACCOUNT, [LOCAL])).toBeUndefined();
+  });
+
+  it("admits an account with one password endpoint among others", () => {
+    // The password is checked at the local endpoint, which is reason enough.
+    expect(
+      invitationRefusal(ACCOUNT, [FEDERATED, LOCAL, PERSONA_MODE]),
+    ).toBeUndefined();
   });
 
   it("refuses a persona, which has no password to choose", () => {
-    expect(invitationRefusal(LOCAL, { ...ACCOUNT, isPersona: true })).toBe(
+    expect(invitationRefusal({ ...ACCOUNT, isPersona: true }, [LOCAL])).toBe(
       "persona",
     );
   });
 
-  it("refuses an endpoint that federates, which never checks a local password", () => {
-    expect(invitationRefusal(FEDERATED, ACCOUNT)).toBe("federated");
+  it("refuses an account whose endpoints never check a local password", () => {
+    expect(invitationRefusal(ACCOUNT, [FEDERATED, PERSONA_MODE])).toBe(
+      "no-password-endpoint",
+    );
+  });
+
+  it("refuses an account with access to no endpoint at all", () => {
+    expect(invitationRefusal(ACCOUNT, [])).toBe("no-password-endpoint");
   });
 
   it("refuses a disabled account, which could not sign in with the password", () => {
     expect(
-      invitationRefusal(LOCAL, {
-        ...ACCOUNT,
-        disabledAt: new Date("2026-01-01T00:00:00Z"),
-      }),
+      invitationRefusal(
+        { ...ACCOUNT, disabledAt: new Date("2026-01-01T00:00:00Z") },
+        [LOCAL],
+      ),
     ).toBe("disabled");
   });
 
   it("reads a disabled instant serialised as a string, as the console holds it", () => {
     expect(
-      invitationRefusal(LOCAL, {
-        ...ACCOUNT,
-        disabledAt: "2026-01-01T00:00:00.000Z",
-      }),
+      invitationRefusal(
+        { ...ACCOUNT, disabledAt: "2026-01-01T00:00:00.000Z" },
+        [LOCAL],
+      ),
     ).toBe("disabled");
   });
 
   it("refuses an unrecognised auth mode rather than assuming local", () => {
     // Deny by default: a mode added later must be admitted by a rule naming it.
-    expect(invitationRefusal({ authMode: "something-new" }, ACCOUNT)).toBe(
-      "federated",
+    expect(invitationRefusal(ACCOUNT, [{ authMode: "something-new" }])).toBe(
+      "no-password-endpoint",
     );
   });
 
-  it("names the persona before the endpoint, since it can never be fixed", () => {
+  it("names the persona before anything else, since it can never be fixed", () => {
     expect(
-      invitationRefusal(FEDERATED, {
-        isPersona: true,
-        disabledAt: new Date(),
-      }),
+      invitationRefusal({ isPersona: true, disabledAt: new Date() }, []),
     ).toBe("persona");
   });
 
@@ -95,18 +106,18 @@ describe("invitationExpiry", () => {
 });
 
 describe("invitationUrl and invitationTokenFromFragment", () => {
-  const issuer = "https://signet.example.org/t/demo/e/main";
+  const tenantUrl = "https://signet.example.org/t/demo";
 
-  it("puts the token in the fragment of the invitation page", () => {
+  it("puts the token in the fragment of the tenant's invitation page", () => {
     // The fragment is never sent to a server, so the token stays out of access logs,
     // proxies and the Referer header of anything the page loads.
-    expect(invitationUrl(issuer, "abc_DEF-123")).toBe(
-      "https://signet.example.org/t/demo/e/main/invitation#abc_DEF-123",
+    expect(invitationUrl(tenantUrl, "abc_DEF-123")).toBe(
+      "https://signet.example.org/t/demo/invitation#abc_DEF-123",
     );
   });
 
   it("reads back exactly the token it wrote", () => {
-    const url = new URL(invitationUrl(issuer, "abc_DEF-123"));
+    const url = new URL(invitationUrl(tenantUrl, "abc_DEF-123"));
     expect(invitationTokenFromFragment(url.hash)).toBe("abc_DEF-123");
   });
 

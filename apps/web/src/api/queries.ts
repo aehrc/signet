@@ -24,6 +24,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
 
@@ -32,7 +33,7 @@ import {
   auditPath,
   clientPath,
   endpointPath,
-  endUserPath,
+  endpointUserPath,
   passkeyPath,
   PASSKEYS_PATH,
   PASSKEY_OPTIONS_PATH,
@@ -41,6 +42,7 @@ import {
   PRESETS_PATH,
   SESSION_PATH,
   tenantPath,
+  tenantUserPath,
   type AuditQuery,
 } from "./paths.js";
 import { getField, patchField, postField } from "./unwrap.js";
@@ -57,6 +59,7 @@ import type {
   ClientRequestView,
   ClientView,
   EndpointKeyView,
+  EndpointEndUserView,
   EndpointView,
   EndUserView,
   InvitationView,
@@ -122,22 +125,23 @@ export const keys = {
     endpoint,
     clientId,
   ],
-  users: (tenant: string, endpoint: string): QueryKey => [
-    "users",
-    tenant,
-    endpoint,
-  ],
-  endUser: (tenant: string, endpoint: string, userId: string): QueryKey => [
+  users: (tenant: string): QueryKey => ["users", tenant],
+  endUser: (tenant: string, userId: string): QueryKey => [
     "user",
     tenant,
-    endpoint,
     userId,
   ],
-  invitation: (tenant: string, endpoint: string, userId: string): QueryKey => [
+  invitation: (tenant: string, userId: string): QueryKey => [
     "invitation",
     tenant,
-    endpoint,
     userId,
+  ],
+  /** Every endpoint's view of its users, as a prefix of {@link keys.endpointUsers}. */
+  allEndpointUsers: (tenant: string): QueryKey => ["endpoint-users", tenant],
+  endpointUsers: (tenant: string, endpoint: string): QueryKey => [
+    "endpoint-users",
+    tenant,
+    endpoint,
   ],
   policies: (tenant: string, endpoint: string): QueryKey => [
     "policies",
@@ -735,12 +739,49 @@ export function useDeleteClient(tenant: string, endpoint: string) {
   });
 }
 
-/** The endpoint's users and personas. */
-export function useEndUsers(tenant: string, endpoint: string) {
+/**
+ * Refreshes everything that shows an account after it changed.
+ *
+ * The tenant's list, the account's own page, and every endpoint's view of its users:
+ * the policy simulator lists an account by its display name, and an account is listed
+ * by each endpoint it has access to, so a change to one is a change to all of them.
+ */
+async function invalidateEndUser(
+  client: QueryClient,
+  tenant: string,
+  userId: string,
+): Promise<void> {
+  await Promise.all([
+    client.invalidateQueries({ queryKey: keys.endUser(tenant, userId) }),
+    client.invalidateQueries({ queryKey: keys.users(tenant) }),
+    client.invalidateQueries({ queryKey: keys.allEndpointUsers(tenant) }),
+  ]);
+}
+
+/** The tenant's users and personas. */
+export function useEndUsers(tenant: string) {
   return useQuery({
-    queryKey: keys.users(tenant, endpoint),
+    queryKey: keys.users(tenant),
     queryFn: async ({ signal }) =>
       await getField<"users", readonly EndUserView[]>(
+        tenantPath(tenant, "/users"),
+        "users",
+        signal,
+      ),
+  });
+}
+
+/**
+ * The accounts with access to one endpoint, as that endpoint sees them.
+ *
+ * What the policy simulator offers, so it cannot pick an account the endpoint would
+ * refuse to sign in.
+ */
+export function useEndpointUsers(tenant: string, endpoint: string) {
+  return useQuery({
+    queryKey: keys.endpointUsers(tenant, endpoint),
+    queryFn: async ({ signal }) =>
+      await getField<"users", readonly EndpointEndUserView[]>(
         endpointPath(tenant, endpoint, "/users"),
         "users",
         signal,
@@ -749,38 +790,36 @@ export function useEndUsers(tenant: string, endpoint: string) {
 }
 
 /** One end user or persona. */
-export function useEndUser(tenant: string, endpoint: string, userId: string) {
+export function useEndUser(tenant: string, userId: string) {
   return useQuery({
-    queryKey: keys.endUser(tenant, endpoint, userId),
+    queryKey: keys.endUser(tenant, userId),
     queryFn: async ({ signal }) =>
       await getField<"user", EndUserView>(
-        endUserPath(tenant, endpoint, userId),
+        tenantUserPath(tenant, userId),
         "user",
         signal,
       ),
   });
 }
 
-/** Creates a user or persona. */
-export function useCreateEndUser(tenant: string, endpoint: string) {
+/** Creates a user or persona in the tenant, with access to no endpoint yet. */
+export function useCreateEndUser(tenant: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (body: unknown) =>
       await postField<"user", EndUserView>(
-        endpointPath(tenant, endpoint, "/users"),
+        tenantPath(tenant, "/users"),
         "user",
         body,
       ),
     onSuccess: async () => {
-      await client.invalidateQueries({
-        queryKey: keys.users(tenant, endpoint),
-      });
+      await client.invalidateQueries({ queryKey: keys.users(tenant) });
     },
   });
 }
 
 /** Edits a user, including enabling and disabling. */
-export function useUpdateEndUser(tenant: string, endpoint: string) {
+export function useUpdateEndUser(tenant: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (change: {
@@ -788,17 +827,12 @@ export function useUpdateEndUser(tenant: string, endpoint: string) {
       readonly body: unknown;
     }) =>
       await patchField<"user", EndUserView>(
-        endUserPath(tenant, endpoint, change.userId),
+        tenantUserPath(tenant, change.userId),
         "user",
         change.body,
       ),
     onSuccess: async (_user, change) => {
-      await client.invalidateQueries({
-        queryKey: keys.endUser(tenant, endpoint, change.userId),
-      });
-      await client.invalidateQueries({
-        queryKey: keys.users(tenant, endpoint),
-      });
+      await invalidateEndUser(client, tenant, change.userId);
     },
   });
 }
@@ -807,104 +841,130 @@ export function useUpdateEndUser(tenant: string, endpoint: string) {
  * Sets a user's password.
  *
  * Its own hook rather than a field on the patch, mirroring the API: replacing a
- * credential is a separate operation with its own audit event. The detail query is
- * invalidated because the summary says whether a password is set.
+ * credential is a separate operation with its own audit event. The account is
+ * refreshed because its summary says whether a password is set.
  */
-export function useSetEndUserPassword(
-  tenant: string,
-  endpoint: string,
-  userId: string,
-) {
+export function useSetEndUserPassword(tenant: string, userId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (password: string) => {
-      await post<void>(endUserPath(tenant, endpoint, userId, "/password"), {
+      await post<void>(tenantUserPath(tenant, userId, "/password"), {
         password,
       });
     },
     onSuccess: async () => {
-      await client.invalidateQueries({
-        queryKey: keys.endUser(tenant, endpoint, userId),
-      });
+      await invalidateEndUser(client, tenant, userId);
     },
   });
 }
 
 /** Deletes a user. */
-export function useDeleteEndUser(tenant: string, endpoint: string) {
+export function useDeleteEndUser(tenant: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (userId: string) => {
-      await remove(endUserPath(tenant, endpoint, userId));
+      await remove(tenantUserPath(tenant, userId));
     },
     onSuccess: async (_result, userId) => {
       // The detail query is removed rather than invalidated: the row is gone, and
       // refetching it would answer 404 into a page the browser is leaving.
-      client.removeQueries({
-        queryKey: keys.endUser(tenant, endpoint, userId),
-      });
-      await client.invalidateQueries({
-        queryKey: keys.users(tenant, endpoint),
-      });
+      client.removeQueries({ queryKey: keys.endUser(tenant, userId) });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: keys.users(tenant) }),
+        client.invalidateQueries({ queryKey: keys.allEndpointUsers(tenant) }),
+      ]);
+    },
+  });
+}
+
+/**
+ * Gives a user access to an endpoint, or changes the access they have.
+ *
+ * The same PUT does both: an empty body gives access and leaves the fields alone,
+ * and a body naming `fhirUserReference` or `defaultContext` sets them. The response
+ * is the whole account, which seeds its page before the refresh.
+ */
+export function useGrantEndpointAccess(tenant: string, userId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (change: {
+      readonly endpoint: string;
+      readonly body: Readonly<Record<string, unknown>>;
+    }) => {
+      const response = await put<{ readonly user: EndUserView }>(
+        endpointUserPath(tenant, change.endpoint, userId),
+        change.body,
+      );
+      return response.user;
+    },
+    onSuccess: async (user) => {
+      client.setQueryData(keys.endUser(tenant, userId), user);
+      await invalidateEndUser(client, tenant, userId);
+    },
+  });
+}
+
+/**
+ * Withdraws a user's access to an endpoint.
+ *
+ * The server deletes their consents and sessions there and refuses their refresh
+ * tokens there from then on. Refreshed on settled rather than on success, so that a
+ * refusal still leaves the page showing what the server holds rather than a guess.
+ */
+export function useRevokeEndpointAccess(tenant: string, userId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (endpoint: string) => {
+      await remove(endpointUserPath(tenant, endpoint, userId));
+    },
+    onSettled: async () => {
+      await invalidateEndUser(client, tenant, userId);
     },
   });
 }
 
 /** A user's outstanding invitation, or null when there is none. */
-export function useEndUserInvitation(
-  tenant: string,
-  endpoint: string,
-  userId: string,
-) {
+export function useEndUserInvitation(tenant: string, userId: string) {
   return useQuery({
-    queryKey: keys.invitation(tenant, endpoint, userId),
+    queryKey: keys.invitation(tenant, userId),
     queryFn: async ({ signal }) =>
       await getField<"invitation", InvitationView | null>(
-        endUserPath(tenant, endpoint, userId, "/invitation"),
+        tenantUserPath(tenant, userId, "/invitation"),
         "invitation",
         signal,
       ),
   });
 }
 
-/**
- * Makes a new invitation for a user, replacing any outstanding one.
- *
- * The user is the mutation's variable rather than the hook's, so the Add user form
- * can invite the account it has only just created.
- */
-export function useCreateInvitation(tenant: string, endpoint: string) {
+/** Makes a new invitation for a user, replacing any outstanding one. */
+export function useCreateInvitation(tenant: string, userId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (userId: string) =>
+    mutationFn: async () =>
       await postField<"invitation", IssuedInvitationView>(
-        endUserPath(tenant, endpoint, userId, "/invitation"),
+        tenantUserPath(tenant, userId, "/invitation"),
         "invitation",
       ),
-    onSettled: async (_invitation, _error, userId) => {
+    onSettled: async () => {
       // Settled rather than succeeded: a refusal may still have replaced the old
       // link, and what the panel shows must not be a guess.
       await client.invalidateQueries({
-        queryKey: keys.invitation(tenant, endpoint, userId),
+        queryKey: keys.invitation(tenant, userId),
       });
     },
   });
 }
 
 /** Cancels a user's outstanding invitation, so its link stops working. */
-export function useCancelInvitation(
-  tenant: string,
-  endpoint: string,
-  userId: string,
-) {
+export function useCancelInvitation(tenant: string, userId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      await remove(endUserPath(tenant, endpoint, userId, "/invitation"));
+      await remove(tenantUserPath(tenant, userId, "/invitation"));
     },
     onSettled: async () => {
       await client.invalidateQueries({
-        queryKey: keys.invitation(tenant, endpoint, userId),
+        queryKey: keys.invitation(tenant, userId),
       });
     },
   });

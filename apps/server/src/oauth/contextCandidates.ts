@@ -12,14 +12,15 @@
  * have to be given one - an authorization server with read access to every
  * patient record it fronts is a much larger thing to defend than one without.
  *
- * The candidates therefore come from the end user's own record, by three
- * conventions:
+ * The candidates therefore come from the end user's own record as the endpoint sees
+ * it, by three conventions:
  *
- * 1. The user's own `fhirUser` reference, when it is a `Patient`. A patient-facing
- *    app launched by the patient is about that patient, and this is the case that
- *    must work with no configuration at all.
- * 2. A persona's `default_context`, which is what makes a connectathon endpoint
- *    usable - seed a persona with a patient and the launch simply works.
+ * 1. The user's own `fhirUser` reference at this endpoint, when it is a `Patient`. A
+ *    patient-facing app launched by the patient is about that patient, and this is
+ *    the case that must work with no configuration at all.
+ * 2. A persona's `default_context` at this endpoint, which is what makes a
+ *    connectathon endpoint usable - seed a persona with a patient and the launch
+ *    simply works.
  * 3. An explicit list in the user's `attributes`, under `patients` and
  *    `encounters`. This is the general answer for a production endpoint: the
  *    operator states which patients this user may act on, from whatever system of

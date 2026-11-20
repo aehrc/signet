@@ -40,6 +40,8 @@ import type {
   Client,
   ClientRequest,
   Endpoint,
+  EndpointAccess,
+  EndpointEndUser,
   EndpointKey,
   EndUser,
   EndUserInvitation,
@@ -170,23 +172,64 @@ export function clientView(client: Client): Record<string, unknown> {
   };
 }
 
-/** An end user or persona. */
-export function endUserView(user: EndUser): Record<string, unknown> {
+/** The fields of an account that are the same at every endpoint. */
+function accountFields(user: EndUser): Record<string, unknown> {
   return {
     id: user.id,
     username: user.username,
     displayName: user.displayName,
-    fhirUser: user.fhirUserReference,
     email: user.email,
     emailVerified: user.emailVerified,
     roles: user.roles,
     attributes: user.attributes,
-    defaultContext: user.defaultContext,
     isPersona: user.isPersona,
     /** False for a persona by definition; a persona has no password to hold. */
     hasPassword: user.passwordHash !== null,
     disabledAt: user.disabledAt,
     createdAt: user.createdAt,
+  };
+}
+
+/** One endpoint an account has access to, and what it is called there. */
+function endpointAccessView(access: EndpointAccess): Record<string, unknown> {
+  return {
+    slug: access.endpointSlug,
+    name: access.endpointName,
+    kind: access.endpointKind,
+    authMode: access.endpointAuthMode,
+    fhirUser: access.fhirUserReference,
+    defaultContext: access.defaultContext,
+    grantedAt: access.createdAt,
+  };
+}
+
+/**
+ * A tenant's end user or persona, with the endpoints they have access to.
+ *
+ * @param user - The account.
+ * @param access - The account's access rows, from `listEndpointAccess`. Rows for other
+ *   accounts are ignored, so a caller may pass the tenant's whole list.
+ */
+export function endUserView(
+  user: EndUser,
+  access: readonly EndpointAccess[],
+): Record<string, unknown> {
+  return {
+    ...accountFields(user),
+    endpoints: access
+      .filter((row) => row.endUserId === user.id)
+      .map(endpointAccessView),
+  };
+}
+
+/** An end user or persona as one endpoint sees them, with that endpoint's fields. */
+export function endpointEndUserView(
+  user: EndpointEndUser,
+): Record<string, unknown> {
+  return {
+    ...accountFields(user),
+    fhirUser: user.fhirUserReference,
+    defaultContext: user.defaultContext,
   };
 }
 

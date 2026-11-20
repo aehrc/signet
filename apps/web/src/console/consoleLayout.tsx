@@ -19,7 +19,12 @@
  * Author: John Grimes
  */
 
-import { GearIcon, LogIcon, ServerIcon } from "@primer/octicons-react";
+import {
+  GearIcon,
+  LogIcon,
+  PeopleIcon,
+  ServerIcon,
+} from "@primer/octicons-react";
 import { useState } from "react";
 import { Navigate, NavLink, Outlet, useParams } from "react-router";
 
@@ -38,6 +43,8 @@ import type { SessionView } from "../api/types.js";
 export interface ConsoleContext {
   readonly session: SessionView;
   readonly tenant: string;
+  /** The tenant's display name, or its slug where it has none. */
+  readonly tenantName: string;
   /** The role the caller holds in this tenant. */
   readonly role: string;
 }
@@ -104,6 +111,7 @@ export function ConsoleLayout() {
   const context: ConsoleContext = {
     session: session.data,
     tenant,
+    tenantName: membership.name ?? tenant,
     role: membership.role,
   };
 
@@ -154,6 +162,12 @@ export function ConsoleLayout() {
               <NavLink end to={tenantRoute(tenant)} className={navClass}>
                 <ServerIcon />
                 Endpoints
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to={tenantRoute(tenant, "/users")} className={navClass}>
+                <PeopleIcon />
+                Users
               </NavLink>
             </li>
             <li>

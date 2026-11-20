@@ -169,22 +169,50 @@ export type TrustAnchorCheckView =
       readonly description: string;
     };
 
-/** One end user or persona. */
+/**
+ * One end user or persona: an account of the tenant.
+ *
+ * One username and one password across the tenant, but it signs in only at the
+ * endpoints in `endpoints`, each of which it was explicitly given access to.
+ */
 export interface EndUserView {
   readonly id: string;
   readonly username: string;
   readonly displayName: string;
-  readonly fhirUser: string | null;
-  /** Released for the `email` scope, on an OAuth endpoint. */
+  /** Released for the `email` scope, on the OAuth endpoints it has access to. */
   readonly email: string | null;
   readonly emailVerified: boolean;
   readonly roles: readonly string[];
   readonly attributes: Readonly<Record<string, unknown>>;
-  readonly defaultContext: Readonly<Record<string, unknown>> | null;
   readonly isPersona: boolean;
   readonly hasPassword: boolean;
   readonly disabledAt: string | null;
   readonly createdAt: string;
+  /** The endpoints the account has access to, ordered by slug. */
+  readonly endpoints: readonly EndpointAccessView[];
+}
+
+/**
+ * An account's access to one endpoint.
+ *
+ * The `fhirUser` reference and a persona's default launch context name resources on
+ * that endpoint's FHIR server, so they live here rather than on the account. Both are
+ * always null on an OAuth endpoint.
+ */
+export interface EndpointAccessView {
+  readonly slug: string;
+  readonly name: string;
+  readonly kind: EndpointKind;
+  readonly authMode: EndpointView["authMode"];
+  readonly fhirUser: string | null;
+  readonly defaultContext: Readonly<Record<string, unknown>> | null;
+  readonly grantedAt: string;
+}
+
+/** An account as one endpoint sees it: its access row's fields, without the list. */
+export interface EndpointEndUserView extends Omit<EndUserView, "endpoints"> {
+  readonly fhirUser: string | null;
+  readonly defaultContext: Readonly<Record<string, unknown>> | null;
 }
 
 /** An outstanding invitation: when it was made and when it stops working. */

@@ -23,6 +23,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -284,22 +285,27 @@ export const idpConfigs = pgTable("idp_configs", {
     .defaultNow(),
 });
 
-/** An end user or persona able to authorise apps on one endpoint. */
+/**
+ * An end user or persona belonging to a tenant.
+ *
+ * One account per person per tenant, with one username and one password, so a person
+ * given access to two of a tenant's endpoints signs in to both with the same
+ * credential. Belonging to the tenant admits them to nothing: an account may sign in
+ * only at the endpoints an `end_user_endpoints` row names.
+ */
 export const endUsers = pgTable(
   "end_users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    endpointId: uuid("endpoint_id")
+    tenantId: uuid("tenant_id")
       .notNull()
-      .references(() => endpoints.id, { onDelete: "cascade" }),
+      .references(() => tenants.id, { onDelete: "cascade" }),
     username: text("username").notNull(),
     /**
      * Argon2id PHC string, or null for a persona, which has no password by
      * design. Never a recoverable password.
      */
     passwordHash: text("password_hash"),
-    /** Relative FHIR reference, e.g. `Practitioner/123`. */
-    fhirUserReference: text("fhir_user_reference"),
     displayName: text("display_name").notNull(),
     /** Released as `email` in the ID token and userinfo for the `email` scope. */
     email: text("email"),
@@ -314,22 +320,56 @@ export const endUsers = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
+    isPersona: boolean("is_persona").notNull().default(false),
+    ...createdAt(),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("end_users_tenant_id_username_unique").on(
+      table.tenantId,
+      table.username,
+    ),
+    index("end_users_tenant_id_idx").on(table.tenantId),
+  ],
+);
+
+/**
+ * One end user's access to one endpoint of their tenant.
+ *
+ * The row is the rule that admits the account at the endpoint: no row, no sign-in,
+ * no persona in the picker, no refresh. Deleting it cascades the consents, management
+ * sessions and in-flight authorizations the account held there, through the
+ * composite foreign keys those tables carry to this one.
+ *
+ * It also carries what only means something on this endpoint. A `fhirUser`
+ * reference and a persona's launch context name resources on one endpoint's FHIR
+ * server, and two endpoints of a tenant may front different servers, or none.
+ */
+export const endUserEndpoints = pgTable(
+  "end_user_endpoints",
+  {
+    endUserId: uuid("end_user_id")
+      .notNull()
+      .references(() => endUsers.id, { onDelete: "cascade" }),
+    endpointId: uuid("endpoint_id")
+      .notNull()
+      .references(() => endpoints.id, { onDelete: "cascade" }),
+    /** Relative FHIR reference, e.g. `Practitioner/123`. */
+    fhirUserReference: text("fhir_user_reference"),
     /**
      * Launch context pre-set for a persona, so a connectathon endpoint can hand
      * out a working patient context without an EHR. Kept separate from
      * `attributes` because it is a validated `LaunchContext`, not free-form.
      */
     defaultContext: jsonb("default_context").$type<LaunchContext>(),
-    isPersona: boolean("is_persona").notNull().default(false),
     ...createdAt(),
-    disabledAt: timestamp("disabled_at", { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex("end_users_endpoint_id_username_unique").on(
-      table.endpointId,
-      table.username,
-    ),
-    index("end_users_endpoint_id_idx").on(table.endpointId),
+    primaryKey({
+      name: "end_user_endpoints_pk",
+      columns: [table.endUserId, table.endpointId],
+    }),
+    index("end_user_endpoints_endpoint_id_idx").on(table.endpointId),
   ],
 );
 
@@ -352,3 +392,13 @@ export type NewIdpConfig = typeof idpConfigs.$inferInsert;
 export type EndUser = typeof endUsers.$inferSelect;
 /** Values required to insert an end user. */
 export type NewEndUser = typeof endUsers.$inferInsert;
+
+/** An end user's access to one endpoint, as selected. */
+export type EndUserEndpoint = typeof endUserEndpoints.$inferSelect;
+
+/**
+ * An end user as one endpoint sees them: the tenant's account, with the
+ * endpoint-specific fields of the access row that admits them there.
+ */
+export type EndpointEndUser = EndUser &
+  Pick<EndUserEndpoint, "fhirUserReference" | "defaultContext">;

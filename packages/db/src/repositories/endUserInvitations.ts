@@ -13,7 +13,7 @@
  *
  * Every condition that decides whether a link works is applied in SQL, as for the
  * other credentials in this directory: the digest matches, the row belongs to this
- * endpoint, it has not expired, and the account is an enabled local account. A
+ * tenant, it has not expired, and the account is an enabled local account. A
  * caller therefore cannot obtain the row and then forget to check one of them.
  *
  * Redemption deletes the row in the statement that finds it. Two concurrent
@@ -33,14 +33,14 @@ import { endUsers } from "../schema/endpoints.js";
 import { endUserInvitations } from "../schema/runtime.js";
 
 import type { Executor } from "./executor.js";
-import type { BoundEndpointScope } from "./scope.js";
+import type { BoundTenantScope } from "./scope.js";
 import type { EndUser } from "../schema/endpoints.js";
 import type { EndUserInvitation } from "../schema/runtime.js";
 import type { SQL } from "drizzle-orm";
 
 /** The caller-supplied half of an invitation. */
 export interface EndUserInvitationInput {
-  /** The account, which the caller has already resolved on this endpoint. */
+  /** The account, which the caller has already resolved in this tenant. */
   readonly endUserId: string;
   /** SHA-256 of the token in the link. */
   readonly tokenHash: string;
@@ -59,17 +59,17 @@ export interface InvitedEndUser {
  * The replacement is an upsert on the account, so the earlier digest is overwritten in
  * the same statement and the earlier link stops working as the new one starts.
  *
- * @param scope - The endpoint the account belongs to.
+ * @param scope - The tenant the account belongs to.
  * @param input - The account, the token's digest and the expiry.
  * @returns The stored invitation.
  */
 export async function issueEndUserInvitation(
-  scope: BoundEndpointScope,
+  scope: BoundTenantScope,
   input: EndUserInvitationInput,
 ): Promise<EndUserInvitation> {
   const rows = await executorFor(scope)
     .insert(endUserInvitations)
-    .values({ ...input, endpointId: scope.endpointId })
+    .values({ ...input, tenantId: scope.tenantId })
     .onConflictDoUpdate({
       target: endUserInvitations.endUserId,
       set: {
@@ -85,13 +85,13 @@ export async function issueEndUserInvitation(
 /**
  * Reads an account's invitation, if it has one that has not expired.
  *
- * @param scope - The endpoint the account belongs to.
+ * @param scope - The tenant the account belongs to.
  * @param endUserId - The account.
  * @param now - The instant to compare the expiry against; the database's own by default.
  * @returns The invitation, or undefined.
  */
 export async function findOutstandingEndUserInvitation(
-  scope: BoundEndpointScope,
+  scope: BoundTenantScope,
   endUserId: string,
   now?: Date,
 ): Promise<EndUserInvitation | undefined> {
@@ -100,7 +100,7 @@ export async function findOutstandingEndUserInvitation(
     .from(endUserInvitations)
     .where(
       and(
-        eq(endUserInvitations.endpointId, scope.endpointId),
+        eq(endUserInvitations.tenantId, scope.tenantId),
         eq(endUserInvitations.endUserId, endUserId),
         gt(endUserInvitations.expiresAt, nowValue(now)),
       ),
@@ -117,15 +117,15 @@ export async function findOutstandingEndUserInvitation(
  * account can be disabled after the link was sent.
  */
 function usableInvitation(
-  scope: BoundEndpointScope,
+  scope: BoundTenantScope,
   tokenHash: string,
   now: Date | undefined,
 ): SQL | undefined {
   return and(
     eq(endUserInvitations.tokenHash, tokenHash),
-    eq(endUserInvitations.endpointId, scope.endpointId),
+    eq(endUserInvitations.tenantId, scope.tenantId),
     gt(endUserInvitations.expiresAt, nowValue(now)),
-    eq(endUsers.endpointId, scope.endpointId),
+    eq(endUsers.tenantId, scope.tenantId),
     isNull(endUsers.disabledAt),
     eq(endUsers.isPersona, false),
   );
@@ -137,13 +137,13 @@ function usableInvitation(
  * For the invitation page, which shows the invitee which account they are about to
  * claim before they choose a password. Does not spend the link.
  *
- * @param scope - The endpoint the link was presented at.
+ * @param scope - The tenant the link was presented to.
  * @param tokenHash - SHA-256 of the presented token.
  * @param now - The instant to compare the expiry against; the database's own by default.
  * @returns The account and its invitation, or undefined when the link does not work.
  */
 export async function findEndUserByInvitation(
-  scope: BoundEndpointScope,
+  scope: BoundTenantScope,
   tokenHash: string,
   now?: Date,
 ): Promise<InvitedEndUser | undefined> {
@@ -164,14 +164,14 @@ export async function findEndUserByInvitation(
  * link is also how a forgotten or compromised password is replaced, and whoever held
  * the old password may hold a session too.
  *
- * @param scope - The endpoint the link was presented at.
+ * @param scope - The tenant the link was presented to.
  * @param tokenHash - SHA-256 of the presented token.
  * @param passwordHash - The Argon2id hash of the chosen password.
  * @param now - The instant to compare the expiry against; the database's own by default.
  * @returns The updated account, or undefined when the link does not work.
  */
 export async function redeemEndUserInvitation(
-  scope: BoundEndpointScope,
+  scope: BoundTenantScope,
   tokenHash: string,
   passwordHash: string,
   now?: Date,
@@ -190,7 +190,7 @@ export async function redeemEndUserInvitation(
     .where(
       and(
         eq(endUserInvitations.tokenHash, tokenHash),
-        eq(endUserInvitations.endpointId, scope.endpointId),
+        eq(endUserInvitations.tenantId, scope.tenantId),
         sql`${endUserInvitations.endUserId} in ${eligible}`,
       ),
     )
@@ -211,14 +211,14 @@ export async function redeemEndUserInvitation(
 /**
  * Withdraws an account's outstanding invitation.
  *
- * @param scope - The endpoint the account belongs to.
+ * @param scope - The tenant the account belongs to.
  * @param endUserId - The account.
  * @param now - The instant to compare the expiry against; the database's own by default.
  * @returns Whether an outstanding invitation was withdrawn, so cancelling an expired
  *   or absent one is distinguishable from cancelling a live one.
  */
 export async function cancelEndUserInvitation(
-  scope: BoundEndpointScope,
+  scope: BoundTenantScope,
   endUserId: string,
   now?: Date,
 ): Promise<boolean> {
@@ -226,7 +226,7 @@ export async function cancelEndUserInvitation(
     .delete(endUserInvitations)
     .where(
       and(
-        eq(endUserInvitations.endpointId, scope.endpointId),
+        eq(endUserInvitations.tenantId, scope.tenantId),
         eq(endUserInvitations.endUserId, endUserId),
         gt(endUserInvitations.expiresAt, nowValue(now)),
       ),

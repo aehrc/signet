@@ -102,11 +102,16 @@ clearing the email withdraws the verified flag unless the same edit sets it agai
 so a flag set for one address never carries over to the next. A federated
 sign-in sets the email from the upstream claim mapped to `email`, and sets
 `email_verified` only when the upstream provider asserted `email_verified: true`.
-An invitation works as it does on a SMART endpoint, and the console starts its
-email to the account's recorded address.
+An invitation is the tenant's, as the account is, and the console starts its email
+to the account's recorded address. An account signs in at this endpoint only once it
+has been given access to it; see "End user accounts and endpoint access" in
+[operations.md](operations.md).
 
-There is no `fhirUser`, and roles are not added to the ID token. Roles reach an API
-the same way they do on a SMART endpoint: through a claim rule on the access token.
+There is no `fhirUser`, and roles are not added to the ID token. On a SMART
+endpoint an account's `fhirUser` reference and a persona's default launch context
+are set on its access to that endpoint; here the access carries neither, and the
+admin API refuses either one. Roles reach an API the same way they do on a SMART
+endpoint: through a claim rule on the access token.
 
 ### Discovery
 

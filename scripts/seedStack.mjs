@@ -200,6 +200,51 @@ async function ensure(description, method, path, body) {
   );
 }
 
+/** Finds a tenant account's identifier by its username. */
+async function accountId(username) {
+  const response = await api("GET", `/tenants/${TENANT}/users`);
+  if (!response.ok) {
+    throw new Error(`could not list the accounts: ${response.status}`);
+  }
+  const { users } = await response.json();
+  const user = users.find((candidate) => candidate.username === username);
+  if (user === undefined) {
+    throw new Error(`no account named ${username}`);
+  }
+  return user.id;
+}
+
+/**
+ * Creates a tenant account, tolerating one already there, and gives it access to an
+ * endpoint.
+ *
+ * An account belongs to the tenant, so it is created on a tenant route; it signs in
+ * only where it has been given access, which is a PUT on the endpoint. The PUT is
+ * idempotent and restates the endpoint's own fields - `fhirUser` and a persona's
+ * default context - on every run, so a re-seed puts back what the suite relies on.
+ *
+ * @param description - What to call the account in the log.
+ * @param account - The account, as the tenant route takes it.
+ * @param accessPath - The admin API path of the endpoint to give it access to.
+ * @param access - The endpoint's fields for the account.
+ */
+async function ensureAccount(description, account, accessPath, access = {}) {
+  const created = await ensure(
+    description,
+    "POST",
+    `/tenants/${TENANT}/users`,
+    account,
+  );
+  const id = created?.user?.id ?? (await accountId(account.username));
+  const response = await api("PUT", `${accessPath}/users/${id}`, access);
+  if (!response.ok) {
+    throw new Error(
+      `could not give ${description} access to ${accessPath}: ${response.status} ${await response.text()}`,
+    );
+  }
+  console.log(`gave ${description} access to ${accessPath}`);
+}
+
 /** Signs in and keeps the session cookie for everything that follows. */
 async function signIn() {
   const response = await fetch(`${BASE}/api/v1/session`, {
@@ -648,13 +693,17 @@ if (refused !== undefined && refused.status === "pending") {
   console.log(`refused the "${REFUSED_REQUEST_NAME}" registration request`);
 }
 
-await ensure("the clinician account", "POST", `${endpointPath}/users`, {
-  username: SEED_USER.username,
-  password: SEED_USER.password,
-  displayName: "Dr Casey Clinician",
-  fhirUserReference: "Practitioner/clinician-1",
-  roles: ["clinician"],
-});
+await ensureAccount(
+  "the clinician account",
+  {
+    username: SEED_USER.username,
+    password: SEED_USER.password,
+    displayName: "Dr Casey Clinician",
+    roles: ["clinician"],
+  },
+  endpointPath,
+  { fhirUserReference: "Practitioner/clinician-1" },
+);
 
 /**
  * Sets a console identity's role in the seeded tenant.
@@ -690,13 +739,12 @@ await setMembership(VIEWER_EMAIL, "viewer");
 // menu and the dialog behind it, neither of which depends on a role.
 await setMembership(PASSKEY_EMAIL, "viewer");
 
-await ensure("a patient persona", "POST", `${endpointPath}/users`, {
-  username: "pat",
-  displayName: "Pat Patient",
-  fhirUserReference: "Patient/pat-9",
-  isPersona: true,
-  defaultContext: { patient: "pat-9" },
-});
+await ensureAccount(
+  "a patient persona",
+  { username: "pat", displayName: "Pat Patient", isPersona: true },
+  endpointPath,
+  { fhirUserReference: "Patient/pat-9", defaultContext: { patient: "pat-9" } },
+);
 
 /**
  * The OAuth / OpenID Connect endpoint, for a regular web app and its API.
@@ -763,13 +811,17 @@ await ensure("the notes service client", "POST", `${notesPath}/clients`, {
   allowedScopes: ["notes:read"],
 });
 
-await ensure("the notes account", "POST", `${notesPath}/users`, {
-  username: "nora",
-  password: "nora-password",
-  displayName: "Nora Notes",
-  email: "nora@example.org",
-  emailVerified: true,
-});
+await ensureAccount(
+  "the notes account",
+  {
+    username: "nora",
+    password: "nora-password",
+    displayName: "Nora Notes",
+    email: "nora@example.org",
+    emailVerified: true,
+  },
+  notesPath,
+);
 
 console.log(`\nSeeded ${BASE}/t/${TENANT}/e/pathling`);
 console.log(

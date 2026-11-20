@@ -9,7 +9,12 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { END_USER_PAGES, isEndUserPagePath } from "./endUserPages.js";
+import {
+  END_USER_PAGES,
+  isEndUserPagePath,
+  isTenantPagePath,
+  TENANT_PAGES,
+} from "./endUserPages.js";
 
 describe("isEndUserPagePath", () => {
   it("recognises every page", () => {
@@ -26,8 +31,9 @@ describe("isEndUserPagePath", () => {
     expect(isEndUserPagePath("/t/demo/e/fhir/invitation/accept")).toBe(false);
   });
 
-  it("serves the invitation page an invitation link points at", () => {
-    expect(isEndUserPagePath("/t/demo/e/fhir/invitation")).toBe(true);
+  it("does not serve an invitation page under an endpoint", () => {
+    // Invitations belong to the tenant; see `isTenantPagePath`.
+    expect(isEndUserPagePath("/t/demo/e/fhir/invitation")).toBe(false);
   });
 
   it("does not match an OAuth endpoint", () => {
@@ -47,5 +53,30 @@ describe("isEndUserPagePath", () => {
 
   it("tolerates a trailing slash", () => {
     expect(isEndUserPagePath("/t/demo/e/fhir/login/")).toBe(true);
+  });
+});
+
+describe("isTenantPagePath", () => {
+  it("recognises every page", () => {
+    for (const page of TENANT_PAGES) {
+      expect(isTenantPagePath(`/t/demo/${page}`)).toBe(true);
+    }
+  });
+
+  it("serves the invitation page an invitation link points at", () => {
+    expect(isTenantPagePath("/t/demo/invitation")).toBe(true);
+    expect(isTenantPagePath("/t/demo/invitation/")).toBe(true);
+  });
+
+  it("does not match the API beneath a page", () => {
+    expect(isTenantPagePath("/t/demo/invitation/details")).toBe(false);
+    expect(isTenantPagePath("/t/demo/invitation/accept")).toBe(false);
+  });
+
+  it("does not match the tenant's other routes or an endpoint's pages", () => {
+    expect(isTenantPagePath("/t/demo/branding")).toBe(false);
+    expect(isTenantPagePath("/t/demo/logo")).toBe(false);
+    expect(isTenantPagePath("/t/demo/e/fhir/login")).toBe(false);
+    expect(isTenantPagePath("/x/demo/invitation")).toBe(false);
   });
 });

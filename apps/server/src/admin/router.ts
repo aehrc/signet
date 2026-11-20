@@ -36,6 +36,7 @@ import {
   withAdminTenant,
 } from "./authentication.js";
 import { registerClientRoutes } from "./clientRoutes.js";
+import { registerEndpointAccessRoutes } from "./endpointAccessRoutes.js";
 import { registerEndpointRoutes } from "./endpointRoutes.js";
 import { registerEndUserRoutes } from "./endUserRoutes.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
@@ -194,6 +195,7 @@ export function createAdminRouter(
   registerClientRoutes(router, context);
   registerPolicyRoutes(router, context);
   registerEndUserRoutes(router, context);
+  registerEndpointAccessRoutes(router, context);
   registerLaunchRoutes(router, context);
   registerAuditRoutes(router, context);
   // Last of the resource modules, because it registers `GET /tenants/:tenantSlug`

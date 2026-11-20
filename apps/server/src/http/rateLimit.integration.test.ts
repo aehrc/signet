@@ -293,7 +293,7 @@ describe.skipIf(testDatabaseUrl === undefined)("the rate limits", () => {
       let last = 0;
       for (let index = 0; index < RATE_LIMITS.signIn.limit + 1; index += 1) {
         const response = await stack.app.request(
-          `${issuerPath(stack)}/invitation/${action}`,
+          `/t/${stack.tenant.slug}/invitation/${action}`,
           {
             method: "POST",
             headers: {

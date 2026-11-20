@@ -78,14 +78,14 @@ export function App() {
             <Route index element={<EndpointsPage />} />
             <Route path="audit" element={<AuditPage />} />
             <Route path="settings" element={<TenantSettingsPage />} />
+            <Route path="users" element={<UsersPage />} />
+            <Route path="users/:userId" element={<UserDetailPage />} />
 
             <Route path="e/:endpoint" element={<EndpointLayout />}>
               <Route index element={<EndpointOverviewPage />} />
               <Route path="clients" element={<ClientsPage />} />
               <Route path="clients/:clientId" element={<ClientDetailPage />} />
               <Route path="policy" element={<PolicyPage />} />
-              <Route path="users" element={<UsersPage />} />
-              <Route path="users/:userId" element={<UserDetailPage />} />
               <Route path="keys" element={<KeysPage />} />
               <Route path="identity" element={<FederationPage />} />
               <Route path="trust" element={<TrustPage />} />
@@ -104,8 +104,16 @@ export function App() {
             <Route path="picker" element={<PickerPage />} />
             <Route path="consent" element={<ConsentPage />} />
             <Route path="manage" element={<ManagePage />} />
-            <Route path="invitation" element={<InvitationPage />} />
             <Route path="apps" element={<PortalPage />} />
+          </Route>
+
+          {/*
+            The tenant's own end-user page. An invitation is for an account of the
+            tenant rather than of one endpoint, so its link names no endpoint; the
+            same layout carries the tenant's branding, which needs only the tenant.
+          */}
+          <Route path="/t/:tenant" element={<EndUserLayout />}>
+            <Route path="invitation" element={<InvitationPage />} />
           </Route>
 
           {/* Anything else lands on the console, which decides where to go. */}

@@ -4,11 +4,13 @@
  */
 
 /**
- * Invitation links for an endpoint's local accounts.
+ * Invitation links for a tenant's local accounts.
  *
  * An administrator creates the account, then sends its holder a link through their
  * own mail client; opening the link lets the holder choose the account's password.
- * The same link resets a password that has been forgotten.
+ * The same link resets a password that has been forgotten. The link opens the
+ * tenant's own invitation page, and the password chosen there is the account's at
+ * every endpoint it has access to.
  *
  * The rules are here rather than in the server so that the console, which decides
  * whether to offer an invitation, and the admin API, which decides whether to mint
@@ -22,8 +24,11 @@
 export type InvitationRefusal =
   /** A persona has no password by design: it is chosen from a picker. */
   | "persona"
-  /** The endpoint authenticates through an upstream provider, not a password. */
-  | "federated"
+  /**
+   * None of the account's endpoints is in `local` auth mode, so the password it chose
+   * would never be checked anywhere.
+   */
+  | "no-password-endpoint"
   /** A disabled account could not sign in with the password it chose. */
   | "disabled";
 
@@ -36,8 +41,8 @@ export const INVITATION_REFUSAL_MESSAGES: Readonly<
 > = {
   persona:
     "A persona has no password: it is selected from a picker, not signed into",
-  federated:
-    "This endpoint federates authentication to an upstream identity provider, so a local password would never be checked",
+  "no-password-endpoint":
+    "None of the endpoints this account has access to signs in with a password, so the password it chose would never be checked. Give it access to an endpoint in local auth mode first",
   disabled:
     "This account is disabled. Enable it before sending an invitation, or it will not be able to sign in",
 };
@@ -45,33 +50,32 @@ export const INVITATION_REFUSAL_MESSAGES: Readonly<
 /**
  * Decides whether an account may be sent an invitation.
  *
- * Only an enabled local account on an endpoint in `local` auth mode qualifies. The
- * auth mode is matched by name, so a mode added later is refused until a rule
- * admits it.
+ * Only an enabled local account with access to at least one endpoint in `local` auth
+ * mode qualifies. The auth mode is matched by name, so a mode added later is refused
+ * until a rule admits it.
  *
- * @param endpoint - The endpoint the account belongs to.
- * @param endpoint.authMode - The endpoint's `auth_mode`.
  * @param user - The account.
  * @param user.isPersona - Whether the account is a persona.
  * @param user.disabledAt - When the account was disabled, as a `Date` or as the
  *   ISO 8601 string the console holds, or null.
+ * @param endpoints - The endpoints the account has access to.
  * @returns The reason for refusing, or undefined when the account qualifies.
  * @example
- * invitationRefusal({ authMode: "local" }, { isPersona: true, disabledAt: null });
- * // => "persona"
+ * invitationRefusal({ isPersona: false, disabledAt: null }, [{ authMode: "oidc" }]);
+ * // => "no-password-endpoint"
  */
 export function invitationRefusal(
-  endpoint: { readonly authMode: string },
   user: {
     readonly isPersona: boolean;
     readonly disabledAt: Date | string | null;
   },
+  endpoints: readonly { readonly authMode: string }[],
 ): InvitationRefusal | undefined {
   if (user.isPersona) {
     return "persona";
   }
-  if (endpoint.authMode !== "local") {
-    return "federated";
+  if (!endpoints.some((endpoint) => endpoint.authMode === "local")) {
+    return "no-password-endpoint";
   }
   if (user.disabledAt !== null) {
     return "disabled";
@@ -97,15 +101,15 @@ export function invitationExpiry(now: Date): Date {
  * anything the page loads; the page reads it with {@link invitationTokenFromFragment}
  * and presents it in a request body.
  *
- * @param issuer - The endpoint's issuer identifier.
+ * @param tenantUrl - The tenant's base URL, `{public URL}/t/{tenant slug}`.
  * @param token - The opaque invitation token.
  * @returns The invitation page's URL, carrying the token.
  * @example
- * invitationUrl("https://signet.example.org/t/demo/e/main", "abc");
- * // => "https://signet.example.org/t/demo/e/main/invitation#abc"
+ * invitationUrl("https://signet.example.org/t/demo", "abc");
+ * // => "https://signet.example.org/t/demo/invitation#abc"
  */
-export function invitationUrl(issuer: string, token: string): string {
-  return `${issuer}/invitation#${token}`;
+export function invitationUrl(tenantUrl: string, token: string): string {
+  return `${tenantUrl}/invitation#${token}`;
 }
 
 /** The alphabet `generateOpaqueToken` writes in: unpadded base64url. */

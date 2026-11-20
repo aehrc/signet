@@ -19,12 +19,12 @@ function render(recipient: string | null): string {
   return renderToStaticMarkup(
     <InvitationDialog
       invitation={{
-        url: "https://signet.test/t/demo/e/notes/invitation#token",
+        url: "https://signet.test/t/demo/invitation#token",
         createdAt: "2026-11-13T00:00:00.000Z",
         expiresAt: "2026-11-20T00:00:00.000Z",
       }}
       username="nora"
-      endpointName="Notes"
+      tenantName="Demo"
       recipient={recipient}
       onClose={() => undefined}
     />,

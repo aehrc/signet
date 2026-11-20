@@ -85,8 +85,14 @@ import {
 } from "./endUserInvitations.js";
 import {
   createEndUser,
+  findEndUserByUsername,
   getEndUser,
+  getTenantEndUser,
+  grantEndpointAccess,
+  listEndpointAccess,
   listSelectablePersonas,
+  listTenantEndUsers,
+  revokeEndpointAccess,
   setEndUserDisabled,
   upsertFederatedEndUser,
 } from "./endUsers.js";
@@ -146,6 +152,7 @@ import { prepareServingRole, servingRoleUrl } from "../test/servingRole.js";
 
 import type { AdminPasskeyInput } from "./adminPasskeys.js";
 import type { updateClient } from "./clients.js";
+import type { EndUserInput } from "./endUsers.js";
 import type { Executor } from "./executor.js";
 import type {
   BoundTenantScope,
@@ -424,6 +431,45 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
     );
   }
 
+  /** Adds another endpoint, with a client, to a tenant that already has one. */
+  async function newEndpointIn(tenantScope: TenantScope) {
+    const endpoint = await withTenantScope(db, tenantScope, (bound) =>
+      createEndpoint(bound, {
+        slug: `e-${unique()}`,
+        name: "Second endpoint",
+        kind: "smart",
+        audience: "https://fhir.example.org/other",
+        isProduction: false,
+      }),
+    );
+    const endpointScope = endpointScopeFromRow(tenantScope, endpoint);
+    const client = await withTenantScope(db, endpointScope, (bound) =>
+      createClient(bound, {
+        clientId: `client-${unique()}`,
+        name: "Second app",
+        clientType: "public",
+        grantTypes: ["authorization_code"],
+      }),
+    );
+    return {
+      endpoint,
+      endpointScope,
+      clientScope: clientScopeFromRow(endpointScope, client),
+    };
+  }
+
+  /**
+   * Creates an account in the fixture's tenant with access to the fixture's endpoint,
+   * which is what every test about an endpoint's runtime rows needs.
+   */
+  async function newEndUser(fixture: Fixture, input: EndUserInput) {
+    return await withTenantScope(db, fixture.endpointScope, async (bound) => {
+      const user = await createEndUser(bound, input);
+      await grantEndpointAccess(bound, user.id);
+      return user;
+    });
+  }
+
   describe("endpoint kind and end-user email", () => {
     it("stores the kind an endpoint is created with", async () => {
       const tenantScope = await newTenant();
@@ -480,6 +526,295 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       );
       expect(refreshed.email).toBe("new@example.org");
       expect(refreshed.emailVerified).toBe(false);
+    });
+  });
+
+  describe("tenant end users and endpoint access", () => {
+    it("admits an account only at the endpoints it has access to", async () => {
+      const fixture = await newFixture();
+      const second = await newEndpointIn(fixture.tenantScope);
+      const username = `alice-${unique()}`;
+      const user = await inScope(fixture.tenantScope, (bound) =>
+        createEndUser(bound, { username, displayName: "Alice" }),
+      );
+
+      // Belonging to the tenant admits the account nowhere.
+      expect(
+        await inScope(fixture.endpointScope, (bound) =>
+          getEndUser(bound, user.id),
+        ),
+      ).toBeUndefined();
+      expect(
+        await inScope(fixture.endpointScope, (bound) =>
+          findEndUserByUsername(bound, username),
+        ),
+      ).toBeUndefined();
+
+      await inScope(fixture.endpointScope, (bound) =>
+        grantEndpointAccess(bound, user.id, {
+          fhirUserReference: "Practitioner/a",
+        }),
+      );
+
+      const admitted = await inScope(fixture.endpointScope, (bound) =>
+        findEndUserByUsername(bound, username),
+      );
+      expect(admitted?.id).toBe(user.id);
+      expect(admitted?.fhirUserReference).toBe("Practitioner/a");
+      // Access to one endpoint is not access to the other.
+      expect(
+        await inScope(second.endpointScope, (bound) =>
+          getEndUser(bound, user.id),
+        ),
+      ).toBeUndefined();
+    });
+
+    it("keeps the endpoint-specific fields of each endpoint apart", async () => {
+      const fixture = await newFixture();
+      const second = await newEndpointIn(fixture.tenantScope);
+      const user = await inScope(fixture.tenantScope, (bound) =>
+        createEndUser(bound, {
+          username: `persona-${unique()}`,
+          displayName: "Persona",
+          isPersona: true,
+        }),
+      );
+      await inScope(fixture.endpointScope, (bound) =>
+        grantEndpointAccess(bound, user.id, {
+          fhirUserReference: "Patient/a",
+          defaultContext: { patient: "a" },
+        }),
+      );
+      await inScope(second.endpointScope, (bound) =>
+        grantEndpointAccess(bound, user.id, {
+          fhirUserReference: "Patient/b",
+        }),
+      );
+
+      const atFirst = await inScope(fixture.endpointScope, (bound) =>
+        getEndUser(bound, user.id),
+      );
+      const atSecond = await inScope(second.endpointScope, (bound) =>
+        getEndUser(bound, user.id),
+      );
+      expect(atFirst?.fhirUserReference).toBe("Patient/a");
+      expect(atFirst?.defaultContext).toEqual({ patient: "a" });
+      expect(atSecond?.fhirUserReference).toBe("Patient/b");
+      expect(atSecond?.defaultContext).toBeNull();
+
+      // Granting again updates what is named and keeps what is not.
+      const updated = await inScope(fixture.endpointScope, (bound) =>
+        grantEndpointAccess(bound, user.id, { defaultContext: null }),
+      );
+      expect(updated.fhirUserReference).toBe("Patient/a");
+      expect(updated.defaultContext).toBeNull();
+    });
+
+    it("withdraws access at one endpoint, taking its consents and sessions there only", async () => {
+      const fixture = await newFixture();
+      const second = await newEndpointIn(fixture.tenantScope);
+      const user = await newEndUser(fixture, {
+        username: `alice-${unique()}`,
+        displayName: "Alice",
+      });
+      await inScope(second.endpointScope, (bound) =>
+        grantEndpointAccess(bound, user.id),
+      );
+      await inScope(fixture.clientScope, (bound) =>
+        recordConsent(bound, { endUserId: user.id, scope: "openid" }),
+      );
+      await inScope(second.clientScope, (bound) =>
+        recordConsent(bound, { endUserId: user.id, scope: "openid" }),
+      );
+      const sessionHash = `session-${unique()}`;
+      await inScope(fixture.endpointScope, (bound) =>
+        createEndUserSession(bound, {
+          endUserId: user.id,
+          tokenHash: sessionHash,
+          expiresAt: new Date(Date.now() + 600_000),
+          ip: null,
+          userAgent: null,
+        }),
+      );
+
+      expect(
+        await inScope(fixture.endpointScope, (bound) =>
+          revokeEndpointAccess(bound, user.id),
+        ),
+      ).toBe(true);
+
+      expect(
+        await inScope(fixture.clientScope, (bound) =>
+          listLiveConsents(bound, user.id),
+        ),
+      ).toHaveLength(0);
+      expect(
+        await inScope(fixture.endpointScope, (bound) =>
+          findLiveEndUserSession(bound, sessionHash),
+        ),
+      ).toBeUndefined();
+      expect(
+        await inScope(fixture.endpointScope, (bound) =>
+          getEndUser(bound, user.id),
+        ),
+      ).toBeUndefined();
+
+      // The other endpoint, and the account itself, are untouched.
+      expect(
+        await inScope(second.clientScope, (bound) =>
+          listLiveConsents(bound, user.id),
+        ),
+      ).toHaveLength(1);
+      expect(
+        await inScope(fixture.tenantScope, (bound) =>
+          getTenantEndUser(bound, user.id),
+        ),
+      ).toBeDefined();
+
+      // Withdrawing access that is not there reports so.
+      expect(
+        await inScope(fixture.endpointScope, (bound) =>
+          revokeEndpointAccess(bound, user.id),
+        ),
+      ).toBe(false);
+    });
+
+    it("refuses a consent for an account with no access to the endpoint", async () => {
+      const fixture = await newFixture();
+      const user = await inScope(fixture.tenantScope, (bound) =>
+        createEndUser(bound, {
+          username: `alice-${unique()}`,
+          displayName: "Alice",
+        }),
+      );
+      await expect(
+        inScope(fixture.clientScope, (bound) =>
+          recordConsent(bound, { endUserId: user.id, scope: "openid" }),
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("keeps usernames unique within a tenant and not across tenants", async () => {
+      const mine = await newFixture();
+      const theirs = await newFixture();
+      const username = `alice-${unique()}`;
+      await inScope(mine.tenantScope, (bound) =>
+        createEndUser(bound, { username, displayName: "Alice" }),
+      );
+      await expect(
+        inScope(mine.tenantScope, (bound) =>
+          createEndUser(bound, { username, displayName: "Another Alice" }),
+        ),
+      ).rejects.toThrow();
+      const elsewhere = await inScope(theirs.tenantScope, (bound) =>
+        createEndUser(bound, { username, displayName: "Alice elsewhere" }),
+      );
+      expect(elsewhere.username).toBe(username);
+    });
+
+    it("will not give an account access to another tenant's endpoint", async () => {
+      const mine = await newFixture();
+      const theirs = await newFixture();
+      const user = await inScope(mine.tenantScope, (bound) =>
+        createEndUser(bound, {
+          username: `alice-${unique()}`,
+          displayName: "Alice",
+        }),
+      );
+      // The foreign key alone would accept this row; the policy is what refuses it.
+      await expect(
+        inScope(theirs.endpointScope, (bound) =>
+          grantEndpointAccess(bound, user.id),
+        ),
+      ).rejects.toThrow();
+      expect(
+        await inScope(mine.tenantScope, (bound) =>
+          getTenantEndUser(bound, user.id),
+        ),
+      ).toBeDefined();
+      expect(
+        await inScope(theirs.tenantScope, (bound) =>
+          getTenantEndUser(bound, user.id),
+        ),
+      ).toBeUndefined();
+    });
+
+    it("brings a federated sign-in at a second endpoint to the same account", async () => {
+      const fixture = await newFixture();
+      const second = await newEndpointIn(fixture.tenantScope);
+      const identity = {
+        username: `https://idp.example.org#${unique()}`,
+        displayName: "Alice",
+        email: null,
+        emailVerified: false,
+        roles: [],
+        attributes: {},
+      };
+      const first = await inScope(fixture.endpointScope, (bound) =>
+        upsertFederatedEndUser(bound, {
+          ...identity,
+          fhirUserReference: "Practitioner/a",
+        }),
+      );
+      const again = await inScope(second.endpointScope, (bound) =>
+        upsertFederatedEndUser(bound, {
+          ...identity,
+          fhirUserReference: "Practitioner/b",
+        }),
+      );
+
+      expect(again.id).toBe(first.id);
+      expect(first.fhirUserReference).toBe("Practitioner/a");
+      expect(again.fhirUserReference).toBe("Practitioner/b");
+
+      const access = await inScope(fixture.tenantScope, (bound) =>
+        listEndpointAccess(bound, first.id),
+      );
+      expect(
+        access
+          .map((row) => [row.endpointSlug, row.fhirUserReference])
+          .toSorted(),
+      ).toEqual(
+        [
+          [fixture.endpointScope.endpointSlug, "Practitioner/a"],
+          [second.endpointScope.endpointSlug, "Practitioner/b"],
+        ].toSorted(),
+      );
+    });
+
+    it("lists the tenant's access rows with the endpoint each admits to", async () => {
+      const fixture = await newFixture();
+      const alice = await newEndUser(fixture, {
+        username: `alice-${unique()}`,
+        displayName: "Alice",
+      });
+      const bob = await newEndUser(fixture, {
+        username: `bob-${unique()}`,
+        displayName: "Bob",
+      });
+      // Another tenant's rows are not listed.
+      const theirs = await newFixture();
+      await newEndUser(theirs, {
+        username: `carol-${unique()}`,
+        displayName: "Carol",
+      });
+
+      const all = await inScope(fixture.tenantScope, (bound) =>
+        listEndpointAccess(bound),
+      );
+      expect(all.map((row) => row.endUserId).toSorted()).toEqual(
+        [alice.id, bob.id].toSorted(),
+      );
+      expect(all[0]?.endpointSlug).toBe(fixture.endpointScope.endpointSlug);
+      expect(all[0]?.endpointKind).toBe("smart");
+      expect(all[0]?.endpointAuthMode).toBe("local");
+
+      const users = await inScope(fixture.tenantScope, (bound) =>
+        listTenantEndUsers(bound),
+      );
+      expect(users.map((user) => user.id).toSorted()).toEqual(
+        [alice.id, bob.id].toSorted(),
+      );
     });
   });
 
@@ -1833,12 +2168,10 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   describe("consents", () => {
     it("returns only live consents", async () => {
       const fixture = await newFixture();
-      const user = await withTenantScope(db, fixture.endpointScope, (bound) =>
-        createEndUser(bound, {
-          username: `alice-${unique()}`,
-          displayName: "Alice",
-        }),
-      );
+      const user = await newEndUser(fixture, {
+        username: `alice-${unique()}`,
+        displayName: "Alice",
+      });
 
       const live = await withTenantScope(db, fixture.clientScope, (bound) =>
         recordConsent(bound, {
@@ -1883,18 +2216,22 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
         return;
       }
 
-      await withTenantScope(db, fixture.endpointScope, (bound) =>
+      await newEndUser(fixture, {
+        username: `persona-${unique()}`,
+        displayName: "Dr Persona",
+        isPersona: true,
+      });
+      await newEndUser(fixture, {
+        username: `local-${unique()}`,
+        displayName: "Local account",
+        passwordHash: "$argon2id$placeholder",
+      });
+      // A persona of the tenant with no access to this endpoint is not offered.
+      await inScope(fixture.tenantScope, (bound) =>
         createEndUser(bound, {
           username: `persona-${unique()}`,
-          displayName: "Dr Persona",
+          displayName: "Dr Elsewhere",
           isPersona: true,
-        }),
-      );
-      await withTenantScope(db, fixture.endpointScope, (bound) =>
-        createEndUser(bound, {
-          username: `local-${unique()}`,
-          displayName: "Local account",
-          passwordHash: "$argon2id$placeholder",
         }),
       );
 
@@ -1960,14 +2297,15 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
   });
 
   describe("end user invitations", () => {
-    /** A local account with no password, as an invited account starts out. */
+    /**
+     * A local account with no password, as an invited account starts out, with
+     * access to the fixture's endpoint so that it can hold a session there.
+     */
     async function newInvitee(fixture: Fixture) {
-      return await withTenantScope(db, fixture.endpointScope, (bound) =>
-        createEndUser(bound, {
-          username: `invitee-${unique()}`,
-          displayName: "Invitee",
-        }),
-      );
+      return await newEndUser(fixture, {
+        username: `invitee-${unique()}`,
+        displayName: "Invitee",
+      });
     }
 
     /** Issues an invitation for an account, expiring `inMs` from now. */
@@ -2029,37 +2367,46 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       ).toBe(user.id);
     });
 
-    it("sets the password once, spends the link and ends the account's sessions", async () => {
+    it("sets the password once, spends the link and ends the account's sessions everywhere", async () => {
       const fixture = await newFixture();
+      const second = await newEndpointIn(fixture.tenantScope);
       const user = await newInvitee(fixture);
+      await inScope(second.endpointScope, (bound) =>
+        grantEndpointAccess(bound, user.id),
+      );
       const tokenHash = `inv-${unique()}`;
       await invite(fixture, user.id, tokenHash);
-      const sessionHash = `session-${unique()}`;
-      await withTenantScope(db, fixture.endpointScope, (bound) =>
-        createEndUserSession(bound, {
-          endUserId: user.id,
-          tokenHash: sessionHash,
-          expiresAt: new Date(Date.now() + 600_000),
-          ip: null,
-          userAgent: null,
-        }),
-      );
+      const sessions = [
+        [fixture.endpointScope, `session-${unique()}`],
+        [second.endpointScope, `session-${unique()}`],
+      ] as const;
+      for (const [scope, sessionHash] of sessions) {
+        await inScope(scope, (bound) =>
+          createEndUserSession(bound, {
+            endUserId: user.id,
+            tokenHash: sessionHash,
+            expiresAt: new Date(Date.now() + 600_000),
+            ip: null,
+            userAgent: null,
+          }),
+        );
+      }
 
-      const redeemed = await withTenantScope(
-        db,
-        fixture.endpointScope,
-        (bound) => redeemEndUserInvitation(bound, tokenHash, "$argon2id$new"),
+      const redeemed = await withTenantScope(db, fixture.tenantScope, (bound) =>
+        redeemEndUserInvitation(bound, tokenHash, "$argon2id$new"),
       );
       expect(redeemed?.id).toBe(user.id);
       expect(redeemed?.passwordHash).toBe("$argon2id$new");
 
       // A reset is the case this matters for: whoever held the old password may
-      // also hold a session.
-      expect(
-        await withTenantScope(db, fixture.endpointScope, (bound) =>
-          findLiveEndUserSession(bound, sessionHash),
-        ),
-      ).toBeUndefined();
+      // also hold a session, at any endpoint the account has access to.
+      for (const [scope, sessionHash] of sessions) {
+        expect(
+          await inScope(scope, (bound) =>
+            findLiveEndUserSession(bound, sessionHash),
+          ),
+        ).toBeUndefined();
+      }
 
       expect(
         await withTenantScope(db, fixture.endpointScope, (bound) =>
@@ -2108,7 +2455,7 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       expect(
         (
           await withTenantScope(db, fixture.endpointScope, (bound) =>
-            getEndUser(bound, user.id),
+            getTenantEndUser(bound, user.id),
           )
         )?.passwordHash,
       ).toBeNull();
@@ -2168,30 +2515,22 @@ describeWithDatabase("tenant-scoped repositories against Postgres", () => {
       ).toBeUndefined();
     });
 
-    it("does not honour a link at another endpoint of the same tenant", async () => {
+    it("does not honour a link in another tenant", async () => {
       const fixture = await newFixture();
       const user = await newInvitee(fixture);
       const tokenHash = `inv-elsewhere-${unique()}`;
       await invite(fixture, user.id, tokenHash);
-      const other = await withTenantScope(db, fixture.tenantScope, (bound) =>
-        createEndpoint(bound, {
-          slug: `e-${unique()}`,
-          name: "Other endpoint",
-          kind: "smart",
-          audience: "https://fhir.example.org/fhir",
-        }),
-      );
-      const otherScope = endpointScopeFromRow(fixture.tenantScope, other);
+      const other = await newFixture();
 
-      // Separate endpoints hold separate accounts; the tenant policy alone would
-      // let this row be seen, so the endpoint predicate is what is under test.
+      // The policy alone would hide this row; the tenant predicate is the
+      // application's half of the same boundary.
       expect(
-        await withTenantScope(db, otherScope, (bound) =>
+        await withTenantScope(db, other.tenantScope, (bound) =>
           findEndUserByInvitation(bound, tokenHash),
         ),
       ).toBeUndefined();
       expect(
-        await withTenantScope(db, otherScope, (bound) =>
+        await withTenantScope(db, other.tenantScope, (bound) =>
           redeemEndUserInvitation(bound, tokenHash, "$argon2id$elsewhere"),
         ),
       ).toBeUndefined();

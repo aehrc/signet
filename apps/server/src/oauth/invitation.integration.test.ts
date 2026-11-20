@@ -9,8 +9,12 @@
  * The properties asserted are the ones the feature is for and the ones that would make
  * it dangerous: a link lets exactly one person set exactly one account's password once;
  * it stops working when it expires, is replaced, is cancelled or has been used; it
- * cannot be minted for an account that could not sign in with the password; and the
- * token never reaches the audit trail.
+ * cannot be minted for an account that could not sign in with the password anywhere;
+ * and the token never reaches the audit trail.
+ *
+ * An invitation belongs to the tenant, as the account does: the link opens a tenant
+ * page, and the password it sets works at every endpoint in local auth mode that the
+ * account has been given access to.
  *
  * Author: John Grimes
  */
@@ -28,6 +32,7 @@ import { issuerPath } from "../test/flows.js";
 import {
   createTestStack,
   TEST_PASSWORD,
+  TEST_PUBLIC_URL,
   testDatabaseUrl,
 } from "../test/harness.js";
 
@@ -57,24 +62,29 @@ async function messageOf(response: Response): Promise<string> {
 describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
   let stack: TestStack;
   let owner: AdminCredential;
+  let federating: TestStack;
   let sequence = 0;
 
   beforeAll(async () => {
     stack = await createTestStack();
     owner = { cookie: await stack.signIn() };
+    federating = await stack.addEndpoint({
+      slug: "federating",
+      endpoint: { authMode: "oidc" },
+    });
   });
 
   afterAll(async () => {
     await stack.close();
   });
 
-  /** Creates a local account with no password, as the console's invite flow does. */
-  async function newAccount(): Promise<{ id: string; username: string }> {
+  /** Creates a tenant account with no password and no access. */
+  async function newBareAccount(): Promise<{ id: string; username: string }> {
     sequence += 1;
     const username = `invitee-${String(sequence)}`;
     const created = await adminJson<{
       user: { id: string; username: string; hasPassword: boolean };
-    }>(stack, "POST", endpointPath(stack, "/users"), {
+    }>(stack, "POST", tenantPath(stack, "/users"), {
       credential: owner,
       body: { username, displayName: `Invitee ${String(sequence)}` },
       expect: 201,
@@ -83,12 +93,35 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
     return created.user;
   }
 
+  /** Gives an account access to an endpoint. */
+  async function grant(at: TestStack, userId: string): Promise<void> {
+    await adminJson(stack, "PUT", endpointPath(at, `/users/${userId}`), {
+      credential: owner,
+      body: {},
+    });
+  }
+
+  /**
+   * Creates an account with access to the fixture endpoint, as the console's invite
+   * flow leaves it.
+   */
+  async function newAccount(): Promise<{ id: string; username: string }> {
+    const account = await newBareAccount();
+    await grant(stack, account.id);
+    return account;
+  }
+
+  /** The admin API path of an account's invitation. */
+  function invitationPath(userId: string): string {
+    return tenantPath(stack, `/users/${userId}/invitation`);
+  }
+
   /** Mints an invitation for an account and returns the token from its link. */
   async function invite(userId: string): Promise<string> {
     const issued = await adminJson<IssuedInvitation>(
       stack,
       "POST",
-      endpointPath(stack, `/users/${userId}/invitation`),
+      invitationPath(userId),
       { credential: owner, expect: 201 },
     );
     return new URL(issued.invitation.url).hash.slice(1);
@@ -98,24 +131,24 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
   async function invitationApi(
     action: "details" | "accept",
     body: unknown,
-    headers: Record<string, string> = {},
   ): Promise<Response> {
     return await stack.app.request(
-      `${issuerPath(stack)}/invitation/${action}`,
+      `/t/${stack.tenant.slug}/invitation/${action}`,
       {
         method: "POST",
-        headers: { "content-type": "application/json", ...headers },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       },
     );
   }
 
-  /** Signs in at the management page and returns the response. */
+  /** Signs in at an endpoint's management page and returns the response. */
   async function manageSignIn(
     username: string,
     password: string,
+    at: TestStack = stack,
   ): Promise<Response> {
-    return await stack.app.request(`${issuerPath(stack)}/manage/session`, {
+    return await stack.app.request(`${issuerPath(at)}/manage/session`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ username, password }),
@@ -130,13 +163,13 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       expect(response.status).toBe(401);
     });
 
-    it("returns a link under the endpoint's issuer, once, with a seven day expiry", async () => {
+    it("returns a link to the tenant's invitation page, once, with a seven day expiry", async () => {
       const account = await newAccount();
 
       const response = await adminRequest(
         stack,
         "POST",
-        endpointPath(stack, `/users/${account.id}/invitation`),
+        invitationPath(account.id),
         { credential: owner },
       );
       expect(response.status).toBe(201);
@@ -145,7 +178,9 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       const body = (await response.json()) as IssuedInvitation;
 
       expect(body.invitation.url).toMatch(
-        new RegExp(`^${stack.issuer}/invitation#[A-Za-z0-9_-]{43}$`),
+        new RegExp(
+          `^${TEST_PUBLIC_URL}/t/${stack.tenant.slug}/invitation#[A-Za-z0-9_-]{43}$`,
+        ),
       );
       expect(
         Date.parse(body.invitation.expiresAt) - stack.context.clock().getTime(),
@@ -155,7 +190,7 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       const read = await adminJson<{ invitation: Record<string, unknown> }>(
         stack,
         "GET",
-        endpointPath(stack, `/users/${account.id}/invitation`),
+        invitationPath(account.id),
         { credential: owner },
       );
       expect(read.invitation).toEqual({
@@ -170,7 +205,7 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       const read = await adminJson<{ invitation: unknown }>(
         stack,
         "GET",
-        endpointPath(stack, `/users/${account.id}/invitation`),
+        invitationPath(account.id),
         { credential: owner },
       );
       expect(read.invitation).toBeNull();
@@ -181,7 +216,11 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       const token = await invite(account.id);
 
       const audit = await adminJson<{
-        events: { action: string; targetId: string | null; detail: unknown }[];
+        events: {
+          targetId: string | null;
+          endpointId: string | null;
+          detail: unknown;
+        }[];
       }>(stack, "GET", tenantPath(stack, "/audit?action=end-user.invited"), {
         credential: owner,
       });
@@ -189,6 +228,7 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
         (candidate) => candidate.targetId === account.id,
       );
       expect(event).toBeDefined();
+      expect(event?.endpointId).toBeNull();
       expect(JSON.stringify(event)).not.toContain(token);
     });
 
@@ -196,7 +236,7 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       const response = await adminRequest(
         stack,
         "POST",
-        endpointPath(stack, `/users/${stack.persona.id}/invitation`),
+        invitationPath(stack.persona.id),
         { credential: owner },
       );
       expect(response.status).toBe(400);
@@ -208,7 +248,7 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       await adminJson(
         stack,
         "PATCH",
-        endpointPath(stack, `/users/${account.id}`),
+        tenantPath(stack, `/users/${account.id}`),
         {
           credential: owner,
           body: { disabled: true },
@@ -218,46 +258,43 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       const response = await adminRequest(
         stack,
         "POST",
-        endpointPath(stack, `/users/${account.id}/invitation`),
+        invitationPath(account.id),
         { credential: owner },
       );
       expect(response.status).toBe(400);
+      expect(await messageOf(response)).toMatch(/disabled/);
     });
 
-    it("refuses an endpoint that federates, which never checks a local password", async () => {
-      await adminJson(stack, "POST", tenantPath(stack, "/endpoints"), {
-        credential: owner,
-        body: {
-          slug: "federating",
-          name: "Federating endpoint",
-          kind: "smart",
-          audience: "https://federating.test/fhir",
-          authMode: "oidc",
-        },
-        expect: 201,
-      });
-      const account = await adminJson<{ user: { id: string } }>(
+    it("refuses an account whose only endpoints federate, or that has none", async () => {
+      const account = await newBareAccount();
+      const withNothing = await adminRequest(
         stack,
         "POST",
-        tenantPath(stack, "/endpoints/federating/users"),
-        {
-          credential: owner,
-          body: { username: "federated", displayName: "Federated" },
-          expect: 201,
-        },
-      );
-
-      const response = await adminRequest(
-        stack,
-        "POST",
-        tenantPath(
-          stack,
-          `/endpoints/federating/users/${account.user.id}/invitation`,
-        ),
+        invitationPath(account.id),
         { credential: owner },
       );
-      expect(response.status).toBe(400);
-      expect(await messageOf(response)).toMatch(/federates/);
+      expect(withNothing.status).toBe(400);
+      expect(await messageOf(withNothing)).toMatch(/local auth mode/);
+
+      await grant(federating, account.id);
+      const federatedOnly = await adminRequest(
+        stack,
+        "POST",
+        invitationPath(account.id),
+        { credential: owner },
+      );
+      expect(federatedOnly.status).toBe(400);
+      expect(await messageOf(federatedOnly)).toMatch(/local auth mode/);
+
+      // One endpoint that checks a password is enough.
+      await grant(stack, account.id);
+      expect(
+        (
+          await adminRequest(stack, "POST", invitationPath(account.id), {
+            credential: owner,
+          })
+        ).status,
+      ).toBe(201);
     });
 
     it("lets a viewer see an invitation but not issue or cancel one", async () => {
@@ -265,7 +302,7 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       const viewer: AdminCredential = {
         bearer: await stack.mintApiToken("viewer"),
       };
-      const path = endpointPath(stack, `/users/${account.id}/invitation`);
+      const path = invitationPath(account.id);
 
       expect(
         (await adminRequest(stack, "GET", path, { credential: viewer })).status,
@@ -280,22 +317,11 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       ).toBe(403);
     });
 
-    it("answers 404 for an account on another endpoint", async () => {
-      const elsewhere = await adminJson<{ user: { id: string } }>(
-        stack,
-        "POST",
-        tenantPath(stack, "/endpoints/federating/users"),
-        {
-          credential: owner,
-          body: { username: "elsewhere", displayName: "Elsewhere" },
-          expect: 201,
-        },
-      );
-
+    it("answers 404 for an account the tenant does not hold", async () => {
       const response = await adminRequest(
         stack,
         "POST",
-        endpointPath(stack, `/users/${elsewhere.user.id}/invitation`),
+        invitationPath("00000000-0000-4000-8000-000000000000"),
         { credential: owner },
       );
       expect(response.status).toBe(404);
@@ -306,7 +332,7 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
     it("stops the link working, and says so when there is nothing to cancel", async () => {
       const account = await newAccount();
       const token = await invite(account.id);
-      const path = endpointPath(stack, `/users/${account.id}/invitation`);
+      const path = invitationPath(account.id);
 
       expect(
         (await adminRequest(stack, "DELETE", path, { credential: owner }))
@@ -321,17 +347,19 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
   });
 
   describe("the invitation page's API", () => {
-    it("names the account the link is for without spending it", async () => {
+    it("names the account and the tenant the link is for without spending it", async () => {
       const account = await newAccount();
       const token = await invite(account.id);
 
       const first = await invitationApi("details", { token });
       expect(first.status).toBe(200);
       expect(first.headers.get("cache-control")).toBe("no-store");
-      expect(await first.json()).toMatchObject({
+      const details = (await first.json()) as Record<string, unknown>;
+      expect(details).toMatchObject({
         username: account.username,
-        endpointName: stack.endpoint.name,
+        tenantName: stack.tenant.name,
       });
+      expect(Object.keys(details)).not.toContain("endpointName");
       expect((await invitationApi("details", { token })).status).toBe(200);
     });
 
@@ -341,6 +369,37 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       expect(await unknown.json()).toMatchObject({
         error: "invalid_invitation",
       });
+    });
+
+    it("answers 404 for a tenant that does not exist", async () => {
+      const response = await stack.app.request(
+        "/t/no-such-tenant/invitation/details",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ token: "not-a-token" }),
+        },
+      );
+      expect(response.status).toBe(404);
+    });
+
+    it("refuses a link presented to another tenant", async () => {
+      const other = await createTestStack();
+      try {
+        const account = await newAccount();
+        const token = await invite(account.id);
+        const response = await other.app.request(
+          `/t/${other.tenant.slug}/invitation/details`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ token }),
+          },
+        );
+        expect(response.status).toBe(404);
+      } finally {
+        await other.close();
+      }
     });
 
     it("refuses a malformed body", async () => {
@@ -380,6 +439,7 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
         events: {
           actorType: string;
           actorId: string | null;
+          endpointId: string | null;
           detail: unknown;
         }[];
       }>(
@@ -392,28 +452,48 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
         (candidate) => candidate.actorId === account.id,
       );
       expect(event?.actorType).toBe("end-user");
+      expect(event?.endpointId).toBeNull();
       expect(JSON.stringify(event)).not.toContain(token);
       expect(JSON.stringify(event)).not.toContain("a-chosen-password");
     });
 
-    it("invites an account on an OAuth endpoint, keeping its email", async () => {
+    it("sets the one password every local endpoint the account can use checks", async () => {
+      const second = await stack.addEndpoint({ slug: "second-local" });
+      const account = await newAccount();
+      await grant(second, account.id);
+      await grant(federating, account.id);
+      const token = await invite(account.id);
+
+      expect(
+        (
+          await invitationApi("accept", {
+            token,
+            password: "one-password-for-all",
+          })
+        ).status,
+      ).toBe(200);
+
+      expect(
+        (await manageSignIn(account.username, "one-password-for-all", stack))
+          .status,
+      ).toBe(200);
+      expect(
+        (await manageSignIn(account.username, "one-password-for-all", second))
+          .status,
+      ).toBe(200);
+    });
+
+    it("invites an account with access to an OAuth endpoint, keeping its email", async () => {
       // Nothing about an invitation is SMART-specific: it sets a password and no
-      // more, so the account keeps the fields its endpoint's kind gave it.
-      await adminJson(stack, "POST", tenantPath(stack, "/endpoints"), {
-        credential: owner,
-        body: {
-          slug: "invite-oauth",
-          name: "OAuth endpoint",
-          kind: "oauth",
-          audience: "https://api.invite.test/v1",
-        },
-        expect: 201,
+      // more, so the account keeps the fields it was given.
+      const api = await stack.addEndpoint({
+        slug: "invite-oauth",
+        kind: "oauth",
       });
-      const usersPath = tenantPath(stack, "/endpoints/invite-oauth/users");
       const created = await adminJson<{ user: { id: string } }>(
         stack,
         "POST",
-        usersPath,
+        tenantPath(stack, "/users"),
         {
           credential: owner,
           body: {
@@ -425,31 +505,21 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
           expect: 201,
         },
       );
-      const issued = await adminJson<IssuedInvitation>(
-        stack,
-        "POST",
-        `${usersPath}/${created.user.id}/invitation`,
-        { credential: owner, expect: 201 },
-      );
-      const link = new URL(issued.invitation.url);
-      expect(link.pathname).toContain("/e/invite-oauth/");
+      await grant(api, created.user.id);
+      const token = await invite(created.user.id);
 
-      const accepted = await stack.app.request(
-        `/t/${stack.tenant.slug}/e/invite-oauth/invitation/accept`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            token: link.hash.slice(1),
+      expect(
+        (
+          await invitationApi("accept", {
+            token,
             password: "a-chosen-password",
-          }),
-        },
-      );
-      expect(accepted.status).toBe(200);
+          })
+        ).status,
+      ).toBe(200);
 
       const after = await adminJson<{
         user: { hasPassword: boolean; email: string; emailVerified: boolean };
-      }>(stack, "GET", `${usersPath}/${created.user.id}`, {
+      }>(stack, "GET", tenantPath(stack, `/users/${created.user.id}`), {
         credential: owner,
       });
       expect(after.user).toMatchObject({
@@ -543,12 +613,12 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
       await adminRequest(
         stack,
         "POST",
-        endpointPath(stack, `/users/${stack.user.id}/password`),
+        tenantPath(stack, `/users/${stack.user.id}/password`),
         { credential: owner, body: { password: TEST_PASSWORD } },
       );
     });
 
-    it("refuses the link once the endpoint stops checking local passwords", async () => {
+    it("refuses the link once no endpoint the account can use checks local passwords", async () => {
       const account = await newAccount();
       const token = await invite(account.id);
 
@@ -573,6 +643,29 @@ describe.skipIf(testDatabaseUrl === undefined)("end user invitations", () => {
         });
       }
       expect((await invitationApi("details", { token })).status).toBe(200);
+    });
+
+    it("refuses the link once the account's access is withdrawn everywhere", async () => {
+      const account = await newAccount();
+      const token = await invite(account.id);
+
+      await adminRequest(
+        stack,
+        "DELETE",
+        endpointPath(stack, `/users/${account.id}`),
+        {
+          credential: owner,
+        },
+      );
+      expect((await invitationApi("details", { token })).status).toBe(404);
+      expect(
+        (
+          await invitationApi("accept", {
+            token,
+            password: "a-chosen-password",
+          })
+        ).status,
+      ).toBe(404);
     });
   });
 });

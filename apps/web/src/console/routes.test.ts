@@ -50,18 +50,15 @@ describe("clientRoute", () => {
 });
 
 describe("endUserRoute", () => {
-  it("nests the user under the endpoint's users", () => {
-    expect(endUserRoute("demo", "fhir", "user-1")).toBe(
-      "/console/t/demo/e/fhir/users/user-1",
-    );
+  it("nests the user under the tenant's users", () => {
+    // An account belongs to the tenant, not to any one endpoint.
+    expect(endUserRoute("demo", "user-1")).toBe("/console/t/demo/users/user-1");
   });
 
   it("encodes every segment", () => {
-    // A user id is a uuid in practice, but the tenant and endpoint slugs reach here
-    // from the URL, so nothing is trusted to be safe.
-    expect(endUserRoute("a/b", "c d", "u/1")).toBe(
-      "/console/t/a%2Fb/e/c%20d/users/u%2F1",
-    );
+    // A user id is a uuid in practice, but the tenant slug reaches here from the
+    // URL, so nothing is trusted to be safe.
+    expect(endUserRoute("a/b", "u/1")).toBe("/console/t/a%2Fb/users/u%2F1");
   });
 });
 
@@ -85,10 +82,11 @@ describe("activeEndpointTab", () => {
     ).toBe("/clients");
   });
 
-  it("keeps a user's detail page on the Users tab", () => {
+  it("has no Users tab, since users belong to the tenant", () => {
+    expect(ENDPOINT_TABS.map((tab) => tab.path)).not.toContain("/users");
     expect(
       activeEndpointTab("demo", "fhir", "/console/t/demo/e/fhir/users/user-1"),
-    ).toBe("/users");
+    ).toBe("");
   });
 
   it("falls back to the overview for a path outside the endpoint", () => {
@@ -130,7 +128,6 @@ describe("endpointTabs", () => {
       "",
       "/clients",
       "/policy",
-      "/users",
       "/keys",
       "/identity",
       "/trust",

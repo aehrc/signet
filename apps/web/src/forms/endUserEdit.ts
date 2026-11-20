@@ -4,16 +4,21 @@
  */
 
 /**
- * Turning a user into a form, and a form into a patch.
+ * Turning a user into a form, and a form into a request body.
  *
  * The page that uses this is a thin composition; everything here is where the
  * decisions actually are, so this is where they can be tested without a browser.
  *
- * Three of those decisions are worth stating.
+ * An account belongs to the tenant, and two forms edit it: the account form, for
+ * what is the same at every endpoint, and the endpoint access form, for the
+ * `fhirUser` reference and a persona's default launch context, which name resources
+ * on one endpoint's FHIR server and so live on the account's access to it.
  *
- * The API's PATCH writes only the fields a request names, so a save sends the
- * changed ones and nothing else - a form that sent everything would overwrite what
- * another operator changed while this page was open.
+ * Three decisions are worth stating.
+ *
+ * Both APIs write only the fields a request names, so a save sends the changed ones
+ * and nothing else - a form that sent everything would overwrite what another
+ * operator changed while this page was open.
  *
  * A blank is not the same as an absence. A cleared `fhirUser` field means "remove the
  * reference", which the API takes as an explicit `null`, and a default context whose
@@ -34,20 +39,19 @@ import { attributeStringList } from "@signet/core";
 
 import { changedFields, formatList, parseList } from "./lists.js";
 
-import type { EndUserView } from "../api/types.js";
-import type { EndpointKind } from "@signet/core";
+import type {
+  EndpointAccessView,
+  EndpointView,
+  EndUserView,
+} from "../api/types.js";
 
-/** The flat, all-text shape the user edit form holds. */
+/** The flat, all-text shape the account edit form holds. */
 export interface EndUserFormValues {
   readonly displayName: string;
-  readonly fhirUser: string;
   readonly email: string;
   readonly emailVerified: boolean;
   /** Roles, one per line. */
   readonly roles: string;
-  readonly defaultPatient: string;
-  readonly defaultEncounter: string;
-  readonly intent: string;
   /** Candidate patient identifiers, one per line. */
   readonly patients: string;
   /** Candidate encounter identifiers, one per line. */
@@ -95,7 +99,7 @@ export function mergeCandidateLists(
  * @returns An object of the non-blank fields, or null when all three are blank.
  */
 function defaultContextFrom(
-  values: EndUserFormValues,
+  values: EndpointAccessFormValues,
 ): Record<string, string> | null {
   const context: Record<string, string> = {};
   const fields: readonly [string, string][] = [
@@ -133,50 +137,40 @@ function isSameRecord(
 }
 
 /**
- * Reads a user's current values into the form.
+ * Reads a user's current values into the account form.
  *
  * @param user - The user as the API returns them.
  * @returns The values the form renders when nothing has been edited.
  */
 export function endUserFormValues(user: EndUserView): EndUserFormValues {
-  const context = user.defaultContext ?? {};
-  const contextField = (name: string): string => {
-    const value = context[name];
-    return typeof value === "string" ? value : "";
-  };
-
   return {
     displayName: user.displayName,
-    fhirUser: user.fhirUser ?? "",
     email: user.email ?? "",
     emailVerified: user.emailVerified,
     roles: formatList(user.roles),
-    defaultPatient: contextField("patient"),
-    defaultEncounter: contextField("encounter"),
-    intent: contextField("intent"),
     patients: formatList(attributeStringList(user.attributes, "patients")),
     encounters: formatList(attributeStringList(user.attributes, "encounters")),
   };
 }
 
 /**
- * Builds the PATCH body for a set of edits.
+ * Builds the account PATCH body for a set of edits.
  *
  * Carries only what differs from what was loaded, so a save with no changes produces
  * an empty object and sends nothing. The username is absent by construction: the form
- * has no field for it, and the API would refuse one anyway.
+ * has no field for it, and the API would refuse one anyway. So are the per-endpoint
+ * fields, which {@link endpointAccessBody} sends to the access route instead.
  *
  * @param edited - The form's current values.
  * @param current - The user as loaded.
  * @returns The patch, which may be empty.
  * @example
- * endUserPatch({ ...values, fhirUser: "" }, user); // { fhirUserReference: null }
+ * endUserPatch({ ...values, email: "" }, user); // { email: null }
  */
 export function endUserPatch(
   edited: EndUserFormValues,
   current: EndUserView,
 ): Record<string, unknown> {
-  const fhirUser = edited.fhirUser.trim();
   const email = edited.email.trim();
 
   const patch: Record<string, unknown> = changedFields<Record<string, unknown>>(
@@ -184,28 +178,17 @@ export function endUserPatch(
       displayName: edited.displayName,
       // Null rather than "": the API reads the first as "clear this" and refuses
       // the second, which is not a distinction the operator should have to make.
-      fhirUserReference: fhirUser.length === 0 ? null : fhirUser,
       email: email.length === 0 ? null : email,
       emailVerified: edited.emailVerified,
       roles: parseList(edited.roles),
     },
     {
       displayName: current.displayName,
-      fhirUserReference: current.fhirUser,
       email: current.email,
       emailVerified: current.emailVerified,
       roles: [...current.roles],
     },
   );
-
-  const context = defaultContextFrom(edited);
-  const contextChanged =
-    context === null || current.defaultContext === null
-      ? context !== null || current.defaultContext !== null
-      : !isSameRecord(context, current.defaultContext);
-  if (contextChanged) {
-    patch["defaultContext"] = context;
-  }
 
   const attributes = mergeCandidateLists(
     current.attributes,
@@ -228,37 +211,29 @@ export interface EndUserCreateForm {
   readonly isPersona: boolean;
   /** Whether the account's holder chooses its password through an invitation link. */
   readonly invite: boolean;
-  readonly fhirUser: string;
   readonly email: string;
   readonly emailVerified: boolean;
   /** Roles, one per line. */
   readonly roles: string;
-  readonly defaultPatient: string;
 }
 
 /**
- * Builds the request body for a new user on an endpoint of a kind.
+ * Builds the request body for a new account in the tenant.
  *
- * A blank field is left out rather than sent empty. Fields belong to one kind: a
- * `fhirUser` reference and a default launch context only to a SMART endpoint, and an
- * email address only to an OAuth one, where the `email` scope releases it. The other
- * kind's fields are dropped even if the form holds a value for them, because the API
- * refuses them there and the form never showed them.
+ * A blank field is left out rather than sent empty. The account is created with
+ * access to no endpoint, so nothing that belongs to an endpoint's access is sent:
+ * those fields are set once access is given.
  *
  * @param form - The form's current values.
- * @param kind - The endpoint's kind.
  * @returns The body to POST.
  * @example
- * endUserCreateBody({ ...form, email: "jo@example.org" }, "oauth").email;
+ * endUserCreateBody({ ...form, email: "jo@example.org" }).email;
  * // "jo@example.org"
  */
 export function endUserCreateBody(
   form: EndUserCreateForm,
-  kind: EndpointKind,
 ): Record<string, unknown> {
-  const fhirUser = form.fhirUser.trim();
   const email = form.email.trim();
-  const patient = form.defaultPatient.trim();
   const roles = parseList(form.roles);
 
   return {
@@ -269,14 +244,115 @@ export function endUserCreateBody(
     // through the link.
     ...(form.isPersona || form.invite ? {} : { password: form.password }),
     ...(roles.length === 0 ? {} : { roles }),
-    ...(kind === "smart" && fhirUser.length > 0
-      ? { fhirUserReference: fhirUser }
-      : {}),
-    ...(kind === "smart" && form.isPersona && patient.length > 0
-      ? { defaultContext: { patient } }
-      : {}),
-    ...(kind === "oauth" && email.length > 0
-      ? { email, emailVerified: form.emailVerified }
-      : {}),
+    ...(email.length === 0 ? {} : { email, emailVerified: form.emailVerified }),
   };
+}
+
+/** The flat, all-text shape one endpoint's access form holds. */
+export interface EndpointAccessFormValues {
+  readonly fhirUser: string;
+  readonly defaultPatient: string;
+  readonly defaultEncounter: string;
+  readonly intent: string;
+}
+
+/**
+ * Reads an account's access to one endpoint into the access form.
+ *
+ * @param access - The access as the API returns it.
+ * @returns The values the form renders when nothing has been edited.
+ */
+export function endpointAccessFormValues(
+  access: EndpointAccessView,
+): EndpointAccessFormValues {
+  const context = access.defaultContext ?? {};
+  const contextField = (name: string): string => {
+    const value = context[name];
+    return typeof value === "string" ? value : "";
+  };
+
+  return {
+    fhirUser: access.fhirUser ?? "",
+    defaultPatient: contextField("patient"),
+    defaultEncounter: contextField("encounter"),
+    intent: contextField("intent"),
+  };
+}
+
+/**
+ * Builds the PUT body that changes an account's access to one endpoint.
+ *
+ * Carries only what differs from what was loaded, so an unedited form produces an
+ * empty object and the page sends nothing. A cleared field is sent as null, which
+ * the API reads as "clear this". The default context is sent only for a persona,
+ * whose launch context it seeds, and nothing at all is sent for an OAuth endpoint,
+ * which refuses both fields.
+ *
+ * @param edited - The form's current values.
+ * @param current - The access as loaded.
+ * @param isPersona - Whether the account is a persona.
+ * @returns The body, which may be empty.
+ * @example
+ * endpointAccessBody({ ...values, fhirUser: "" }, access, false);
+ * // { fhirUserReference: null }
+ */
+export function endpointAccessBody(
+  edited: EndpointAccessFormValues,
+  current: EndpointAccessView,
+  isPersona: boolean,
+): Record<string, unknown> {
+  if (current.kind !== "smart") {
+    return {};
+  }
+  const fhirUser = edited.fhirUser.trim();
+  const body: Record<string, unknown> = changedFields<Record<string, unknown>>(
+    { fhirUserReference: fhirUser.length === 0 ? null : fhirUser },
+    { fhirUserReference: current.fhirUser },
+  );
+
+  if (isPersona) {
+    const context = defaultContextFrom(edited);
+    const contextChanged =
+      context === null || current.defaultContext === null
+        ? context !== null || current.defaultContext !== null
+        : !isSameRecord(context, current.defaultContext);
+    if (contextChanged) {
+      body["defaultContext"] = context;
+    }
+  }
+  return body;
+}
+
+/** The fields of an endpoint the Endpoint access section needs. */
+export type AccessEndpoint = Pick<
+  EndpointView,
+  "slug" | "name" | "kind" | "authMode"
+>;
+
+/** One row of the Endpoint access section: an endpoint, and the access to it. */
+export interface EndpointAccessRow<Endpoint extends AccessEndpoint> {
+  readonly endpoint: Endpoint;
+  /** Undefined when the account has no access to the endpoint. */
+  readonly access: EndpointAccessView | undefined;
+}
+
+/**
+ * Pairs every endpoint of the tenant with the account's access to it.
+ *
+ * The tenant's list decides which rows exist and their order, so an endpoint the
+ * account cannot use is still offered for giving access, and access to an endpoint
+ * the list does not hold is not shown.
+ *
+ * @param endpoints - The tenant's endpoints, in the order to show them.
+ * @param access - The account's access, as the API returns it.
+ * @returns One row per endpoint.
+ */
+export function endpointAccessRows<Endpoint extends AccessEndpoint>(
+  endpoints: readonly Endpoint[],
+  access: readonly EndpointAccessView[],
+): EndpointAccessRow<Endpoint>[] {
+  return endpoints.map((endpoint) => ({
+    endpoint,
+    access: access.find((entry) => entry.slug === endpoint.slug),
+  }));
 }

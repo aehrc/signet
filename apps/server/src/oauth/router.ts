@@ -45,10 +45,6 @@ import {
   interactionStateHandler,
 } from "./interaction.js";
 import { introspectHandler } from "./introspect.js";
-import {
-  invitationAcceptHandler,
-  invitationDetailsHandler,
-} from "./invitation.js";
 import { ISSUER_PATH_PREFIX, withIssuer } from "./issuer.js";
 import { launchContextHandler } from "./launchContextEndpoint.js";
 import {
@@ -177,16 +173,6 @@ export function createOAuthRouter(
     manageAuthorizationsHandler(context),
   );
   router.post(path("/manage/revoke"), manageRevokeHandler(context));
-
-  // The invitation page's API. Both routes take a bearer token from a caller with no
-  // other credential, and the second sets a password with it, so both are limited as
-  // sign-in is. See `./invitation.js`.
-  for (const [suffix, handler] of [
-    ["/invitation/details", invitationDetailsHandler(context)],
-    ["/invitation/accept", invitationAcceptHandler(context)],
-  ] as const) {
-    router.post(path(suffix), rateLimit("signIn", context), handler);
-  }
 
   // Vouched dynamic client registration. Off unless the endpoint names a trust
   // anchor, in which case the handler answers 404 - see `./register.js`.

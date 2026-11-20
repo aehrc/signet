@@ -10,6 +10,9 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  endpointAccessBody,
+  endpointAccessFormValues,
+  endpointAccessRows,
   endUserCreateBody,
   endUserFormValues,
   endUserPatch,
@@ -17,7 +20,7 @@ import {
 } from "./endUserEdit.js";
 
 import type { EndUserCreateForm } from "./endUserEdit.js";
-import type { EndUserView } from "../api/types.js";
+import type { EndpointAccessView, EndUserView } from "../api/types.js";
 
 /** A user as the API returns them, with the fields a case cares about overridden. */
 function userView(overrides: Partial<EndUserView> = {}): EndUserView {
@@ -25,16 +28,31 @@ function userView(overrides: Partial<EndUserView> = {}): EndUserView {
     id: "user-1",
     username: "johngrimes",
     displayName: "John Grimes",
-    fhirUser: "Practitioner/clin-001",
     email: null,
     emailVerified: false,
     roles: ["clinician"],
     attributes: {},
-    defaultContext: null,
     isPersona: false,
     hasPassword: true,
     disabledAt: null,
     createdAt: "2026-08-03T14:02:11.000Z",
+    endpoints: [],
+    ...overrides,
+  };
+}
+
+/** One endpoint's access, with the fields a case cares about overridden. */
+function accessView(
+  overrides: Partial<EndpointAccessView> = {},
+): EndpointAccessView {
+  return {
+    slug: "ward",
+    name: "Ward",
+    kind: "smart",
+    authMode: "local",
+    fhirUser: "Practitioner/clin-001",
+    defaultContext: null,
+    grantedAt: "2026-08-04T09:00:00.000Z",
     ...overrides,
   };
 }
@@ -84,14 +102,8 @@ describe("endUserFormValues", () => {
     );
 
     expect(values.displayName).toBe("John Grimes");
-    expect(values.fhirUser).toBe("Practitioner/clin-001");
     // One role per line, which is what the parser round-trips exactly.
     expect(values.roles).toBe("clinician\nresearcher");
-  });
-
-  it("renders an absent fhirUser reference as an empty field", () => {
-    // Not the string "null", which is what a naive `String(value)` would show.
-    expect(endUserFormValues(userView({ fhirUser: null })).fhirUser).toBe("");
   });
 
   it("renders an email address and whether it is verified", () => {
@@ -105,30 +117,6 @@ describe("endUserFormValues", () => {
 
   it("renders an absent email address as an empty field", () => {
     expect(endUserFormValues(userView({ email: null })).email).toBe("");
-  });
-
-  it("spreads the default context across its three fields", () => {
-    const values = endUserFormValues(
-      userView({
-        defaultContext: {
-          patient: "pat-1",
-          encounter: "enc-2",
-          intent: "reconcile",
-        },
-      }),
-    );
-
-    expect(values.defaultPatient).toBe("pat-1");
-    expect(values.defaultEncounter).toBe("enc-2");
-    expect(values.intent).toBe("reconcile");
-  });
-
-  it("renders an absent default context as three empty fields", () => {
-    const values = endUserFormValues(userView({ defaultContext: null }));
-
-    expect(values.defaultPatient).toBe("");
-    expect(values.defaultEncounter).toBe("");
-    expect(values.intent).toBe("");
   });
 
   it("renders the candidate lists one entry per line", () => {
@@ -169,32 +157,6 @@ describe("endUserPatch", () => {
     );
 
     expect(patch).toEqual({ displayName: "John A Grimes" });
-  });
-
-  it("clears a fhirUser reference with null rather than an empty string", () => {
-    // The API distinguishes the two: null clears the column, "" fails validation.
-    const current = userView();
-    const patch = endUserPatch(
-      { ...endUserFormValues(current), fhirUser: "   " },
-      current,
-    );
-
-    expect(patch).toEqual({ fhirUserReference: null });
-  });
-
-  it("trims a fhirUser reference before sending it", () => {
-    const current = userView();
-    const patch = endUserPatch(
-      { ...endUserFormValues(current), fhirUser: "  Patient/pat-3  " },
-      current,
-    );
-
-    expect(patch).toEqual({ fhirUserReference: "Patient/pat-3" });
-  });
-
-  it("leaves an unchanged blank fhirUser reference out of the patch", () => {
-    const current = userView({ fhirUser: null });
-    expect(endUserPatch(endUserFormValues(current), current)).toEqual({});
   });
 
   it("sends a new email address, trimmed", () => {
@@ -251,48 +213,6 @@ describe("endUserPatch", () => {
     expect(patch).toEqual({ roles: ["b", "a"] });
   });
 
-  it("clears an emptied default context with null", () => {
-    // FR-003: an empty object would store a context whose mere presence is a
-    // signal, so clearing has to be explicit.
-    const current = userView({ defaultContext: { patient: "pat-1" } });
-    const patch = endUserPatch(
-      { ...endUserFormValues(current), defaultPatient: "  " },
-      current,
-    );
-
-    expect(patch).toEqual({ defaultContext: null });
-  });
-
-  it("sends a default context of only the fields that were filled in", () => {
-    const current = userView();
-    const patch = endUserPatch(
-      {
-        ...endUserFormValues(current),
-        defaultPatient: " pat-1 ",
-        intent: "reconcile",
-      },
-      current,
-    );
-
-    expect(patch).toEqual({
-      defaultContext: { patient: "pat-1", intent: "reconcile" },
-    });
-  });
-
-  it("leaves an unchanged default context out of the patch", () => {
-    const current = userView({
-      defaultContext: { patient: "pat-1", intent: "reconcile" },
-    });
-    expect(endUserPatch(endUserFormValues(current), current)).toEqual({});
-  });
-
-  it("leaves an absent default context out of the patch when still blank", () => {
-    // The distinction that matters: nothing changed, so no `defaultContext: null`
-    // may be sent - that would be a write where the operator made no edit.
-    const current = userView({ defaultContext: null });
-    expect(endUserPatch(endUserFormValues(current), current)).toEqual({});
-  });
-
   it("sends the whole merged attributes record when a list changes", () => {
     const current = userView({
       attributes: { team: "renal", patients: ["p1"] },
@@ -336,6 +256,19 @@ describe("endUserPatch", () => {
     });
   });
 
+  it("can never carry the per-endpoint fields", () => {
+    // fhirUser and the default context live on the account's access to one
+    // endpoint now, so the account's patch cannot name them.
+    const current = userView({ endpoints: [accessView()] });
+    const patch = endUserPatch(
+      { ...endUserFormValues(current), displayName: "Renamed" },
+      current,
+    );
+
+    expect(patch).not.toHaveProperty("fhirUserReference");
+    expect(patch).not.toHaveProperty("defaultContext");
+  });
+
   it("can never carry a username", () => {
     // FR-008: the username is not editable anywhere in the console, and the form
     // has no field for it - this asserts the patch cannot grow one by accident.
@@ -360,17 +293,15 @@ describe("endUserCreateBody", () => {
       password: "correct horse",
       isPersona: false,
       invite: false,
-      fhirUser: "",
       email: "",
       emailVerified: false,
       roles: "",
-      defaultPatient: "",
       ...overrides,
     };
   }
 
   it("sends a local account's password, and nothing left blank", () => {
-    expect(endUserCreateBody(createForm(), "smart")).toEqual({
+    expect(endUserCreateBody(createForm())).toEqual({
       username: "jo",
       displayName: "Jo Bloggs",
       isPersona: false,
@@ -380,85 +311,203 @@ describe("endUserCreateBody", () => {
 
   it("sends no password for a persona", () => {
     expect(
-      endUserCreateBody(createForm({ isPersona: true }), "smart"),
+      endUserCreateBody(createForm({ isPersona: true })),
     ).not.toHaveProperty("password");
   });
 
   it("sends no password for an account invited to choose its own", () => {
-    expect(
-      endUserCreateBody(createForm({ invite: true }), "smart"),
-    ).not.toHaveProperty("password");
-  });
-
-  it("sends an invited account's email on an OAuth endpoint", () => {
-    // The invitation is only the password; the account it is for is still created
-    // with the fields its endpoint's kind takes.
-    const body = endUserCreateBody(
-      createForm({ invite: true, email: "jo@example.org" }),
-      "oauth",
+    expect(endUserCreateBody(createForm({ invite: true }))).not.toHaveProperty(
+      "password",
     );
-
-    expect(body).toMatchObject({ email: "jo@example.org" });
-    expect(body).not.toHaveProperty("password");
   });
 
-  it("sends the SMART identity fields on a SMART endpoint", () => {
-    const body = endUserCreateBody(
-      createForm({
-        isPersona: true,
-        fhirUser: " Practitioner/1 ",
-        defaultPatient: " pat-1 ",
-        roles: "clinician\nnurse",
-      }),
-      "smart",
-    );
-
-    expect(body).toMatchObject({
-      fhirUserReference: "Practitioner/1",
-      defaultContext: { patient: "pat-1" },
-      roles: ["clinician", "nurse"],
-    });
-  });
-
-  it("never sends an email on a SMART endpoint", () => {
-    // SMART's scope grammar has no `email` scope, so the field is not offered there.
-    const body = endUserCreateBody(
-      createForm({ email: "jo@example.org", emailVerified: true }),
-      "smart",
-    );
-
-    expect(body).not.toHaveProperty("email");
-    expect(body).not.toHaveProperty("emailVerified");
-  });
-
-  it("sends the email and its verified flag on an OAuth endpoint", () => {
+  it("sends the email and its verified flag, trimmed", () => {
+    // The account belongs to the tenant, so its email is not tied to a kind of
+    // endpoint: it is released wherever the email scope is granted.
     expect(
       endUserCreateBody(
         createForm({ email: " jo@example.org ", emailVerified: true }),
-        "oauth",
       ),
     ).toMatchObject({ email: "jo@example.org", emailVerified: true });
   });
 
-  it("leaves a blank email out on an OAuth endpoint", () => {
-    const body = endUserCreateBody(createForm(), "oauth");
+  it("leaves a blank email out", () => {
+    const body = endUserCreateBody(createForm({ emailVerified: true }));
     expect(body).not.toHaveProperty("email");
     expect(body).not.toHaveProperty("emailVerified");
   });
 
-  it("never sends SMART identity fields on an OAuth endpoint", () => {
-    // The API refuses a fhirUser reference or a default context there, so a value
-    // left in the form from before must not reach it.
-    const body = endUserCreateBody(
-      createForm({
-        isPersona: true,
-        fhirUser: "Practitioner/1",
-        defaultPatient: "pat-1",
-      }),
-      "oauth",
-    );
+  it("parses roles one per line", () => {
+    expect(
+      endUserCreateBody(createForm({ roles: "clinician\n\n nurse " })),
+    ).toMatchObject({ roles: ["clinician", "nurse"] });
+  });
 
+  it("never sends the per-endpoint fields", () => {
+    // They are set on the account's access to an endpoint, after it is created.
+    const body = endUserCreateBody(createForm({ isPersona: true }));
     expect(body).not.toHaveProperty("fhirUserReference");
     expect(body).not.toHaveProperty("defaultContext");
+  });
+});
+
+describe("endpointAccessFormValues", () => {
+  it("renders the fhirUser reference and the context fields", () => {
+    const values = endpointAccessFormValues(
+      accessView({
+        defaultContext: {
+          patient: "pat-1",
+          encounter: "enc-2",
+          intent: "reconcile",
+        },
+      }),
+    );
+
+    expect(values).toEqual({
+      fhirUser: "Practitioner/clin-001",
+      defaultPatient: "pat-1",
+      defaultEncounter: "enc-2",
+      intent: "reconcile",
+    });
+  });
+
+  it("renders absent values as empty fields", () => {
+    // Not the string "null", which is what a naive `String(value)` would show.
+    expect(endpointAccessFormValues(accessView({ fhirUser: null }))).toEqual({
+      fhirUser: "",
+      defaultPatient: "",
+      defaultEncounter: "",
+      intent: "",
+    });
+  });
+});
+
+describe("endpointAccessBody", () => {
+  it("is empty when nothing was edited", () => {
+    const current = accessView({ defaultContext: { patient: "pat-1" } });
+    expect(
+      endpointAccessBody(endpointAccessFormValues(current), current, true),
+    ).toEqual({});
+  });
+
+  it("sends a changed fhirUser reference, trimmed", () => {
+    const current = accessView();
+    expect(
+      endpointAccessBody(
+        { ...endpointAccessFormValues(current), fhirUser: " Patient/p-3 " },
+        current,
+        false,
+      ),
+    ).toEqual({ fhirUserReference: "Patient/p-3" });
+  });
+
+  it("clears a fhirUser reference with null rather than an empty string", () => {
+    // The API reads null as "clear this" and refuses an empty string.
+    const current = accessView();
+    expect(
+      endpointAccessBody(
+        { ...endpointAccessFormValues(current), fhirUser: "  " },
+        current,
+        false,
+      ),
+    ).toEqual({ fhirUserReference: null });
+  });
+
+  it("leaves an unchanged blank fhirUser reference out", () => {
+    const current = accessView({ fhirUser: null });
+    expect(
+      endpointAccessBody(endpointAccessFormValues(current), current, false),
+    ).toEqual({});
+  });
+
+  it("sends a persona's default context of only the fields filled in", () => {
+    const current = accessView();
+    expect(
+      endpointAccessBody(
+        {
+          ...endpointAccessFormValues(current),
+          defaultPatient: " pat-1 ",
+          intent: "reconcile",
+        },
+        current,
+        true,
+      ),
+    ).toEqual({ defaultContext: { patient: "pat-1", intent: "reconcile" } });
+  });
+
+  it("clears a persona's emptied default context with null", () => {
+    // An empty object would store a context whose mere presence is a signal.
+    const current = accessView({ defaultContext: { patient: "pat-1" } });
+    expect(
+      endpointAccessBody(
+        { ...endpointAccessFormValues(current), defaultPatient: "" },
+        current,
+        true,
+      ),
+    ).toEqual({ defaultContext: null });
+  });
+
+  it("leaves an unchanged default context out", () => {
+    const current = accessView({
+      defaultContext: { patient: "pat-1", intent: "reconcile" },
+    });
+    expect(
+      endpointAccessBody(endpointAccessFormValues(current), current, true),
+    ).toEqual({});
+  });
+
+  it("never sends a default context for a local account", () => {
+    // Only a persona is seeded with a launch context; a local account's comes
+    // from the launch.
+    const current = accessView();
+    expect(
+      endpointAccessBody(
+        { ...endpointAccessFormValues(current), defaultPatient: "pat-1" },
+        current,
+        false,
+      ),
+    ).toEqual({});
+  });
+
+  it("sends nothing at all for an OAuth endpoint", () => {
+    // The server refuses both fields there, so whatever the form holds is dropped.
+    const current = accessView({ kind: "oauth", fhirUser: null });
+    expect(
+      endpointAccessBody(
+        {
+          fhirUser: "Practitioner/1",
+          defaultPatient: "pat-1",
+          defaultEncounter: "",
+          intent: "",
+        },
+        current,
+        true,
+      ),
+    ).toEqual({});
+  });
+});
+
+describe("endpointAccessRows", () => {
+  const endpoints = [
+    { slug: "ward", name: "Ward", kind: "smart", authMode: "local" },
+    { slug: "notes", name: "Notes", kind: "oauth", authMode: "oidc" },
+  ] as const;
+
+  it("gives every endpoint of the tenant a row, in the tenant's order", () => {
+    const rows = endpointAccessRows(endpoints, [accessView()]);
+    expect(rows.map((row) => row.endpoint.slug)).toEqual(["ward", "notes"]);
+  });
+
+  it("pairs each endpoint with the user's access to it, or none", () => {
+    const access = accessView();
+    const rows = endpointAccessRows(endpoints, [access]);
+    expect(rows[0]?.access).toBe(access);
+    expect(rows[1]?.access).toBeUndefined();
+  });
+
+  it("ignores access to an endpoint the list does not hold", () => {
+    // Deny by default: a row is offered only for an endpoint the tenant lists.
+    const rows = endpointAccessRows(endpoints, [accessView({ slug: "gone" })]);
+    expect(rows.every((row) => row.access === undefined)).toBe(true);
   });
 });

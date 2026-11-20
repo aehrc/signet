@@ -84,6 +84,8 @@ const OWNER_IDENTITY_FILES: Readonly<Record<string, string>> = {
     "Runs the `sweep` command, which acts across tenants and therefore requires the owning identity, and asserts the converse - that the same command given the serving role refuses rather than reporting a database it cannot see as clean.",
   "apps/server/src/migrate.integration.test.ts":
     "Runs the `migrate` command, which requires the owning identity by design, and then observes the privileges it left in force for a serving role it names rather than connects as.",
+  "packages/db/src/tenantEndUsers.migration.integration.test.ts":
+    "Creates a scratch database, migrates it to the schema before 0014, seeds it in raw SQL and migrates it the rest of the way. Migrating is DDL and requires the owning identity; the suite asserts on what the migration did to the data, not on what a policy permits.",
 };
 
 /** Every `.ts` file under the scanned trees, by repository-relative path. */

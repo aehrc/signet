@@ -11,8 +11,9 @@
  * and returns the decoded claims. So what is on screen is what would be minted, not an
  * approximation of it computed in the browser.
  *
- * It simulates as a registered client and, optionally, a real end user, because a
- * simulation over an invented user would answer a question nobody asked. Scopes are
+ * It simulates as a registered client and, optionally, a real end user with access to
+ * this endpoint, because a simulation over an invented user would answer a question
+ * nobody asked. Scopes are
  * typed as an app would request them, including ones the policy will refuse - seeing the
  * refusals and their reasons is most of the value.
  *
@@ -28,7 +29,7 @@ import { useState } from "react";
 import { policiesDiffer } from "./document.js";
 import { scopeText } from "./scopeText.js";
 import { describeError } from "../api/errors.js";
-import { useClients, useEndUsers, useSimulate } from "../api/queries.js";
+import { useClients, useEndpointUsers, useSimulate } from "../api/queries.js";
 import { SelectField, TextField } from "../components/fields.js";
 import { ErrorAlert, Panel } from "../components/layout.js";
 import { Chips, StatusBadge } from "../components/table.js";
@@ -59,7 +60,9 @@ export function SimulatePanel({
   document,
 }: Readonly<SimulatePanelProps>) {
   const clients = useClients(tenant, endpointSlug);
-  const users = useEndUsers(tenant, endpointSlug);
+  // Only the accounts with access to this endpoint: simulating as anybody else would
+  // answer for a user the token endpoint would never see.
+  const users = useEndpointUsers(tenant, endpointSlug);
   const simulate = useSimulate(tenant, endpointSlug);
 
   const [clientId, setClientId] = useState("");

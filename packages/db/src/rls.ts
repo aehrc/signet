@@ -137,13 +137,14 @@ const TENANT_PREDICATES: Readonly<Record<string, string>> = {
   tenant_logos: `tenant_id = ${CURRENT_TENANT}`,
   audit_events: `tenant_id = ${CURRENT_TENANT}`,
   endpoints: `tenant_id = ${CURRENT_TENANT}`,
+  end_users: `tenant_id = ${CURRENT_TENANT}`,
+  end_user_invitations: `tenant_id = ${CURRENT_TENANT}`,
 
   // One hop: through the endpoint the row is configured on.
   endpoint_keys: viaEndpoint("endpoint_keys"),
   endpoint_trust_anchors: viaEndpoint("endpoint_trust_anchors"),
   endpoint_ticket_issuers: viaEndpoint("endpoint_ticket_issuers"),
   idp_configs: viaEndpoint("idp_configs"),
-  end_users: viaEndpoint("end_users"),
   clients: viaEndpoint("clients"),
   client_requests: viaEndpoint("client_requests"),
   policies: viaEndpoint("policies"),
@@ -153,8 +154,16 @@ const TENANT_PREDICATES: Readonly<Record<string, string>> = {
   refresh_tokens: viaEndpoint("refresh_tokens"),
   consents: viaEndpoint("consents"),
   end_user_sessions: viaEndpoint("end_user_sessions"),
-  end_user_invitations: viaEndpoint("end_user_invitations"),
   federation_states: viaEndpoint("federation_states"),
+
+  // Both ends: an access row joins an account to an endpoint, and both must be the
+  // current tenant's. Checking only the endpoint would let a row admit another
+  // tenant's account, since a foreign key check does not pass through the policies.
+  end_user_endpoints: `${viaEndpoint("end_user_endpoints")} and exists (
+    select 1 from end_users u
+    where u.id = end_user_endpoints.end_user_id
+      and u.tenant_id = ${CURRENT_TENANT}
+  )`,
 
   // Two hops: through the client, which is on an endpoint.
   client_policy_overrides: viaClient("client_policy_overrides", "client_id"),

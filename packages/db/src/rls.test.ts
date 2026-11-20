@@ -44,7 +44,6 @@ const ONE_HOP_TABLES = [
   "endpoint_trust_anchors",
   "endpoint_ticket_issuers",
   "idp_configs",
-  "end_users",
   "clients",
   "client_requests",
   "policies",
@@ -53,7 +52,8 @@ const ONE_HOP_TABLES = [
   "access_tokens",
   "refresh_tokens",
   "consents",
-  "end_user_invitations",
+  "end_user_sessions",
+  "end_user_endpoints",
 ];
 
 describe("policy coverage", () => {
@@ -166,6 +166,31 @@ describe("rowLevelSecurityStatements", () => {
       expect(policy).toBeDefined();
       expect(policy).toContain(`e.id = ${table}.endpoint_id`);
     }
+  });
+
+  it("scopes end users and their invitations by their own tenant column", () => {
+    for (const table of ["end_users", "end_user_invitations"]) {
+      const policy = statements.find((statement) =>
+        statement.startsWith(
+          `create policy ${TENANT_POLICY_NAME} on ${table} `,
+        ),
+      );
+      expect(policy).toContain(
+        `using (tenant_id = nullif(current_setting('${TENANT_SETTING}', true), '')::uuid)`,
+      );
+    }
+  });
+
+  it("checks both ends of an endpoint access row", () => {
+    // The endpoint alone is not enough: a foreign key check does not pass through
+    // the policies, so a row could otherwise admit another tenant's account.
+    const policy = statements.find((statement) =>
+      statement.startsWith(
+        `create policy ${TENANT_POLICY_NAME} on end_user_endpoints `,
+      ),
+    );
+    expect(policy).toContain("e.id = end_user_endpoints.endpoint_id");
+    expect(policy).toContain("u.id = end_user_endpoints.end_user_id");
   });
 
   it("scopes authorization codes through their session's endpoint", () => {

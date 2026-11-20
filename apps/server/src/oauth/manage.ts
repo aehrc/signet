@@ -22,9 +22,12 @@
  * access token lasts, which is not what a person pressing "disconnect" means.
  *
  * The session cookie is scoped to the endpoint's own path, so a session on one endpoint
- * is not sent to another. Two endpoints of the same tenant hold separate accounts with
- * separate passwords, and a cookie shared between them would make one password admit
- * the holder to both.
+ * is not sent to another. An account belongs to the tenant and may sign in at several
+ * of its endpoints with one password, but only at those it has been given access to,
+ * and what it sees here is its consents and tokens at this endpoint. A cookie shared
+ * between endpoints would admit the holder to one they may have no access to, and a
+ * session there must end when that access is withdrawn - which the per-endpoint
+ * session row does, by cascading away with it.
  *
  * Author: John Grimes
  */
@@ -85,8 +88,8 @@ export const MANAGE_COOKIE_NAME = "signet_end_user";
  *
  * The attributes come from the shared helper; what is specific here is the path. It is
  * the endpoint's own issuer path rather than `/`, which is what keeps a session on one
- * endpoint from being presented to another - the two hold separate accounts with
- * separate passwords.
+ * endpoint from being presented to another - the account may have no access there, and
+ * a session here ends when its access here is withdrawn. See the module header.
  *
  * @param value - The session token, or an empty string to clear it.
  * @param issuer - The endpoint's issuer identifier.

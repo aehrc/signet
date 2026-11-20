@@ -9,7 +9,13 @@
  *
  * Whether an account may be invited is decided by `invitationRefusal` from
  * `@signet/core`, the same rule the admin API applies, so the button is disabled -
- * with the reason beside it - in exactly the cases the server would refuse.
+ * with the reason beside it - in exactly the cases the server would refuse. The rule
+ * reads the endpoints the account has access to: a password is worth choosing only
+ * if one of them signs in with one, so giving access above can be what makes an
+ * invitation possible.
+ *
+ * The link opens the tenant's own invitation page rather than an endpoint's, because
+ * the password chosen there is the account's at every endpoint it has access to.
  *
  * Making a new invitation replaces the outstanding one, which is also how a link
  * that was lost before it was sent is dealt with: the server keeps only a hash, so
@@ -26,7 +32,7 @@ import {
 import { useState } from "react";
 
 import { InvitationDialog } from "./invitationDialog.js";
-import { useEndpointContext } from "./useConsole.js";
+import { useConsoleContext } from "./useConsole.js";
 import { describeError } from "../api/errors.js";
 import {
   useCancelInvitation,
@@ -59,19 +65,19 @@ export function InvitationPanel({
   user,
   mayWrite,
 }: Readonly<InvitationPanelProps>) {
-  const { tenant, endpointSlug, endpoint } = useEndpointContext();
-  const invitation = useEndUserInvitation(tenant, endpointSlug, user.id);
-  const create = useCreateInvitation(tenant, endpointSlug);
-  const cancel = useCancelInvitation(tenant, endpointSlug, user.id);
+  const { tenant, tenantName } = useConsoleContext();
+  const invitation = useEndUserInvitation(tenant, user.id);
+  const create = useCreateInvitation(tenant, user.id);
+  const cancel = useCancelInvitation(tenant, user.id);
   const [issued, setIssued] = useState<IssuedInvitationView | undefined>();
 
-  const refusal = invitationRefusal(endpoint, user);
+  const refusal = invitationRefusal(user, user.endpoints);
   const outstanding = invitation.data ?? null;
 
   return (
     <Panel
       title="Invitation"
-      description={`A link that lets the holder of this account choose its password, or reset one they have forgotten. It works once, for ${LIFETIME}.`}
+      description={`A link that lets the holder of this account choose its password, or reset one they have forgotten. The password works at every endpoint the account has access to. The link works once, for ${LIFETIME}.`}
     >
       {invitation.isPending ? (
         <Loading label="Loading the invitation…" />
@@ -123,7 +129,7 @@ export function InvitationPanel({
               disabled={refusal !== undefined || create.isPending}
               onClick={() => {
                 cancel.reset();
-                create.mutate(user.id, { onSuccess: setIssued });
+                create.mutate(undefined, { onSuccess: setIssued });
               }}
             >
               {create.isPending ? (
@@ -154,7 +160,7 @@ export function InvitationPanel({
         <InvitationDialog
           invitation={issued}
           username={user.username}
-          endpointName={endpoint.name}
+          tenantName={tenantName}
           recipient={user.email}
           onClose={() => {
             setIssued(undefined);
