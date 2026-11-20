@@ -14,6 +14,7 @@ import { bodyLimit } from "hono/body-limit";
 import { ADMIN_BASE_PATH, createAdminRouter } from "./admin/router.js";
 import { createBrandingRouter } from "./branding/router.js";
 import { serveStaticUi } from "./http/staticFiles.js";
+import { createInvitationRouter } from "./oauth/invitation.js";
 import { createOAuthRouter } from "./oauth/router.js";
 
 import type { ServerContext, SignetEnvironment } from "./context.js";
@@ -81,9 +82,11 @@ export function createApp(context: ServerContext): Hono<SignetEnvironment> {
   // or personal access token here, by client credentials there.
   app.route(ADMIN_BASE_PATH, createAdminRouter(context));
   app.route("/", createOAuthRouter(context));
-  // A tenant's logo and what the pages are told about it. Under `/t/{tenant}` but
-  // outside every issuer, so it cannot shadow an OAuth route either.
+  // A tenant's logo and what the pages are told about it, and the API behind the
+  // tenant's invitation page. Under `/t/{tenant}` but outside every issuer, so neither
+  // can shadow an OAuth route.
   app.route("/", createBrandingRouter(context));
+  app.route("/", createInvitationRouter(context));
 
   // Last, and only when a build is present: the UI answers whatever the API and
   // the OAuth endpoints did not claim. Mounting it here rather than first is what

@@ -82,14 +82,22 @@ export function clientPath(
   );
 }
 
-/** One end user or persona. */
-export function endUserPath(
+/** One end user or persona, which belongs to the tenant rather than an endpoint. */
+export function tenantUserPath(
   tenant: string,
-  endpoint: string,
   userId: string,
   suffix = "",
 ): string {
-  return endpointPath(tenant, endpoint, `/users/${segment(userId)}${suffix}`);
+  return tenantPath(tenant, `/users/${segment(userId)}${suffix}`);
+}
+
+/** One user's access to one endpoint: given with PUT, withdrawn with DELETE. */
+export function endpointUserPath(
+  tenant: string,
+  endpoint: string,
+  userId: string,
+): string {
+  return endpointPath(tenant, endpoint, `/users/${segment(userId)}`);
 }
 
 /** What the audit browser is asking for. */

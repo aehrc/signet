@@ -52,9 +52,15 @@ describe("isReservedPath", () => {
     }
   });
 
+  it("does not reserve the tenant's invitation page", () => {
+    expect(isReservedPath("/t/demo/invitation")).toBe(false);
+  });
+
   it("still reserves the API those pages call", () => {
     expect(isReservedPath("/t/demo/e/fhir/manage/session")).toBe(true);
     expect(isReservedPath("/t/demo/e/fhir/apps/requests")).toBe(true);
+    expect(isReservedPath("/t/demo/invitation/details")).toBe(true);
+    expect(isReservedPath("/t/demo/branding")).toBe(true);
   });
 });
 

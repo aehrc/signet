@@ -427,6 +427,10 @@ export function federationCallbackHandler(context: ServerContext) {
       loaded.setup.config.claimMappings,
       identity.claims,
     );
+    // The account is the tenant's, keyed on the provider's issuer and subject, so a
+    // sign-in at another endpoint trusting the same provider reaches the same one.
+    // Access to this endpoint is granted with it, since the provider configuration is
+    // the rule that admits whoever it authenticates; other endpoints are untouched.
     const user = await withTenantScope(
       context.db,
       issuerContext.scope,

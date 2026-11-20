@@ -9,8 +9,10 @@
  * Both interactive grants reach the same question from different directions - the
  * code grant holds a subject from its session, the refresh grant one from the token
  * it claimed - and must answer it the same way. A subject that no longer resolves
- * means the account was deleted since the authorization, and the right answer is to
- * refuse rather than to mint a token for a user who is gone.
+ * means the account was deleted since the authorization, or its access to this
+ * endpoint was withdrawn, and the right answer is to refuse rather than to mint a
+ * token for a user who is gone. Access to the tenant's other endpoints does not
+ * matter here: the lookup is the endpoint's own.
  *
  * Author: John Grimes
  */
@@ -21,11 +23,11 @@ import { grantRefusal } from "./types.js";
 
 import type { GrantOutcome } from "./types.js";
 import type { ResolvedIssuerContext, ServerContext } from "../../context.js";
-import type { EndUser } from "@signet/db";
+import type { EndpointEndUser } from "@signet/db";
 
 /** The user, or the refusal to answer the token request with. */
 export type EndUserResolution =
-  | { readonly ok: true; readonly user: EndUser }
+  | { readonly ok: true; readonly user: EndpointEndUser }
   | { readonly ok: false; readonly outcome: GrantOutcome };
 
 /**
@@ -48,8 +50,8 @@ export async function requireEndUser(
         ok: false,
         outcome: grantRefusal(
           "invalid_grant",
-          "The user this authorization belongs to no longer exists",
-          { reason: "user-deleted" },
+          "The user this authorization belongs to no longer exists, or no longer has access to this endpoint",
+          { reason: "user-unavailable" },
         ),
       }
     : { ok: true, user };

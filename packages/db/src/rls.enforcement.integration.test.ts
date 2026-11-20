@@ -51,7 +51,7 @@ import { recordConsent } from "./repositories/consents.js";
 import { insertEndpointKey } from "./repositories/endpointKeys.js";
 import { createEndpoint, upsertIdpConfig } from "./repositories/endpoints.js";
 import { issueEndUserInvitation } from "./repositories/endUserInvitations.js";
-import { createEndUser } from "./repositories/endUsers.js";
+import { createEndUser, grantEndpointAccess } from "./repositories/endUsers.js";
 import { createEndUserSession } from "./repositories/endUserSessions.js";
 import { sqlStateOf } from "./repositories/errors.js";
 import { createFederationState } from "./repositories/federationStates.js";
@@ -279,11 +279,17 @@ describeWithDatabase("row-level security as the serving role", () => {
       }),
     );
 
-    const endUser = await withTenantScope(owner, endpointScope, (bound) =>
-      createEndUser(bound, {
-        username: `user-${unique()}`,
-        displayName: "End user",
-      }),
+    const endUser = await withTenantScope(
+      owner,
+      endpointScope,
+      async (bound) => {
+        const user = await createEndUser(bound, {
+          username: `user-${unique()}`,
+          displayName: "End user",
+        });
+        await grantEndpointAccess(bound, user.id);
+        return user;
+      },
     );
 
     const client = await withTenantScope(owner, endpointScope, (bound) =>

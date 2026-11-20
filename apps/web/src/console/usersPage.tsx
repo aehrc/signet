@@ -4,41 +4,38 @@
  */
 
 /**
- * End users and personas.
+ * The tenant's end users and personas.
  *
- * The distinction is the whole point of the page, so it is stated rather than
+ * An account belongs to the tenant: one username and one password across all of its
+ * endpoints. It signs in only at the endpoints it has been given access to, so the
+ * list says which those are, and an account with none is plainly an account that can
+ * sign in nowhere yet.
+ *
+ * The distinction between a local account and a persona is stated rather than
  * implied: a local account has a password and signs in; a persona has none and is
- * chosen from a picker. Personas are only *selectable* on a non-production endpoint,
- * which is a property of the endpoint rather than of the persona - so the page says
- * so where it matters instead of hiding the option.
+ * chosen from a picker, on a non-production endpoint it has access to.
  *
  * The rows carry no buttons. A user's name links to their detail page, where the
- * edit form and the account state actions live - so that disabling and deleting sit
- * next to the summary that explains what each of them costs, rather than beside a
- * row that shows a name and a badge.
+ * edit form, the endpoint access and the account state actions live - so that
+ * disabling and deleting sit next to the summary that explains what each of them
+ * costs, rather than beside a row that shows a name and a badge.
  *
- * A local account can be added without a password and sent an invitation instead,
- * so its holder chooses their own. The account is created first and the invitation
- * made straight after; if the second step fails the account still exists, so the
- * page says so and points to the detail page, where inviting can be tried again.
+ * A new account has access to no endpoint, so the form takes the administrator
+ * straight to its detail page to give it some. That is also where a local account
+ * created without a password is sent its invitation: an invitation is refused until
+ * the account can sign in somewhere with the password it would choose.
  *
  * Author: John Grimes
  */
 
-import { invitationRefusal } from "@signet/core";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { EmailFields } from "./emailFields.js";
-import { InvitationDialog } from "./invitationDialog.js";
 import { endUserRoute } from "./routes.js";
-import { roleAllows, useEndpointContext } from "./useConsole.js";
+import { roleAllows, useConsoleContext } from "./useConsole.js";
 import { describeError, issuesByField } from "../api/errors.js";
-import {
-  useCreateEndUser,
-  useCreateInvitation,
-  useEndUsers,
-} from "../api/queries.js";
+import { useCreateEndUser, useEndUsers } from "../api/queries.js";
 import {
   CheckboxField,
   FormFooter,
@@ -49,7 +46,6 @@ import {
 import {
   EmptyState,
   ErrorAlert,
-  InfoAlert,
   Loading,
   PageHeader,
   Panel,
@@ -58,28 +54,14 @@ import { Chips, DataTable, StatusBadge } from "../components/table.js";
 import { countOf, formatInstant } from "../formatting/values.js";
 import { endUserCreateBody } from "../forms/endUserEdit.js";
 
-import type { EndUserView, IssuedInvitationView } from "../api/types.js";
+import type { EndUserView } from "../api/types.js";
 import type { Column } from "../components/table.js";
-
-/** What became of an invitation made by the Add user form. */
-type InviteOutcome =
-  | {
-      readonly kind: "issued";
-      readonly user: EndUserView;
-      readonly invitation: IssuedInvitationView;
-    }
-  | {
-      readonly kind: "failed";
-      readonly user: EndUserView;
-      readonly error: unknown;
-    };
 
 /** The users and personas page. */
 export function UsersPage() {
-  const { tenant, endpointSlug, endpoint, role } = useEndpointContext();
-  const users = useEndUsers(tenant, endpointSlug);
+  const { tenant, role } = useConsoleContext();
+  const users = useEndUsers(tenant);
   const [adding, setAdding] = useState(false);
-  const [outcome, setOutcome] = useState<InviteOutcome | undefined>();
 
   const mayWrite = roleAllows(role, "admin");
 
@@ -91,7 +73,7 @@ export function UsersPage() {
         <div>
           <Link
             className="link link-hover font-medium"
-            to={endUserRoute(tenant, endpointSlug, user.id)}
+            to={endUserRoute(tenant, user.id)}
           >
             {user.displayName}
           </Link>
@@ -104,45 +86,14 @@ export function UsersPage() {
     {
       key: "kind",
       header: "Kind",
-      cell: (user) =>
-        user.isPersona ? (
-          <StatusBadge tone="info">persona</StatusBadge>
-        ) : (
-          <StatusBadge tone="neutral">local account</StatusBadge>
-        ),
+      cell: (user) => <AccountKind user={user} />,
     },
-    // The identity column each kind releases: a fhirUser reference on SMART, an
-    // email address on OAuth.
-    endpoint.kind === "smart"
-      ? {
-          key: "fhirUser",
-          header: "fhirUser",
-          cell: (user) =>
-            user.fhirUser === null ? (
-              <span className="text-base-content/50">none</span>
-            ) : (
-              <code className="font-mono text-xs">{user.fhirUser}</code>
-            ),
-        }
-      : {
-          key: "email",
-          header: "Email",
-          cell: (user) =>
-            user.email === null ? (
-              <span className="text-base-content/50">none</span>
-            ) : (
-              <span className="text-xs">
-                {user.email}
-                {user.emailVerified ? null : (
-                  <span className="text-base-content/50"> (unverified)</span>
-                )}
-              </span>
-            ),
-        },
     {
-      key: "roles",
-      header: "Roles",
-      cell: (user) => <Chips values={user.roles} />,
+      key: "endpoints",
+      header: "Endpoints",
+      cell: (user) => (
+        <Chips values={user.endpoints.map((endpoint) => endpoint.name)} />
+      ),
     },
     {
       key: "state",
@@ -162,14 +113,13 @@ export function UsersPage() {
     <>
       <PageHeader
         title="Users"
-        description="Who can authorise an app on this endpoint. A local account signs in with a password; a persona is chosen from a picker and has none."
+        description="The tenant's accounts. Each one has one username and one password, and signs in only at the endpoints it has been given access to. A local account signs in with a password; a persona is chosen from a picker and has none."
         actions={
           mayWrite ? (
             <button
               type="button"
               className="btn btn-primary btn-sm"
               onClick={() => {
-                setOutcome(undefined);
                 setAdding((open) => !open);
               }}
             >
@@ -179,51 +129,10 @@ export function UsersPage() {
         }
       />
 
-      {endpoint.isProduction ? (
-        <div className="mb-6">
-          <InfoAlert>
-            This endpoint is marked production, so personas are not selectable
-            at sign-in even if you create one. Turn that off under the
-            endpoint&apos;s settings to run a connectathon against it.
-          </InfoAlert>
-        </div>
-      ) : null}
-
       {adding ? (
         <EndUserForm
-          onDone={(result) => {
+          onCancel={() => {
             setAdding(false);
-            setOutcome(result);
-          }}
-        />
-      ) : null}
-
-      {outcome?.kind === "failed" ? (
-        <div className="mb-6">
-          <ErrorAlert
-            message={`${outcome.user.username} was added, but the invitation could not be made: ${describeError(outcome.error)}`}
-          >
-            <p className="text-sm max-sm:text-base">
-              Try again from{" "}
-              <Link
-                className="link"
-                to={endUserRoute(tenant, endpointSlug, outcome.user.id)}
-              >
-                their detail page
-              </Link>
-              .
-            </p>
-          </ErrorAlert>
-        </div>
-      ) : null}
-      {outcome?.kind === "issued" ? (
-        <InvitationDialog
-          invitation={outcome.invitation}
-          username={outcome.user.username}
-          endpointName={endpoint.name}
-          recipient={outcome.user.email}
-          onClose={() => {
-            setOutcome(undefined);
           }}
         />
       ) : null}
@@ -250,7 +159,7 @@ export function UsersPage() {
             empty={
               <EmptyState
                 title="No users"
-                description="Nobody can authorise an app on this endpoint yet. Add a local account, or seed a persona for a connectathon."
+                description="Nobody can authorise an app on any of this tenant's endpoints yet. Add a local account, or seed a persona for a connectathon, then give it access to an endpoint."
               />
             }
           />
@@ -260,75 +169,69 @@ export function UsersPage() {
   );
 }
 
+/** Whether an account is a persona or a local account, and whether it has a password. */
+function AccountKind({ user }: Readonly<{ readonly user: EndUserView }>) {
+  if (user.isPersona) {
+    return <StatusBadge tone="info">persona</StatusBadge>;
+  }
+  return (
+    <span className="flex flex-wrap gap-1">
+      <StatusBadge tone="neutral">local account</StatusBadge>
+      {user.hasPassword ? null : (
+        <StatusBadge tone="warning">no password</StatusBadge>
+      )}
+    </span>
+  );
+}
+
 /**
  * The form for a local account or a persona.
  *
- * `onDone` is called with no outcome when the form is cancelled or an account is
- * added with a password, and with the invitation's outcome when one was asked for.
+ * On success it navigates to the new account's detail page, where access to an
+ * endpoint is given; there is nothing to close, because the page is left.
  */
 function EndUserForm({
-  onDone,
-}: Readonly<{ readonly onDone: (outcome?: InviteOutcome) => void }>) {
-  const { tenant, endpointSlug, endpoint } = useEndpointContext();
-  const create = useCreateEndUser(tenant, endpointSlug);
-  const invite = useCreateInvitation(tenant, endpointSlug);
+  onCancel,
+}: Readonly<{ readonly onCancel: () => void }>) {
+  const { tenant } = useConsoleContext();
+  const create = useCreateEndUser(tenant);
+  const navigate = useNavigate();
 
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [fhirUser, setFhirUser] = useState("");
   const [email, setEmail] = useState("");
   const [emailVerified, setEmailVerified] = useState(false);
   const [password, setPassword] = useState("");
   const [roles, setRoles] = useState("");
   const [isPersona, setIsPersona] = useState(false);
-  const [patient, setPatient] = useState("");
   const [setup, setSetup] = useState<"password" | "invite">("password");
 
-  // Asked of a hypothetical enabled local account, since the account does not
-  // exist yet: what is left is whether the endpoint checks local passwords at all.
-  const mayInvite =
-    invitationRefusal(endpoint, { isPersona: false, disabledAt: null }) ===
-    undefined;
-  const inviting = !isPersona && mayInvite && setup === "invite";
+  const inviting = !isPersona && setup === "invite";
   const issues = issuesByField(create.error);
-  const isSmart = endpoint.kind === "smart";
 
   return (
-    <Panel title="Add user">
+    <Panel
+      title="Add user"
+      description="The account is created with access to no endpoint. You are taken to its page next, to give it access."
+    >
       <form
         className="flex flex-col gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           create.mutate(
-            endUserCreateBody(
-              {
-                username,
-                displayName,
-                password,
-                isPersona,
-                invite: inviting,
-                fhirUser,
-                email,
-                emailVerified,
-                roles,
-                defaultPatient: patient,
-              },
-              endpoint.kind,
-            ),
+            endUserCreateBody({
+              username,
+              displayName,
+              password,
+              isPersona,
+              invite: inviting,
+              email,
+              emailVerified,
+              roles,
+            }),
             {
               onSuccess: (user) => {
-                if (!inviting) {
-                  onDone();
-                  return;
-                }
-                invite.mutate(user.id, {
-                  onSuccess: (invitation) => {
-                    onDone({ kind: "issued", user, invitation });
-                  },
-                  onError: (error) => {
-                    onDone({ kind: "failed", user, error });
-                  },
-                });
+                void navigate(endUserRoute(tenant, user.id));
               },
             },
           );
@@ -338,7 +241,7 @@ function EndUserForm({
           label="This is a persona"
           checked={isPersona}
           onChange={setIsPersona}
-          hint="A persona has no password and is chosen from a picker. Only selectable on a non-production endpoint."
+          hint="A persona has no password and is chosen from a picker. Only selectable on a non-production endpoint it has access to."
         />
 
         <TextField
@@ -346,7 +249,7 @@ function EndUserForm({
           value={username}
           onChange={setUsername}
           error={issues["username"]}
-          hint="How the account is identified in consents and in the audit trail. Cannot be changed afterwards."
+          hint="How the account is identified in consents and in the audit trail, at every endpoint. Cannot be changed afterwards."
           required
         />
         <TextField
@@ -356,7 +259,7 @@ function EndUserForm({
           error={issues["displayName"]}
           required
         />
-        {isPersona || !mayInvite ? null : (
+        {isPersona ? null : (
           <SelectField
             label="Account setup"
             value={setup}
@@ -367,7 +270,7 @@ function EndUserForm({
               { value: "password", label: "Set a password now" },
               { value: "invite", label: "Invite by email" },
             ]}
-            hint="An invitation is a link you send from your own mail client. The person it is for chooses their own password."
+            hint="An invitation is a link you send from your own mail client, and the person it is for chooses their own password. Send it from the account's page once it has access to an endpoint that signs in with a password."
           />
         )}
         {isPersona || inviting ? null : (
@@ -381,23 +284,13 @@ function EndUserForm({
             required
           />
         )}
-        {isSmart ? (
-          <TextField
-            label="fhirUser reference"
-            value={fhirUser}
-            onChange={setFhirUser}
-            error={issues["fhirUserReference"]}
-            hint="A relative FHIR reference such as Practitioner/123. Released to apps granted the fhirUser scope."
-          />
-        ) : (
-          <EmailFields
-            email={email}
-            emailVerified={emailVerified}
-            onEmail={setEmail}
-            onEmailVerified={setEmailVerified}
-            issues={issues}
-          />
-        )}
+        <EmailFields
+          email={email}
+          emailVerified={emailVerified}
+          onEmail={setEmail}
+          onEmailVerified={setEmailVerified}
+          issues={issues}
+        />
         <ListField
           label="Roles"
           value={roles}
@@ -406,24 +299,13 @@ function EndUserForm({
           hint="One per line. A policy rule can require one of these before granting a scope."
           rows={2}
         />
-        {isSmart && isPersona ? (
-          <TextField
-            label="Default patient"
-            value={patient}
-            onChange={setPatient}
-            error={issues["defaultContext"]}
-            hint="Seeds this persona's launch context, so a connectathon launch works without an EHR supplying one."
-          />
-        ) : null}
 
         <FormFooter
           error={create.error}
           issues={issues}
-          pending={create.isPending || invite.isPending}
+          pending={create.isPending}
           submitLabel="Add"
-          onCancel={() => {
-            onDone();
-          }}
+          onCancel={onCancel}
         />
       </form>
     </Panel>

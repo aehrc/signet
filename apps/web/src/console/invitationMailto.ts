@@ -23,7 +23,8 @@ import { formatInstantWithZone } from "../formatting/values.js";
 export interface InvitationMessage {
   /** The invitee's address, as the administrator typed it. May be empty. */
   readonly to: string;
-  readonly endpointName: string;
+  /** The tenant the account belongs to. The account is not tied to one endpoint. */
+  readonly tenantName: string;
   readonly username: string;
   /** The invitation link, carrying its token. */
   readonly url: string;
@@ -39,19 +40,19 @@ export interface InvitationMessage {
  * @example
  * invitationMailto({
  *   to: "casey@example.org",
- *   endpointName: "Main",
+ *   tenantName: "Demo Hospital",
  *   username: "casey",
- *   url: "https://signet.example.org/t/demo/e/main/invitation#abc",
+ *   url: "https://signet.example.org/t/demo/invitation#abc",
  *   expiresAt: "2026-11-20T03:00:00.000Z",
  * });
- * // => "mailto:casey@example.org?subject=Your%20account%20on%20Main&body=…"
+ * // => "mailto:casey@example.org?subject=Your%20account%20with%20Demo%20Hospital&body=…"
  */
 export function invitationMailto(message: InvitationMessage): string {
-  const subject = `Your account on ${message.endpointName}`;
+  const subject = `Your account with ${message.tenantName}`;
   const body = [
     "Hello,",
     "",
-    `You have been given an account on ${message.endpointName}. Your username is ${message.username}.`,
+    `You have been given an account with ${message.tenantName}. Your username is ${message.username}.`,
     "",
     "Open this link to choose your password:",
     "",

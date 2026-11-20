@@ -22,7 +22,9 @@
 
 import {
   createActivityProbe,
-  listEndUsers,
+  findEndUserByUsername,
+  listEndpointAccess,
+  listTenantEndUsers,
   servingRoleUrl,
   withTenantScope,
 } from "@signet/db";
@@ -43,7 +45,14 @@ import { startUpstreamIdp, UPSTREAM_SUBJECT } from "../test/upstreamIdp.js";
 
 import type { TestStack } from "../test/harness.js";
 import type { UpstreamIdp, UpstreamIdpOptions } from "../test/upstreamIdp.js";
-import type { ActivityProbe } from "@signet/db";
+import type { ActivityProbe, EndpointEndUser } from "@signet/db";
+
+/** The accounts in a stack's tenant. */
+async function tenantAccounts(stack: TestStack) {
+  return await withTenantScope(stack.context.db, stack.tenantScope, (bound) =>
+    listTenantEndUsers(bound),
+  );
+}
 
 /**
  * Points a stack's endpoint at a stub provider.
@@ -115,18 +124,27 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
     });
   });
 
+  /** The federated account, as the endpoint a stack is aimed at sees it. */
+  async function federatedAccount(
+    at: TestStack = stack,
+  ): Promise<EndpointEndUser | undefined> {
+    return await withTenantScope(at.context.db, at.scope, (bound) =>
+      findEndUserByUsername(bound, `${idp.issuer}#${UPSTREAM_SUBJECT}`),
+    );
+  }
+
   /** Starts an authorization and follows it to the provider, returning the state. */
-  async function toProvider(): Promise<{
+  async function toProvider(at: TestStack = stack): Promise<{
     readonly session: string;
     readonly state: string;
   }> {
-    const session = await startAuthorization(stack, {
-      clientId: stack.publicClient.clientId,
+    const session = await startAuthorization(at, {
+      clientId: at.publicClient.clientId,
       scope: "openid fhirUser",
       challenge: (await pkcePair()).challenge,
     });
-    const response = await stack.app.request(
-      `${issuerPath(stack)}/federation/start?session=${session}`,
+    const response = await at.app.request(
+      `${issuerPath(at)}/federation/start?session=${session}`,
     );
     expect(response.status).toBe(302);
     const location = response.headers.get("location") ?? "";
@@ -142,19 +160,23 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
   /** Presents a callback and returns the response. */
   async function callback(
     query: Readonly<Record<string, string>>,
+    at: TestStack = stack,
   ): Promise<Response> {
-    return await stack.app.request(
-      `${issuerPath(stack)}/federation/callback?${new URLSearchParams(query).toString()}`,
+    return await at.app.request(
+      `${issuerPath(at)}/federation/callback?${new URLSearchParams(query).toString()}`,
     );
   }
 
   /** Runs a whole round trip, with the provider configured as given. */
-  async function roundTrip(options?: UpstreamIdpOptions): Promise<Response> {
-    const started = await toProvider();
+  async function roundTrip(
+    options?: UpstreamIdpOptions,
+    at: TestStack = stack,
+  ): Promise<Response> {
+    const started = await toProvider(at);
     if (options !== undefined) {
       idp.configure(options);
     }
-    return await callback({ state: started.state, code: "upstream-code" });
+    return await callback({ state: started.state, code: "upstream-code" }, at);
   }
 
   it("sends the browser to the provider with state, nonce and a challenge", async () => {
@@ -197,14 +219,7 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
     );
     expect(location.searchParams.get("code")).not.toBeNull();
 
-    const users = await withTenantScope(
-      stack.context.db,
-      stack.scope,
-      (bound) => listEndUsers(bound),
-    );
-    const federated = users.find(
-      (user) => user.username === `${idp.issuer}#${UPSTREAM_SUBJECT}`,
-    );
+    const federated = await federatedAccount();
     expect(federated).toBeDefined();
     expect(federated?.displayName).toBe("Dr Upstream");
     expect(federated?.fhirUserReference).toBe("Practitioner/upstream-1");
@@ -235,17 +250,14 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
       },
     });
 
-    const users = await withTenantScope(
-      stack.context.db,
-      stack.scope,
-      (bound) => listEndUsers(bound),
-    );
-    const matching = users.filter(
+    const matching = (await tenantAccounts(stack)).filter(
       (user) => user.username === `${idp.issuer}#${UPSTREAM_SUBJECT}`,
     );
     // One row, not two: the second sign-in found what the first created.
     expect(matching).toHaveLength(1);
-    expect(matching[0]?.fhirUserReference).toBe("Practitioner/upstream-2");
+    expect((await federatedAccount())?.fhirUserReference).toBe(
+      "Practitioner/upstream-2",
+    );
     expect(matching[0]?.roles).toEqual(["clinician", "researcher"]);
     // A role revoked upstream is a role revoked here - the provider is the source
     // of truth, so the mapped fields are replaced rather than merged.
@@ -261,16 +273,52 @@ describe.skipIf(testDatabaseUrl === undefined)("upstream federation", () => {
       },
     });
 
-    const users = await withTenantScope(
-      stack.context.db,
-      stack.scope,
-      (bound) => listEndUsers(bound),
-    );
-    const federated = users.find(
-      (user) => user.username === `${idp.issuer}#${UPSTREAM_SUBJECT}`,
-    );
+    const federated = await federatedAccount();
     expect(federated?.displayName).toBe("From userinfo");
     expect(federated?.fhirUserReference).toBe("Practitioner/from-userinfo");
+  });
+
+  it("lands a sign-in at a second endpoint trusting the provider on the same account", async () => {
+    const second = await stack.addEndpoint({
+      slug: "second-sso",
+      endpoint: { authMode: "oidc", consentMode: "auto" },
+    });
+    await configureProvider(second, idp);
+
+    await roundTrip();
+    expect(await federatedAccount(second)).toBeUndefined();
+
+    const response = await roundTrip(
+      {
+        idTokenClaims: {
+          fhir_user: "Practitioner/upstream-1",
+          groups: ["clinician"],
+          name: "Dr Upstream",
+        },
+      },
+      second,
+    );
+    expect(response.status).toBe(302);
+
+    const matching = (await tenantAccounts(stack)).filter(
+      (user) => user.username === `${idp.issuer}#${UPSTREAM_SUBJECT}`,
+    );
+    expect(matching).toHaveLength(1);
+    const account = matching[0];
+    expect((await federatedAccount(second))?.id).toBe(account?.id);
+    expect((await federatedAccount())?.id).toBe(account?.id);
+
+    // Access to both endpoints, each granted by a sign-in there.
+    const access = await withTenantScope(
+      stack.context.db,
+      stack.tenantScope,
+      (bound) => listEndpointAccess(bound, account?.id ?? ""),
+    );
+    // Ordered by slug, which is how the list comes back.
+    expect(access.map((row) => row.endpointSlug)).toEqual([
+      stack.endpoint.slug,
+      "second-sso",
+    ]);
   });
 
   it("refuses a userinfo response about a different person", async () => {
@@ -469,20 +517,12 @@ describe.skipIf(testDatabaseUrl === undefined)(
     });
 
     it("provisions nobody through a callback", async () => {
-      const before = await withTenantScope(
-        stack.context.db,
-        stack.scope,
-        (bound) => listEndUsers(bound),
-      );
+      const before = await tenantAccounts(stack);
       const response = await stack.app.request(
         `${issuerPath(stack)}/federation/callback?state=anything&code=x`,
       );
       expect(response.status).toBe(400);
-      const after = await withTenantScope(
-        stack.context.db,
-        stack.scope,
-        (bound) => listEndUsers(bound),
-      );
+      const after = await tenantAccounts(stack);
       expect(after).toHaveLength(before.length);
     });
   },
@@ -603,11 +643,7 @@ describe.skipIf(testDatabaseUrl === undefined)("the outbound guard", () => {
     // send the browser. This is the guard doing its job on a real address.
     expect(response.status).toBe(400);
 
-    const users = await withTenantScope(
-      stack.context.db,
-      stack.scope,
-      (bound) => listEndUsers(bound),
-    );
+    const users = await tenantAccounts(stack);
     expect(users.some((user) => user.username.startsWith(idp.issuer))).toBe(
       false,
     );
@@ -694,15 +730,10 @@ describe.skipIf(testDatabaseUrl === undefined)(
       );
     }
 
-    /** The account the stub provider's subject was provisioned as. */
+    /** The account the stub provider's subject was provisioned as, at this endpoint. */
     async function federatedUser() {
-      const users = await withTenantScope(
-        stack.context.db,
-        stack.scope,
-        (bound) => listEndUsers(bound),
-      );
-      return users.find(
-        (user) => user.username === `${idp.issuer}#${UPSTREAM_SUBJECT}`,
+      return await withTenantScope(stack.context.db, stack.scope, (bound) =>
+        findEndUserByUsername(bound, `${idp.issuer}#${UPSTREAM_SUBJECT}`),
       );
     }
 

@@ -47,6 +47,7 @@ import {
   deleteTenant,
   endpointScopeFromRow,
   generateOpaqueToken,
+  grantEndpointAccess,
   hashPassword,
   hashToken,
   insertEndpointKey,
@@ -74,9 +75,12 @@ import type { EndpointKind, PolicyDocument } from "@signet/core";
 import type {
   AdminUser,
   Client,
+  Database,
   Endpoint,
+  EndpointEndUser,
   EndpointScope,
   EndUser,
+  EndUserEndpoint,
   Tenant,
   TenantRole,
   TenantScope,
@@ -139,10 +143,10 @@ export interface TestStack {
   readonly asymmetricClient: ClientFixture;
   /** A backend service, registered for `client_credentials` only. */
   readonly backendClient: ClientFixture;
-  /** A local account with {@link TEST_PASSWORD}. */
-  readonly user: EndUser;
-  /** A password-free persona with a default patient context. */
-  readonly persona: EndUser;
+  /** A local account with {@link TEST_PASSWORD}, as the fixture endpoint sees it. */
+  readonly user: EndpointEndUser;
+  /** A password-free persona with a default patient context at the fixture endpoint. */
+  readonly persona: EndpointEndUser;
   /** A console identity holding `owner` in the fixture tenant. */
   readonly admin: AdminUser;
   /**
@@ -164,6 +168,17 @@ export interface TestStack {
   readonly mintApiToken: (role: TenantRole) => Promise<string>;
   /** Advances the harness clock. Requests see the new instant immediately. */
   readonly setNow: (at: Date) => void;
+  /**
+   * Adds another endpoint to the fixture tenant and returns a view of the stack aimed
+   * at it.
+   *
+   * The endpoint gets its own signing key, its kind's baseline policy and its own
+   * fixture clients. The view shares the app, the database and the tenant, so its
+   * `user` and `persona` are the same accounts - but neither has been given access to
+   * the new endpoint, which a suite does explicitly. Closing the view does nothing:
+   * the endpoint goes when the tenant does.
+   */
+  readonly addEndpoint: (options: AddedEndpointOptions) => Promise<TestStack>;
   readonly close: () => Promise<void>;
 }
 
@@ -190,6 +205,16 @@ export interface TestStackOptions {
   readonly trustedProxyCount?: number;
   /** What `SIGNET_SIGN_IN_RATE_LIMIT` would have set. Defaults to the shipped limit. */
   readonly signInRateLimit?: number;
+}
+
+/** What {@link TestStack.addEndpoint} should build. */
+export interface AddedEndpointOptions {
+  /** The new endpoint's URL segment. */
+  readonly slug: string;
+  /** The kind of endpoint. Defaults to SMART on FHIR. */
+  readonly kind?: EndpointKind;
+  /** Overrides on the `endpoints` row. */
+  readonly endpoint?: Partial<Parameters<typeof createEndpoint>[1]>;
 }
 
 /** Every scope the fixture clients are permitted to request. */
@@ -288,40 +313,51 @@ async function connect(ownerUrl: string, applicationName: string) {
   });
 }
 
+/** An endpoint the harness built, and the clients that exercise it. */
+interface ProvisionedEndpoint {
+  readonly endpoint: Endpoint;
+  readonly scope: EndpointScope;
+  readonly issuer: string;
+  readonly publicClient: Client;
+  readonly symmetricClient: Client;
+  readonly asymmetricClient: ClientFixture;
+  readonly backendClient: ClientFixture;
+}
+
+/** How {@link provisionEndpoint} should build an endpoint. */
+interface ProvisionOptions {
+  readonly slug: string;
+  readonly name: string;
+  readonly kind: EndpointKind;
+  /** Distinguishes the client identifiers from every other stack's. */
+  readonly clientSuffix: string;
+  readonly endpoint?: Partial<Parameters<typeof createEndpoint>[1]> | undefined;
+  readonly policy?: PolicyDocument | undefined;
+  readonly withoutSigningKey?: boolean | undefined;
+}
+
 /**
- * Builds a fully configured endpoint and the clients that exercise it.
+ * Builds an endpoint in a tenant: the row, a signing key, a published policy and the
+ * fixture clients.
  *
- * @param options - Deviations from the default configuration.
- * @throws {Error} When no test database is configured. A suite should check
- *   {@link testDatabaseUrl} and skip rather than reach this.
+ * @param db - The serving connection.
+ * @param tenant - The tenant the endpoint belongs to.
+ * @param tenantScope - The tenant's scope.
+ * @param options - What to build.
  */
-export async function createTestStack(
-  options: TestStackOptions = {},
-): Promise<TestStack> {
-  if (testDatabaseUrl === undefined) {
-    throw new Error("SIGNET_TEST_DATABASE_URL is not set");
-  }
-
-  sequence += 1;
-  const suffix = `${String(process.pid)}-${String(sequence)}`;
-  const applicationName = `signet-test-${suffix}`;
-
-  const handle = await connect(testDatabaseUrl, applicationName);
-  const db = handle.db;
-
-  const tenant = await createTenant(db, {
-    slug: `t-${suffix}`,
-    name: `Test tenant ${suffix}`,
-  });
-  const tenantScope = tenantScopeFromRow(tenant);
-
-  const kind = options.kind ?? "smart";
+async function provisionEndpoint(
+  db: Database,
+  tenant: Tenant,
+  tenantScope: TenantScope,
+  options: ProvisionOptions,
+): Promise<ProvisionedEndpoint> {
+  const { kind, clientSuffix: suffix } = options;
   const allowedScopes =
     kind === "smart" ? ALLOWED_SCOPES : OAUTH_ALLOWED_SCOPES;
   const endpoint = await withTenantScope(db, tenantScope, (bound) =>
     createEndpoint(bound, {
-      slug: "fhir",
-      name: "Test endpoint",
+      slug: options.slug,
+      name: options.name,
       ...kindSettings(kind),
       // Non-production so personas are selectable and the picker accepts an
       // identifier that is not on a user's list.
@@ -429,11 +465,81 @@ export async function createTestStack(
     }),
   );
 
-  const user = await withTenantScope(db, scope, async (bound) =>
+  return {
+    endpoint,
+    scope,
+    issuer: `${TEST_PUBLIC_URL}/t/${tenant.slug}/e/${endpoint.slug}`,
+    publicClient,
+    symmetricClient,
+    asymmetricClient: {
+      client: asymmetricClient,
+      privateJwk: await decryptedJwk(asymmetricKey.privateJwkEncrypted),
+    },
+    backendClient: {
+      client: backendClient,
+      privateJwk: await decryptedJwk(backendKey.privateJwkEncrypted),
+    },
+  };
+}
+
+/** An account as one endpoint sees it, from the account and its access row there. */
+function asEndpointUser(
+  account: EndUser,
+  access: EndUserEndpoint,
+): EndpointEndUser {
+  return {
+    ...account,
+    fhirUserReference: access.fhirUserReference,
+    defaultContext: access.defaultContext,
+  };
+}
+
+/**
+ * Builds a fully configured endpoint, the clients that exercise it, and two tenant
+ * accounts with access to it.
+ *
+ * @param options - Deviations from the default configuration.
+ * @throws {Error} When no test database is configured. A suite should check
+ *   {@link testDatabaseUrl} and skip rather than reach this.
+ */
+export async function createTestStack(
+  options: TestStackOptions = {},
+): Promise<TestStack> {
+  if (testDatabaseUrl === undefined) {
+    throw new Error("SIGNET_TEST_DATABASE_URL is not set");
+  }
+
+  sequence += 1;
+  const suffix = `${String(process.pid)}-${String(sequence)}`;
+  const applicationName = `signet-test-${suffix}`;
+
+  const handle = await connect(testDatabaseUrl, applicationName);
+  const db = handle.db;
+
+  const tenant = await createTenant(db, {
+    slug: `t-${suffix}`,
+    name: `Test tenant ${suffix}`,
+  });
+  const tenantScope = tenantScopeFromRow(tenant);
+
+  const kind = options.kind ?? "smart";
+  const provisioned = await provisionEndpoint(db, tenant, tenantScope, {
+    slug: "fhir",
+    name: "Test endpoint",
+    kind,
+    clientSuffix: suffix,
+    endpoint: options.endpoint,
+    policy: options.policy,
+    withoutSigningKey: options.withoutSigningKey,
+  });
+  const { scope } = provisioned;
+
+  // The accounts belong to the tenant; what makes them usable at the fixture endpoint
+  // is the access each is given there, which is also where the FHIR fields live.
+  const clinician = await withTenantScope(db, tenantScope, async (bound) =>
     createEndUser(bound, {
       username: "clinician",
       passwordHash: await hashPassword(TEST_PASSWORD),
-      fhirUserReference: kind === "smart" ? "Practitioner/prac-1" : null,
       email: TEST_USER_EMAIL,
       emailVerified: true,
       displayName: "Test Clinician",
@@ -441,16 +547,27 @@ export async function createTestStack(
       attributes: { patients: ["pat-1", "pat-2"] },
     }),
   );
+  const clinicianAccess = await withTenantScope(db, scope, (bound) =>
+    grantEndpointAccess(bound, clinician.id, {
+      fhirUserReference: kind === "smart" ? "Practitioner/prac-1" : null,
+    }),
+  );
+  const user = asEndpointUser(clinician, clinicianAccess);
 
-  const persona = await withTenantScope(db, scope, (bound) =>
+  const personaAccount = await withTenantScope(db, tenantScope, (bound) =>
     createEndUser(bound, {
       username: "persona-patient",
-      fhirUserReference: kind === "smart" ? "Patient/pat-9" : null,
       displayName: "Persona Patient",
       isPersona: true,
+    }),
+  );
+  const personaAccess = await withTenantScope(db, scope, (bound) =>
+    grantEndpointAccess(bound, personaAccount.id, {
+      fhirUserReference: kind === "smart" ? "Patient/pat-9" : null,
       defaultContext: kind === "smart" ? { patient: "pat-9" } : null,
     }),
   );
+  const persona = asEndpointUser(personaAccount, personaAccess);
 
   const admin = await createAdminUser(db, {
     email: `admin-${suffix}@signet.test`,
@@ -512,25 +629,13 @@ export async function createTestStack(
 
   const app = createApp(context);
 
-  return {
+  const stack: TestStack = {
     app,
     context,
     tenant,
-    endpoint,
     tenantScope,
-    scope,
-    issuer: `${TEST_PUBLIC_URL}/t/${tenant.slug}/e/${endpoint.slug}`,
+    ...provisioned,
     applicationName,
-    publicClient,
-    symmetricClient,
-    asymmetricClient: {
-      client: asymmetricClient,
-      privateJwk: await decryptedJwk(asymmetricKey.privateJwkEncrypted),
-    },
-    backendClient: {
-      client: backendClient,
-      privateJwk: await decryptedJwk(backendKey.privateJwkEncrypted),
-    },
     user,
     persona,
     admin,
@@ -568,6 +673,16 @@ export async function createTestStack(
     setNow: (at) => {
       now = at;
     },
+    addEndpoint: async (added) => {
+      const view = await provisionEndpoint(db, tenant, tenantScope, {
+        slug: added.slug,
+        name: `Endpoint ${added.slug}`,
+        kind: added.kind ?? "smart",
+        clientSuffix: `${suffix}-${added.slug}`,
+        endpoint: added.endpoint,
+      });
+      return { ...stack, ...view, close: async () => {} };
+    },
     close: async () => {
       // Deleting the tenant cascades to everything the fixtures created, audit
       // events included. Console identities are not tenant-owned, so they are
@@ -578,6 +693,7 @@ export async function createTestStack(
       await handle.close();
     },
   };
+  return stack;
 }
 
 /**

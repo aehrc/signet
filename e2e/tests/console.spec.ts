@@ -16,78 +16,22 @@ import {
   SIGNET,
   VIEWER_STORAGE_STATE,
 } from "../support/stack.js";
+import {
+  accessRow,
+  addUser,
+  giveAccess,
+  PATHLING_NAME,
+  uniqueUser,
+  USERS,
+} from "../support/users.js";
 
 import type { Locator, Page } from "@playwright/test";
-
-/** The endpoint's Users tab, where every user journey below starts. */
-const USERS = `${SIGNET}/console/t/demo/e/pathling/users`;
 
 /** The endpoint's Clients tab. */
 const CLIENTS = `${SIGNET}/console/t/demo/e/pathling/clients`;
 
 /** The endpoint's overview, which holds the settings and capability forms. */
 const OVERVIEW = `${SIGNET}/console/t/demo/e/pathling`;
-
-/** An account one of these tests owns for the duration of the test. */
-interface TestUser {
-  readonly username: string;
-  readonly displayName: string;
-  readonly password: string;
-}
-
-/**
- * Names an account no other test and no earlier run has used.
- *
- * The display name carries the suffix as well as the username, and that is not
- * belt-and-braces: these tests find their user by the name in the table, the suite
- * is expected to run against a stack it did not create, and two runs against one
- * long-lived stack would otherwise leave two rows called "Edit Target" and every
- * lookup after the first would be ambiguous. The random half is for workers that
- * start inside the same millisecond.
- *
- * @param prefix - What this account is for, so a leftover row explains itself.
- */
-function uniqueUser(prefix: string): TestUser {
-  const suffix = `${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
-  return {
-    username: `${prefix}-${suffix}`,
-    displayName: `${prefix} ${suffix}`,
-    password: `${prefix}-password`,
-  };
-}
-
-/**
- * Creates a user through the console's own Add user form.
- *
- * Each test makes its own rather than editing a seeded account: the seeded
- * clinician and persona are what `launch.spec.ts` and `grants.spec.ts` sign in and
- * pick with, and a test that renamed or disabled one of them would break those from
- * a long way away.
- *
- * @param page - The browser page to drive.
- * @param user - The account to create, from {@link uniqueUser}.
- * @param isPersona - True to create a password-free persona instead.
- */
-async function createUser(
-  page: Page,
-  user: TestUser,
-  isPersona = false,
-): Promise<void> {
-  await page.goto(USERS);
-  await page.getByRole("button", { name: "Add user" }).click();
-  if (isPersona) {
-    await page.getByLabel("This is a persona").check();
-  }
-  await page.getByLabel("Username").fill(user.username);
-  await page.getByLabel("Display name").fill(user.displayName);
-  if (!isPersona) {
-    await page.getByLabel("Password").fill(user.password);
-  }
-  await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(
-    page.getByRole("link", { name: user.displayName }),
-  ).toBeVisible();
-}
 
 /** A client one of these tests owns for the duration of the test. */
 interface TestClient {
@@ -98,7 +42,7 @@ interface TestClient {
 /**
  * Names a client no other test and no earlier run has used.
  *
- * Same reasoning as {@link uniqueUser}: the seeded clients are what the launch and
+ * Same reasoning as `uniqueUser`: the seeded clients are what the launch and
  * grant suites authorize as, so a test that edited one would break those from a long
  * way away.
  *
@@ -275,47 +219,67 @@ test.describe("an authenticated operator", () => {
 
   test("edits a user from their detail page", async ({ page }) => {
     const user = uniqueUser("edit-target");
-    await createUser(page, user);
+    await addUser(page, user);
     const renamed = `${user.displayName} renamed`;
 
-    // The rows carry no action buttons any more: the name is a link, and the
-    // actions live with the detail that explains them (FR-007).
+    // The rows carry no action buttons: the name is a link, and the actions live
+    // with the detail that explains them (FR-007). A new account has access to no
+    // endpoint, and the list says so.
+    await page.goto(USERS);
     const row = page.getByRole("row").filter({ hasText: user.username });
     await expect(row.getByRole("button", { name: "Disable" })).toHaveCount(0);
     await expect(row.getByRole("button", { name: "Delete" })).toHaveCount(0);
+    await expect(row.getByText("none")).toBeVisible();
 
     await page.getByRole("link", { name: user.displayName }).click();
 
     // The summary states what cannot be edited, and the form pre-fills what can.
     await expect(page.getByText(user.username).first()).toBeVisible();
-    await expect(page.getByLabel("Display name")).toHaveValue(user.displayName);
+    const form = panelForm(page, "Edit");
+    await expect(form.getByLabel("Display name")).toHaveValue(user.displayName);
 
-    await page.getByLabel("Display name").fill(renamed);
-    await page.getByLabel("fhirUser reference").fill("Practitioner/e2e-1");
-    await page.getByLabel("Roles").fill("clinician\nresearcher");
-    await page.getByRole("button", { name: "Save" }).click();
+    await form.getByLabel("Display name").fill(renamed);
+    await form.getByLabel("Roles").fill("clinician\nresearcher");
+    await form.getByRole("button", { name: "Save" }).click();
 
     // Every operation reports its outcome; silence would not be an answer.
     await expect(page.getByText("User saved.")).toBeVisible();
+
+    // The fhirUser reference is set on the account's access to one endpoint, not
+    // on the account, so it is offered only once access has been given.
+    const pathling = accessRow(page, PATHLING_NAME);
+    await expect(pathling.getByLabel("fhirUser reference")).toHaveCount(0);
+    await giveAccess(page, PATHLING_NAME);
+    await pathling.getByLabel("fhirUser reference").fill("Practitioner/e2e-1");
+    await pathling.getByRole("button", { name: "Save" }).click();
+    await expect(
+      pathling.getByText(`Saved for ${PATHLING_NAME}.`),
+    ).toBeVisible();
 
     await page.goto(USERS);
     await expect(page.getByRole("link", { name: renamed })).toBeVisible();
     // The username is what consents and the audit trail name them by, and no edit
     // may change it (FR-008).
     await expect(page.getByText(user.username).first()).toBeVisible();
+    // And the list names the endpoint the account can now sign in at.
+    await expect(
+      page
+        .getByRole("row")
+        .filter({ hasText: user.username })
+        .getByText(PATHLING_NAME, { exact: true }),
+    ).toBeVisible();
   });
 
   test("sends nothing when Save is pressed with nothing changed", async ({
     page,
   }) => {
     const user = uniqueUser("unchanged-target");
-    await createUser(page, user);
+    await addUser(page, user);
 
-    await page.getByRole("link", { name: user.displayName }).click();
-    await expect(page.getByLabel("Display name")).toHaveValue(user.displayName);
+    const name = panelForm(page, "Edit").getByLabel("Display name");
+    await expect(name).toHaveValue(user.displayName);
 
     // FR-009.
-    const name = page.getByLabel("Display name");
     await expectsNothingToSave(
       page,
       panelForm(page, "Edit"),
@@ -487,31 +451,69 @@ test.describe("an authenticated operator", () => {
     page,
   }) => {
     const user = uniqueUser("clear-target");
-    await createUser(page, user);
+    await addUser(page, user);
+    await giveAccess(page, PATHLING_NAME);
 
-    await page.getByRole("link", { name: user.displayName }).click();
-    await page.getByLabel("fhirUser reference").fill("Practitioner/e2e-2");
-    await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByText("User saved.")).toBeVisible();
+    const pathling = accessRow(page, PATHLING_NAME);
+    const saved = pathling.getByText(`Saved for ${PATHLING_NAME}.`);
+    await pathling.getByLabel("fhirUser reference").fill("Practitioner/e2e-2");
+    await pathling.getByRole("button", { name: "Save" }).click();
+    await expect(saved).toBeVisible();
 
-    await page.getByLabel("fhirUser reference").fill("");
-    await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByText("User saved.")).toBeVisible();
+    await pathling.getByLabel("fhirUser reference").fill("");
+    await pathling.getByRole("button", { name: "Save" }).click();
+    await expect(saved).toBeVisible();
 
     // Reloaded rather than asserted against the form's own state: the point is what
     // the server stored, which is a cleared reference and not an empty string.
     await page.reload();
-    await expect(page.getByLabel("fhirUser reference")).toHaveValue("");
-    await page.goto(USERS);
-    const row = page.getByRole("row").filter({ hasText: user.username });
-    await expect(row.getByText("none").first()).toBeVisible();
+    await expect(pathling.getByLabel("fhirUser reference")).toHaveValue("");
+  });
+
+  test("withdraws access to an endpoint after saying what it costs", async ({
+    page,
+  }) => {
+    const user = uniqueUser("withdraw-target");
+    await addUser(page, user);
+    await giveAccess(page, PATHLING_NAME);
+    const pathling = accessRow(page, PATHLING_NAME);
+
+    // Dismissed first: a withdrawal nobody confirmed must change nothing.
+    page.once("dialog", (dialog) => void dialog.dismiss());
+    await pathling.getByRole("button", { name: "Withdraw access" }).click();
+    await expect(
+      pathling.getByRole("button", { name: "Withdraw access" }),
+    ).toBeVisible();
+    await expect(pathling.getByText("no access")).toHaveCount(0);
+
+    // The confirmation has to say what is lost, so it is asserted rather than
+    // merely accepted.
+    const confirmations: string[] = [];
+    page.once("dialog", (dialog) => {
+      confirmations.push(dialog.message());
+      void dialog.accept();
+    });
+    await pathling.getByRole("button", { name: "Withdraw access" }).click();
+
+    await expect(
+      pathling.getByText(`Access to ${PATHLING_NAME} withdrawn.`, {
+        exact: false,
+      }),
+    ).toBeVisible();
+    await expect(pathling.getByText("no access")).toBeVisible();
+    await expect(
+      pathling.getByRole("button", { name: "Give access" }),
+    ).toBeVisible();
+    expect(confirmations[0]).toContain("consents and sessions");
+    expect(confirmations[0]).toContain("refresh tokens");
   });
 
   test("sets a password the user can then sign in with", async ({ page }) => {
     const user = uniqueUser("password-target");
-    await createUser(page, user);
+    await addUser(page, user);
+    // Without access to the endpoint the launch runs on, no password would get in.
+    await giveAccess(page, PATHLING_NAME);
 
-    await page.getByRole("link", { name: user.displayName }).click();
     await page.getByLabel("New password").fill("the-second-password");
     await page.getByRole("button", { name: "Set password" }).click();
 
@@ -538,9 +540,7 @@ test.describe("an authenticated operator", () => {
 
   test("offers a persona no password form", async ({ page }) => {
     const user = uniqueUser("persona-target");
-    await createUser(page, user, true);
-
-    await page.getByRole("link", { name: user.displayName }).click();
+    await addUser(page, user, "persona");
 
     // A persona has no password by definition, so the console never offers the
     // operation the API would refuse.
@@ -554,9 +554,8 @@ test.describe("an authenticated operator", () => {
     page,
   }) => {
     const user = uniqueUser("state-target");
-    await createUser(page, user);
+    await addUser(page, user);
 
-    await page.getByRole("link", { name: user.displayName }).click();
     await expect(page.getByRole("button", { name: "Disable" })).toBeVisible();
 
     await page.getByRole("button", { name: "Disable" }).click();
@@ -572,9 +571,7 @@ test.describe("an authenticated operator", () => {
 
   test("deletes a user and returns to the users table", async ({ page }) => {
     const user = uniqueUser("delete-target");
-    await createUser(page, user);
-
-    await page.getByRole("link", { name: user.displayName }).click();
+    await addUser(page, user);
 
     // The confirmation has to say what is lost and what the alternative is, so it
     // is asserted rather than merely accepted.
@@ -677,18 +674,20 @@ test.describe("a viewer-role operator", () => {
     await page.goto(USERS);
     await page.getByRole("link", { name: "Dr Casey Clinician" }).click();
 
-    // Everything is visible.
+    // Everything is visible, including the fhirUser reference the account has on
+    // the endpoint it was given access to.
+    const pathling = accessRow(page, PATHLING_NAME);
     await expect(page.getByLabel("Display name")).toHaveValue(
       "Dr Casey Clinician",
     );
-    await expect(page.getByLabel("fhirUser reference")).toHaveValue(
+    await expect(pathling.getByLabel("fhirUser reference")).toHaveValue(
       "Practitioner/clinician-1",
     );
 
     // And nothing is editable. Both directions of FR-010: the inputs are disabled,
     // and the controls that write are absent rather than present-and-failing.
     await expect(page.getByLabel("Display name")).toBeDisabled();
-    await expect(page.getByLabel("fhirUser reference")).toBeDisabled();
+    await expect(pathling.getByLabel("fhirUser reference")).toBeDisabled();
     await expect(page.getByLabel("Roles")).toBeDisabled();
     await expect(page.getByLabel("Patients")).toBeDisabled();
     await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
@@ -697,6 +696,9 @@ test.describe("a viewer-role operator", () => {
     await expect(page.getByRole("button", { name: "Delete user" })).toHaveCount(
       0,
     );
+    await expect(
+      page.getByRole("button", { name: /^(Give|Withdraw) access$/ }),
+    ).toHaveCount(0);
   });
 
   test("reads a client's detail page and is offered no write", async ({

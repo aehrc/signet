@@ -33,6 +33,7 @@ import {
 } from "../test/adminApi.js";
 import {
   interactionState,
+  login,
   pkcePair,
   startAuthorization,
 } from "../test/flows.js";
@@ -711,30 +712,57 @@ describe.skipIf(testDatabaseUrl === undefined)(
     });
 
     describe("end users", () => {
-      it("creates a persona with a seeded context and no password", async () => {
+      /** The audit events with an action, newest first. */
+      async function auditEvents(action: string) {
+        return (
+          await adminJson<{
+            events: {
+              targetId: string | null;
+              endpointId: string | null;
+              detail: Record<string, unknown>;
+            }[];
+          }>(stack, "GET", tenantPath(stack, `/audit?action=${action}`), {
+            credential: owner,
+          })
+        ).events;
+      }
+
+      it("creates a persona with no password and access to nothing", async () => {
         const created = await adminJson<{
-          user: { id: string; isPersona: boolean; hasPassword: boolean };
-        }>(stack, "POST", endpointPath(stack, "/users"), {
+          user: {
+            id: string;
+            isPersona: boolean;
+            hasPassword: boolean;
+            endpoints: unknown[];
+          };
+        }>(stack, "POST", tenantPath(stack, "/users"), {
           credential: owner,
           body: {
             username: "persona-two",
             displayName: "Second Persona",
             isPersona: true,
-            fhirUserReference: "Patient/pat-7",
-            defaultContext: { patient: "pat-7" },
           },
           expect: 201,
         });
 
         expect(created.user.isPersona).toBe(true);
         expect(created.user.hasPassword).toBe(false);
+        expect(created.user.endpoints).toEqual([]);
+
+        const events = await auditEvents("end-user.created");
+        const event = events.find(
+          (candidate) => candidate.targetId === created.user.id,
+        );
+        expect(event?.detail).toMatchObject({ username: "persona-two" });
+        // A tenant-level event: no endpoint is involved in creating an account.
+        expect(event?.endpointId).toBeNull();
       });
 
       it("refuses a password for a persona", async () => {
         const response = await adminRequest(
           stack,
           "POST",
-          endpointPath(stack, "/users"),
+          tenantPath(stack, "/users"),
           {
             credential: owner,
             body: {
@@ -748,16 +776,37 @@ describe.skipIf(testDatabaseUrl === undefined)(
         expect(response.status).toBe(400);
       });
 
-      it("never returns a password hash", async () => {
-        const body = await adminJson<{ users: Record<string, unknown>[] }>(
+      it("refuses a second account with the same username in the tenant", async () => {
+        const response = await adminRequest(
           stack,
-          "GET",
-          endpointPath(stack, "/users"),
-          { credential: owner },
+          "POST",
+          tenantPath(stack, "/users"),
+          {
+            credential: owner,
+            body: { username: stack.user.username, displayName: "Twin" },
+          },
         );
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({
+          error: "conflict",
+          message: "This tenant already has a user with that username",
+        });
+      });
 
-        for (const user of body.users) {
-          expect(Object.keys(user)).not.toContain("passwordHash");
+      it("never returns a password hash", async () => {
+        for (const path of [
+          tenantPath(stack, "/users"),
+          endpointPath(stack, "/users"),
+        ]) {
+          const body = await adminJson<{ users: Record<string, unknown>[] }>(
+            stack,
+            "GET",
+            path,
+            { credential: owner },
+          );
+          for (const user of body.users) {
+            expect(Object.keys(user)).not.toContain("passwordHash");
+          }
         }
       });
 
@@ -765,7 +814,7 @@ describe.skipIf(testDatabaseUrl === undefined)(
         const created = await adminJson<{ user: { id: string } }>(
           stack,
           "POST",
-          endpointPath(stack, "/users"),
+          tenantPath(stack, "/users"),
           {
             credential: owner,
             body: {
@@ -776,54 +825,76 @@ describe.skipIf(testDatabaseUrl === undefined)(
             expect: 201,
           },
         );
+        await adminJson(
+          stack,
+          "PUT",
+          endpointPath(stack, `/users/${created.user.id}`),
+          { credential: owner, body: {} },
+        );
+
+        const signIn = async () => {
+          const pkce = await pkcePair("disabled-user-check");
+          const session = await startAuthorization(stack, {
+            clientId: stack.publicClient.clientId,
+            scope: "openid",
+            challenge: pkce.challenge,
+          });
+          return await login(stack, session, {
+            username: "temp-clinician",
+            password: "temporary-password",
+          });
+        };
+        // Signs in with access, so the refusal below is the disabling.
+        expect((await signIn()).status).toBe(200);
 
         await adminJson(
           stack,
           "PATCH",
-          endpointPath(stack, `/users/${created.user.id}`),
+          tenantPath(stack, `/users/${created.user.id}`),
           { credential: owner, body: { disabled: true } },
         );
+        expect((await signIn()).status).toBe(401);
 
-        const { authorize, pkcePair, startAuthorization, login } =
-          await import("../test/flows.js");
-        void authorize;
-        const pkce = await pkcePair("disabled-user-check");
-        const session = await startAuthorization(stack, {
-          clientId: stack.publicClient.clientId,
-          scope: "openid",
-          challenge: pkce.challenge,
-        });
-        const refused = await login(stack, session, {
-          username: "temp-clinician",
-          password: "temporary-password",
-        });
-        expect(refused.status).toBe(401);
+        const events = await auditEvents("end-user.disabled");
+        expect(events.some((event) => event.targetId === created.user.id)).toBe(
+          true,
+        );
       });
 
       it("fetches one user with every field the list shows", async () => {
         const created = await adminJson<{ user: { id: string } }>(
           stack,
           "POST",
-          endpointPath(stack, "/users"),
+          tenantPath(stack, "/users"),
           {
             credential: owner,
             body: {
               username: "fetch-one",
               displayName: "Fetch One",
               password: "fetch-one-password",
-              fhirUserReference: "Practitioner/prac-fetch",
               roles: ["clinician"],
               attributes: { patients: ["pat-1"], team: "renal" },
-              defaultContext: { patient: "pat-1" },
             },
             expect: 201,
+          },
+        );
+        await adminJson(
+          stack,
+          "PUT",
+          endpointPath(stack, `/users/${created.user.id}`),
+          {
+            credential: owner,
+            body: {
+              fhirUserReference: "Practitioner/prac-fetch",
+              defaultContext: { patient: "pat-1" },
+            },
           },
         );
 
         const fetched = await adminJson<{ user: Record<string, unknown> }>(
           stack,
           "GET",
-          endpointPath(stack, `/users/${created.user.id}`),
+          tenantPath(stack, `/users/${created.user.id}`),
           { credential: owner },
         );
 
@@ -833,90 +904,58 @@ describe.skipIf(testDatabaseUrl === undefined)(
           id: created.user.id,
           username: "fetch-one",
           displayName: "Fetch One",
-          fhirUser: "Practitioner/prac-fetch",
           roles: ["clinician"],
           attributes: { patients: ["pat-1"], team: "renal" },
-          defaultContext: { patient: "pat-1" },
           isPersona: false,
           hasPassword: true,
           disabledAt: null,
+          endpoints: [
+            {
+              slug: stack.endpoint.slug,
+              name: stack.endpoint.name,
+              kind: "smart",
+              authMode: "local",
+              fhirUser: "Practitioner/prac-fetch",
+              defaultContext: { patient: "pat-1" },
+            },
+          ],
         });
         expect(Object.keys(fetched.user)).not.toContain("passwordHash");
+        expect(Object.keys(fetched.user)).not.toContain("fhirUser");
 
         // Identical to the element the list returns, so the two cannot drift.
         const listed = await adminJson<{
           users: Record<string, unknown>[];
-        }>(stack, "GET", endpointPath(stack, "/users"), { credential: owner });
+        }>(stack, "GET", tenantPath(stack, "/users"), { credential: owner });
         expect(fetched.user).toEqual(
           listed.users.find((user) => user["id"] === created.user.id) ?? {},
         );
       });
 
       it("answers 404 for an id no user has", async () => {
-        const response = await adminRequest(
-          stack,
-          "GET",
-          endpointPath(stack, "/users/00000000-0000-4000-8000-000000000000"),
-          { credential: owner },
-        );
-        expect(response.status).toBe(404);
-      });
-
-      it("answers 404 for a user belonging to another endpoint of the tenant", async () => {
-        // The lookup is endpoint-scoped, so a neighbouring endpoint's user must be
-        // indistinguishable from one that does not exist.
-        await adminJson(stack, "POST", tenantPath(stack, "/endpoints"), {
-          credential: owner,
-          body: {
-            slug: "neighbour",
-            name: "Neighbouring endpoint",
-            kind: "smart",
-            audience: "https://neighbour.test/fhir",
-          },
-          expect: 201,
-        });
-
-        const elsewhere = await adminJson<{ user: { id: string } }>(
-          stack,
-          "POST",
-          tenantPath(stack, "/endpoints/neighbour/users"),
-          {
+        const missing = "00000000-0000-4000-8000-000000000000";
+        for (const [method, path] of [
+          ["GET", tenantPath(stack, `/users/${missing}`)],
+          ["PATCH", tenantPath(stack, `/users/${missing}`)],
+          ["DELETE", tenantPath(stack, `/users/${missing}`)],
+          ["PUT", endpointPath(stack, `/users/${missing}`)],
+          ["DELETE", endpointPath(stack, `/users/${missing}`)],
+        ] as const) {
+          const response = await adminRequest(stack, method, path, {
             credential: owner,
-            body: {
-              username: "neighbour-user",
-              displayName: "Neighbour",
-              password: "neighbour-password",
-            },
-            expect: 201,
-          },
-        );
-
-        const response = await adminRequest(
-          stack,
-          "GET",
-          endpointPath(stack, `/users/${elsewhere.user.id}`),
-          { credential: owner },
-        );
-        expect(response.status).toBe(404);
-
-        // ...and is readable on the endpoint it does belong to, so the 404 above is
-        // the scope working rather than the route being broken.
-        const found = await adminRequest(
-          stack,
-          "GET",
-          tenantPath(stack, `/endpoints/neighbour/users/${elsewhere.user.id}`),
-          { credential: owner },
-        );
-        expect(found.status).toBe(200);
+            ...(method === "PATCH" || method === "PUT" ? { body: {} } : {}),
+          });
+          expect(response.status).toBe(404);
+        }
       });
 
-      it("lets a viewer fetch one user but not edit them", async () => {
+      it("lets a viewer fetch one user but not edit them or their access", async () => {
         const viewer = { bearer: await stack.mintApiToken("viewer") };
 
         const read = await adminRequest(
           stack,
           "GET",
-          endpointPath(stack, `/users/${stack.user.id}`),
+          tenantPath(stack, `/users/${stack.user.id}`),
           { credential: viewer },
         );
         expect(read.status).toBe(200);
@@ -924,10 +963,181 @@ describe.skipIf(testDatabaseUrl === undefined)(
         const write = await adminRequest(
           stack,
           "PATCH",
-          endpointPath(stack, `/users/${stack.user.id}`),
+          tenantPath(stack, `/users/${stack.user.id}`),
           { credential: viewer, body: { displayName: "Nope" } },
         );
         expect(write.status).toBe(403);
+
+        const grant = await adminRequest(
+          stack,
+          "PUT",
+          endpointPath(stack, `/users/${stack.user.id}`),
+          { credential: viewer, body: {} },
+        );
+        expect(grant.status).toBe(403);
+      });
+
+      describe("endpoint access", () => {
+        let neighbour: TestStack;
+        let accountId: string;
+
+        beforeAll(async () => {
+          neighbour = await stack.addEndpoint({ slug: "neighbour" });
+          accountId = (
+            await adminJson<{ user: { id: string } }>(
+              stack,
+              "POST",
+              tenantPath(stack, "/users"),
+              {
+                credential: owner,
+                body: {
+                  username: "access-holder",
+                  displayName: "Access Holder",
+                  password: "access-holder-password",
+                },
+                expect: 201,
+              },
+            )
+          ).user.id;
+        });
+
+        /** The ids an endpoint's user list shows. */
+        async function endpointUserIds(at: TestStack): Promise<string[]> {
+          const body = await adminJson<{ users: { id: string }[] }>(
+            stack,
+            "GET",
+            endpointPath(at, "/users"),
+            { credential: owner },
+          );
+          return body.users.map((user) => user.id);
+        }
+
+        it("lists at an endpoint only the accounts with access there", async () => {
+          expect(await endpointUserIds(stack)).not.toContain(accountId);
+          expect(await endpointUserIds(neighbour)).not.toContain(accountId);
+          // The fixture accounts have access to the fixture endpoint alone.
+          expect(await endpointUserIds(stack)).toContain(stack.user.id);
+          expect(await endpointUserIds(neighbour)).not.toContain(stack.user.id);
+        });
+
+        it("grants access with the endpoint's own fhirUser, and audits it", async () => {
+          const granted = await adminJson<{
+            user: { endpoints: { slug: string; fhirUser: string | null }[] };
+          }>(stack, "PUT", endpointPath(neighbour, `/users/${accountId}`), {
+            credential: owner,
+            body: { fhirUserReference: "Practitioner/neighbour-1" },
+          });
+          expect(granted.user.endpoints).toEqual([
+            expect.objectContaining({
+              slug: "neighbour",
+              fhirUser: "Practitioner/neighbour-1",
+            }),
+          ]);
+
+          const listed = await adminJson<{
+            users: {
+              id: string;
+              fhirUser: string | null;
+              defaultContext: unknown;
+              endpoints?: unknown;
+            }[];
+          }>(stack, "GET", endpointPath(neighbour, "/users"), {
+            credential: owner,
+          });
+          const seen = listed.users.find((user) => user.id === accountId);
+          expect(seen).toMatchObject({
+            fhirUser: "Practitioner/neighbour-1",
+            defaultContext: null,
+          });
+          expect(seen?.endpoints).toBeUndefined();
+          expect(await endpointUserIds(stack)).not.toContain(accountId);
+
+          const event = (await auditEvents("end-user.access-granted")).find(
+            (candidate) => candidate.targetId === accountId,
+          );
+          expect(event?.endpointId).toBe(neighbour.endpoint.id);
+          expect(event?.detail).toMatchObject({
+            username: "access-holder",
+            endpointSlug: "neighbour",
+            fields: ["fhirUserReference"],
+          });
+        });
+
+        it("updates the access fields, keeping what the request leaves out", async () => {
+          const path = endpointPath(neighbour, `/users/${accountId}`);
+          await adminJson(stack, "PUT", path, {
+            credential: owner,
+            body: { defaultContext: { patient: "pat-3" } },
+          });
+          const updated = await adminJson<{
+            user: {
+              endpoints: { fhirUser: string | null; defaultContext: unknown }[];
+            };
+          }>(stack, "PUT", path, { credential: owner, body: {} });
+          expect(updated.user.endpoints[0]).toMatchObject({
+            fhirUser: "Practitioner/neighbour-1",
+            defaultContext: { patient: "pat-3" },
+          });
+
+          const cleared = await adminJson<{
+            user: { endpoints: { fhirUser: string | null }[] };
+          }>(stack, "PUT", path, {
+            credential: owner,
+            body: { fhirUserReference: null },
+          });
+          expect(cleared.user.endpoints[0]?.fhirUser).toBeNull();
+        });
+
+        it("revokes access, audits it, and answers 404 when there is none", async () => {
+          const path = endpointPath(neighbour, `/users/${accountId}`);
+          expect(
+            (await adminRequest(stack, "DELETE", path, { credential: owner }))
+              .status,
+          ).toBe(204);
+          expect(await endpointUserIds(neighbour)).not.toContain(accountId);
+
+          const again = await adminRequest(stack, "DELETE", path, {
+            credential: owner,
+          });
+          expect(again.status).toBe(404);
+          expect(await again.json()).toMatchObject({
+            message: "This user has no access to this endpoint",
+          });
+
+          const event = (await auditEvents("end-user.access-revoked")).find(
+            (candidate) => candidate.targetId === accountId,
+          );
+          expect(event?.endpointId).toBe(neighbour.endpoint.id);
+          expect(event?.detail).toMatchObject({ username: "access-holder" });
+
+          // The account itself is untouched.
+          const account = await adminRequest(
+            stack,
+            "GET",
+            tenantPath(stack, `/users/${accountId}`),
+            { credential: owner },
+          );
+          expect(account.status).toBe(200);
+        });
+
+        it("deletes an account, and audits it", async () => {
+          const path = tenantPath(stack, `/users/${accountId}`);
+          expect(
+            (await adminRequest(stack, "DELETE", path, { credential: owner }))
+              .status,
+          ).toBe(204);
+          expect(
+            (await adminRequest(stack, "GET", path, { credential: owner }))
+              .status,
+          ).toBe(404);
+          const event = (await auditEvents("end-user.updated")).find(
+            (candidate) => candidate.targetId === accountId,
+          );
+          expect(event?.detail).toMatchObject({
+            deleted: true,
+            username: "access-holder",
+          });
+        });
       });
     });
 

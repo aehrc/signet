@@ -4,20 +4,23 @@
  */
 
 /**
- * End users and personas.
+ * End users and personas: the tenant's accounts.
  *
- * A persona is an account with no password, seeded with a launch context so that a
- * connectathon launch works without an EHR. Personas may be *created* on any
- * endpoint but are only *selectable* on one flagged non-production - that rule lives
- * in the data layer's `isPersonaSelectable` and is checked at sign-in, which is the
- * only place it can be enforced. Allowing creation either way lets an endpoint be
- * seeded before it is promoted, and refusing selection is what stops a production
- * endpoint from handing out password-free logins.
+ * An account belongs to the tenant, with one username and one password across all of
+ * its endpoints. It signs in only at an endpoint it has been given access to, which is
+ * managed per endpoint in `./endpointAccessRoutes.ts`; an account created here has
+ * access to nothing.
+ *
+ * A persona is an account with no password, seeded with a launch context on each SMART
+ * endpoint it has access to, so that a connectathon launch works without an EHR.
+ * Personas may be *created* in any tenant but are only *selectable* on an endpoint
+ * flagged non-production - that rule lives in the data layer's `isPersonaSelectable`
+ * and is checked at sign-in, which is the only place it can be enforced.
  *
  * Disabling is preferred to deleting throughout. A disabled account stops
- * authenticating on the next request, keeps its name attached to its audit trail, and
- * leaves the consents it granted visible; deleting it takes all three away. Both are
- * available, and the console leads with the first.
+ * authenticating on the next request, at every endpoint, keeps its name attached to its
+ * audit trail, and leaves the consents it granted visible; deleting it takes all three
+ * away. Both are available, and the console leads with the first.
  *
  * Author: John Grimes
  */
@@ -32,7 +35,6 @@ import {
   invitationExpiry,
   invitationRefusal,
   invitationUrl,
-  toLaunchContext,
   withEmailVerification,
 } from "@signet/core";
 import {
@@ -41,12 +43,13 @@ import {
   deleteEndUser,
   findOutstandingEndUserInvitation,
   generateOpaqueToken,
-  getEndUser,
+  getTenantEndUser,
   hashPassword,
   hashToken,
   isUniqueViolation,
   issueEndUserInvitation,
-  listEndUsers,
+  listEndpointAccess,
+  listTenantEndUsers,
   setEndUserDisabled,
   setEndUserPasswordHash,
   updateEndUser,
@@ -56,28 +59,63 @@ import {
 import { recordAdminEvent } from "./auditTrail.js";
 import { requireRole } from "./authentication.js";
 import { adminErrorBody, statusForAdminError } from "./errors.js";
-import { ENDPOINT_PATH } from "./paths.js";
+import { TENANT_PATH } from "./paths.js";
 import { parseBody } from "./requestBody.js";
-import { refuseSmartOnly, smartOnlyUserFields } from "./smartOnly.js";
 import { endUserView, invitationView } from "./views.js";
+import { tenantUrlFor } from "../oauth/issuer.js";
 
 import type { ServerContext, SignetEnvironment } from "../context.js";
-import type { EndpointScope, EndUser } from "@signet/db";
+import type { EndpointAccess, EndUser, TenantScope } from "@signet/db";
 import type { Context, Hono } from "hono";
 
-/** An endpoint-scoped route acting on one existing user. */
+/** A tenant route acting on one existing account. */
 interface EndUserRoute {
-  readonly scope: EndpointScope;
+  readonly scope: TenantScope;
   readonly userId: string;
   readonly user: EndUser;
 }
 
 /**
- * Resolves the user named in the path, or the 404 to answer with.
+ * Reads one of the tenant's accounts, whatever endpoints it has access to.
  *
- * Every route below needs the same three things and would otherwise repeat the same
- * preamble, one copy of which would eventually forget the endpoint predicate - and a
- * user lookup without one would reach another endpoint's account.
+ * @param context - The server's dependencies.
+ * @param scope - The tenant.
+ * @param userId - The account's identifier, from the path.
+ */
+export async function findTenantEndUser(
+  context: ServerContext,
+  scope: TenantScope,
+  userId: string,
+): Promise<EndUser | undefined> {
+  return await withTenantScope(context.db, scope, (bound) =>
+    getTenantEndUser(bound, userId),
+  );
+}
+
+/**
+ * Answers with an account and the endpoints it has access to, as `{ user }`.
+ *
+ * @param c - The Hono request context.
+ * @param context - The server's dependencies.
+ * @param scope - The tenant.
+ * @param user - The account.
+ * @param status - The status to answer with.
+ */
+export async function respondWithEndUser(
+  c: Context<SignetEnvironment>,
+  context: ServerContext,
+  scope: TenantScope,
+  user: EndUser,
+  status: 200 | 201 = 200,
+): Promise<Response> {
+  const access = await withTenantScope(context.db, scope, (bound) =>
+    listEndpointAccess(bound, user.id),
+  );
+  return c.json({ user: endUserView(user, access) }, status);
+}
+
+/**
+ * Resolves the account named in the path, or the 404 to answer with.
  *
  * @param c - The Hono request context.
  * @param context - The server's dependencies.
@@ -86,14 +124,12 @@ async function loadEndUserRoute(
   c: Context<SignetEnvironment>,
   context: ServerContext,
 ): Promise<EndUserRoute | Response> {
-  const { scope } = c.get("endpoint");
+  const { scope } = c.get("tenant");
   const userId = c.req.param("userId") ?? "";
-  const user = await withTenantScope(context.db, scope, (bound) =>
-    getEndUser(bound, userId),
-  );
+  const user = await findTenantEndUser(context, scope, userId);
   if (user === undefined) {
     return c.json(
-      adminErrorBody("not_found", "No such user on this endpoint"),
+      adminErrorBody("not_found", "No such user in this tenant"),
       statusForAdminError("not_found"),
     );
   }
@@ -101,7 +137,7 @@ async function loadEndUserRoute(
 }
 
 /**
- * Registers the end user routes.
+ * Registers the tenant's account routes.
  *
  * @param router - The admin API router.
  * @param context - The server's dependencies.
@@ -110,13 +146,30 @@ export function registerEndUserRoutes(
   router: Hono<SignetEnvironment>,
   context: ServerContext,
 ): void {
-  /** Lists the endpoint's users and personas. */
-  router.get(`${ENDPOINT_PATH}/users`, requireRole("viewer"), async (c) => {
-    const { scope } = c.get("endpoint");
-    const users = await withTenantScope(context.db, scope, (bound) =>
-      listEndUsers(bound),
+  /** Lists the tenant's users and personas, each with the endpoints they can use. */
+  router.get(`${TENANT_PATH}/users`, requireRole("viewer"), async (c) => {
+    const { scope } = c.get("tenant");
+    const { users, access } = await withTenantScope(
+      context.db,
+      scope,
+      async (bound) => ({
+        users: await listTenantEndUsers(bound),
+        access: await listEndpointAccess(bound),
+      }),
     );
-    return c.json({ users: users.map(endUserView) });
+    // Grouped once, rather than filtering the tenant's whole list per account.
+    const byUser = new Map<string, EndpointAccess[]>();
+    for (const row of access) {
+      const rows = byUser.get(row.endUserId);
+      if (rows === undefined) {
+        byUser.set(row.endUserId, [row]);
+      } else {
+        rows.push(row);
+      }
+    }
+    return c.json({
+      users: users.map((user) => endUserView(user, byUser.get(user.id) ?? [])),
+    });
   });
 
   /**
@@ -127,30 +180,23 @@ export function registerEndUserRoutes(
    * what a user is. Read parity with the list: `viewer` and above.
    */
   router.get(
-    `${ENDPOINT_PATH}/users/:userId`,
+    `${TENANT_PATH}/users/:userId`,
     requireRole("viewer"),
     async (c) => {
       const route = await loadEndUserRoute(c, context);
       if (route instanceof Response) {
         return route;
       }
-      return c.json({ user: endUserView(route.user) });
+      return await respondWithEndUser(c, context, route.scope, route.user);
     },
   );
 
-  /** Creates a local account or a persona. */
-  router.post(`${ENDPOINT_PATH}/users`, requireRole("admin"), async (c) => {
-    const { scope, endpoint } = c.get("endpoint");
+  /** Creates a local account or a persona, with access to no endpoint yet. */
+  router.post(`${TENANT_PATH}/users`, requireRole("admin"), async (c) => {
+    const { scope } = c.get("tenant");
     const body = await parseBody(c, endUserCreateSchema);
     if (body instanceof Response) {
       return body;
-    }
-    const refusal = refuseSmartOnly(
-      c,
-      smartOnlyUserFields(endpoint.kind, body),
-    );
-    if (refusal !== undefined) {
-      return refusal;
     }
 
     let user;
@@ -163,9 +209,6 @@ export function registerEndUserRoutes(
           ...(body.password === undefined
             ? {}
             : { passwordHash: await hashPassword(body.password) }),
-          ...(body.fhirUserReference === undefined
-            ? {}
-            : { fhirUserReference: body.fhirUserReference }),
           ...(body.email === undefined ? {} : { email: body.email }),
           ...(body.emailVerified === undefined
             ? {}
@@ -174,9 +217,6 @@ export function registerEndUserRoutes(
           ...(body.attributes === undefined
             ? {}
             : { attributes: body.attributes }),
-          ...(body.defaultContext === undefined || body.defaultContext === null
-            ? {}
-            : { defaultContext: toLaunchContext(body.defaultContext) }),
         }),
       );
     } catch (error) {
@@ -184,7 +224,7 @@ export function registerEndUserRoutes(
         return c.json(
           adminErrorBody(
             "conflict",
-            "This endpoint already has a user with that username",
+            "This tenant already has a user with that username",
           ),
           statusForAdminError("conflict"),
         );
@@ -195,14 +235,10 @@ export function registerEndUserRoutes(
     await recordAdminEvent(context, c, {
       action: "end-user.created",
       target: { type: "end-user", id: user.id },
-      detail: {
-        username: user.username,
-        isPersona: user.isPersona,
-        endpointSlug: endpoint.slug,
-      },
+      detail: { username: user.username, isPersona: user.isPersona },
     });
 
-    return c.json({ user: endUserView(user) }, 201);
+    return c.json({ user: endUserView(user, []) }, 201);
   });
 
   /**
@@ -211,10 +247,11 @@ export function registerEndUserRoutes(
    * The username is not editable: it is what a stored consent and an audit trail name
    * the person by. Neither is the password, which has its own route and its own audit
    * event - a display-name change and a credential change should not be
-   * indistinguishable in the trail.
+   * indistinguishable in the trail. What a user is called at one endpoint is edited
+   * with their access to it.
    */
   router.patch(
-    `${ENDPOINT_PATH}/users/:userId`,
+    `${TENANT_PATH}/users/:userId`,
     requireRole("admin"),
     async (c) => {
       const route = await loadEndUserRoute(c, context);
@@ -227,30 +264,13 @@ export function registerEndUserRoutes(
       if (body instanceof Response) {
         return body;
       }
-      const refusal = refuseSmartOnly(
-        c,
-        smartOnlyUserFields(c.get("endpoint").endpoint.kind, body),
-      );
-      if (refusal !== undefined) {
-        return refusal;
-      }
 
       // A changed or cleared address loses its verified flag unless this same edit
       // vouches for it again; see `withEmailVerification`.
-      const { disabled, defaultContext, ...fields } = withEmailVerification(
-        existing,
-        body,
-      );
+      const { disabled, ...fields } = withEmailVerification(existing, body);
       const patch: Record<string, unknown> = Object.fromEntries(
         Object.entries(fields).filter(([, value]) => value !== undefined),
       );
-      // Normalised rather than passed through: a patch carrying
-      // `{ patient: undefined }` would otherwise store a key holding nothing, and a
-      // seeded context is read back as a launch context where presence is the signal.
-      if (defaultContext !== undefined) {
-        patch["defaultContext"] =
-          defaultContext === null ? null : toLaunchContext(defaultContext);
-      }
 
       let user = existing;
       if (Object.keys(patch).length > 0) {
@@ -259,7 +279,7 @@ export function registerEndUserRoutes(
         );
         if (updated === undefined) {
           return c.json(
-            adminErrorBody("not_found", "No such user on this endpoint"),
+            adminErrorBody("not_found", "No such user in this tenant"),
             statusForAdminError("not_found"),
           );
         }
@@ -287,19 +307,19 @@ export function registerEndUserRoutes(
         },
       });
 
-      return c.json({ user: endUserView(user) });
+      return await respondWithEndUser(c, context, scope, user);
     },
   );
 
   /**
-   * Sets a user's password.
+   * Sets a user's password, which is the one password at every endpoint they can use.
    *
    * Refused for a persona: a persona with a password would be selectable from the
    * picker *and* able to sign in, which is two authentication paths where the model
    * has one.
    */
   router.post(
-    `${ENDPOINT_PATH}/users/:userId/password`,
+    `${TENANT_PATH}/users/:userId/password`,
     requireRole("admin"),
     async (c) => {
       const route = await loadEndUserRoute(c, context);
@@ -342,7 +362,7 @@ export function registerEndUserRoutes(
 
   /** Reports whether a user has an outstanding invitation, and when it expires. */
   router.get(
-    `${ENDPOINT_PATH}/users/:userId/invitation`,
+    `${TENANT_PATH}/users/:userId/invitation`,
     requireRole("viewer"),
     async (c) => {
       const route = await loadEndUserRoute(c, context);
@@ -369,22 +389,28 @@ export function registerEndUserRoutes(
   /**
    * Issues an invitation link, replacing any the user already has.
    *
-   * The link is returned once and only its digest is stored, so the console shows it
-   * to the administrator in the response to this request and never again. Refused for
-   * an account that could not sign in with the password it would choose; the rule is
-   * `invitationRefusal` in `@signet/core`, which the console also uses to decide
-   * whether to offer the action.
+   * The link opens the tenant's invitation page, since the password it sets is the
+   * account's at every endpoint. It is returned once and only its digest is stored, so
+   * the console shows it to the administrator in the response to this request and never
+   * again. Refused for an account that could not sign in anywhere with the password it
+   * would choose; the rule is `invitationRefusal` in `@signet/core`, which the console
+   * also uses to decide whether to offer the action.
    */
   router.post(
-    `${ENDPOINT_PATH}/users/:userId/invitation`,
+    `${TENANT_PATH}/users/:userId/invitation`,
     requireRole("admin"),
     async (c) => {
       const route = await loadEndUserRoute(c, context);
       if (route instanceof Response) {
         return route;
       }
-      const { endpoint, issuer } = c.get("endpoint");
-      const refusal = invitationRefusal(endpoint, route.user);
+      const access = await withTenantScope(context.db, route.scope, (bound) =>
+        listEndpointAccess(bound, route.userId),
+      );
+      const refusal = invitationRefusal(
+        route.user,
+        access.map((row) => ({ authMode: row.endpointAuthMode })),
+      );
       if (refusal !== undefined) {
         return c.json(
           adminErrorBody(
@@ -421,7 +447,10 @@ export function registerEndUserRoutes(
       return c.json(
         {
           invitation: {
-            url: invitationUrl(issuer, token),
+            url: invitationUrl(
+              tenantUrlFor(context.config.publicUrl, route.scope.tenantSlug),
+              token,
+            ),
             ...invitationView(invitation),
           },
         },
@@ -432,7 +461,7 @@ export function registerEndUserRoutes(
 
   /** Withdraws a user's outstanding invitation, so its link stops working. */
   router.delete(
-    `${ENDPOINT_PATH}/users/:userId/invitation`,
+    `${TENANT_PATH}/users/:userId/invitation`,
     requireRole("admin"),
     async (c) => {
       const route = await loadEndUserRoute(c, context);
@@ -464,9 +493,12 @@ export function registerEndUserRoutes(
     },
   );
 
-  /** Deletes a user, and the consents and tokens that hang off them. */
+  /**
+   * Deletes a user, and the access, consents and tokens that hang off them at every
+   * endpoint.
+   */
   router.delete(
-    `${ENDPOINT_PATH}/users/:userId`,
+    `${TENANT_PATH}/users/:userId`,
     requireRole("admin"),
     async (c) => {
       const route = await loadEndUserRoute(c, context);

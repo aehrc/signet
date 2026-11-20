@@ -20,7 +20,7 @@ import {
 } from "./mappers.js";
 
 import type { Client } from "../schema/clients.js";
-import type { Endpoint, EndUser } from "../schema/endpoints.js";
+import type { Endpoint, EndpointEndUser } from "../schema/endpoints.js";
 import type { AccessToken } from "../schema/runtime.js";
 
 const ISSUED = new Date("2026-01-01T12:00:00.000Z");
@@ -98,9 +98,9 @@ const client: Client = {
   updatedAt: ISSUED,
 };
 
-const endUser: EndUser = {
+const endUser: EndpointEndUser = {
   id: "44444444-4444-4444-4444-444444444444",
-  endpointId: endpoint.id,
+  tenantId: endpoint.tenantId,
   username: "alice",
   passwordHash: "$argon2id$never-emitted",
   fhirUserReference: "Practitioner/123",

@@ -12,7 +12,8 @@
  *
  * The console mirrors the API's hierarchy - tenant, then endpoint, then resource -
  * because the navigation is that hierarchy and a URL that did not match it would
- * make a bookmark ambiguous about which endpoint it meant.
+ * make a bookmark ambiguous about which endpoint it meant. End users belong to the
+ * tenant, so their pages hang off the tenant rather than any endpoint.
  *
  * Author: John Grimes
  */
@@ -24,7 +25,6 @@ import {
   InboxIcon,
   KeyIcon,
   LawIcon,
-  PeopleIcon,
   RocketIcon,
   VerifiedIcon,
 } from "@primer/octicons-react";
@@ -66,13 +66,9 @@ export function clientRoute(
   return endpointRoute(tenant, endpoint, `/clients/${segment(clientId)}`);
 }
 
-/** One end user's detail page. */
-export function endUserRoute(
-  tenant: string,
-  endpoint: string,
-  userId: string,
-): string {
-  return endpointRoute(tenant, endpoint, `/users/${segment(userId)}`);
+/** One end user's detail page, under the tenant that owns the account. */
+export function endUserRoute(tenant: string, userId: string): string {
+  return tenantRoute(tenant, `/users/${segment(userId)}`);
 }
 
 /** One tab of an endpoint's pages. */
@@ -88,7 +84,6 @@ export const ENDPOINT_TABS: readonly EndpointTab[] = [
   { path: "", label: "Overview", icon: HomeIcon },
   { path: "/clients", label: "Clients", icon: AppsIcon },
   { path: "/policy", label: "Policy", icon: LawIcon },
-  { path: "/users", label: "Users", icon: PeopleIcon },
   { path: "/keys", label: "Keys", icon: KeyIcon },
   { path: "/identity", label: "Identity", icon: IdBadgeIcon },
   { path: "/trust", label: "Trust & tickets", icon: VerifiedIcon },

@@ -6,8 +6,9 @@
 /**
  * An end user's email address and whether it is verified.
  *
- * Shared by the add-user form and the user detail page, which both offer it on an
- * OAuth endpoint only - the `email` scope that releases it exists only there. The
+ * Shared by the add-user form and the user detail page. The address is the
+ * account's, so it is offered whatever endpoints the account has access to; it is
+ * released only on an OAuth endpoint, where the `email` scope exists. The
  * verified flag is its own control rather than inferred, because Signet sends no
  * verification mail: an operator who has checked the address says so, and an app
  * reading `email_verified` is told exactly that and nothing more.

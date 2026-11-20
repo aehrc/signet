@@ -180,28 +180,20 @@ export function useRevokeAuthorization(tenant: string, endpoint: string) {
 }
 
 /** Reads what an invitation link is for. */
-export function useInvitationDetails(
-  tenant: string,
-  endpoint: string,
-  token: string,
-) {
+export function useInvitationDetails(tenant: string, token: string) {
   return useQuery({
-    queryKey: ["invitation", tenant, endpoint, token],
-    queryFn: async () => await readInvitation(tenant, endpoint, token),
+    queryKey: ["invitation-link", tenant, token],
+    queryFn: async () => await readInvitation(tenant, token),
     retry: false,
     refetchOnWindowFocus: false,
   });
 }
 
 /** Chooses the account's password, spending the invitation link. */
-export function useAcceptInvitation(
-  tenant: string,
-  endpoint: string,
-  token: string,
-) {
+export function useAcceptInvitation(tenant: string, token: string) {
   return useMutation({
     mutationFn: async (password: string) =>
-      await acceptInvitation(tenant, endpoint, token, password),
+      await acceptInvitation(tenant, token, password),
   });
 }
 

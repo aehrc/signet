@@ -19,6 +19,12 @@
  * The username is shown prominently, because it is what the reader signs in with
  * afterwards and the link is the only place they are told it.
  *
+ * The page belongs to the tenant rather than to an endpoint: the account is the
+ * tenant's, and the password chosen here is the one it signs in with at every
+ * endpoint it has been given access to. So the page names the tenant, and sends the
+ * reader back to whichever app or service they were invited to use rather than to
+ * one endpoint's sign-in page.
+ *
  * Author: John Grimes
  */
 
@@ -27,7 +33,6 @@ import { invitationTokenFromFragment } from "@signet/core";
 import { useState } from "react";
 import { useLocation, useParams } from "react-router";
 
-import { issuerBase } from "./api.js";
 import { passwordChoiceIssues } from "./passwordChoice.js";
 import { useAcceptInvitation, useInvitationDetails } from "./queries.js";
 import { ApiError, describeError } from "../api/errors.js";
@@ -49,10 +54,7 @@ const INVALID_LINK =
 
 /** The invitation page. */
 export function InvitationPage() {
-  const { tenant, endpoint } = useParams<{
-    tenant: string;
-    endpoint: string;
-  }>();
+  const { tenant } = useParams<{ tenant: string }>();
   // Followed rather than read once: opening a second link in a tab already showing
   // this page changes only the fragment, which does not remount it.
   const token = invitationTokenFromFragment(useLocation().hash);
@@ -61,27 +63,23 @@ export function InvitationPage() {
     // No server call: nothing in the fragment could have been a token.
     return <InvalidLink message={INVALID_LINK} />;
   }
-  if (tenant === undefined || endpoint === undefined) {
+  if (tenant === undefined) {
     return <InvalidLink message={INVALID_LINK} />;
   }
   // Keyed on the token so that a new link starts with a fresh lookup and form.
-  return (
-    <Invitation key={token} tenant={tenant} endpoint={endpoint} token={token} />
-  );
+  return <Invitation key={token} tenant={tenant} token={token} />;
 }
 
 /** The page proper, once there is a token to ask about. */
 function Invitation({
   tenant,
-  endpoint,
   token,
 }: Readonly<{
   readonly tenant: string;
-  readonly endpoint: string;
   readonly token: string;
 }>) {
-  const details = useInvitationDetails(tenant, endpoint, token);
-  const accept = useAcceptInvitation(tenant, endpoint, token);
+  const details = useInvitationDetails(tenant, token);
+  const accept = useAcceptInvitation(tenant, token);
 
   if (accept.isSuccess) {
     return (
@@ -96,14 +94,11 @@ function Invitation({
           </code>
           .
         </p>
-        <div>
-          <a
-            className="btn btn-primary"
-            href={`${issuerBase(tenant, endpoint)}/manage`}
-          >
-            Sign in
-          </a>
-        </div>
+        <p className="text-base-content/70 text-sm max-sm:text-base">
+          Go back to the app or service you were invited to use, and sign in
+          there. The same username and password work everywhere this account has
+          been given access.
+        </p>
       </CentredShell>
     );
   }
@@ -165,7 +160,7 @@ function ChoosePassword({
   return (
     <CentredShell
       title="Choose your password"
-      subtitle={`For your account on ${details.endpointName}.`}
+      subtitle={`For your account with ${details.tenantName}.`}
     >
       <DetailList>
         <DetailRow label="Name">{details.displayName}</DetailRow>

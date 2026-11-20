@@ -148,7 +148,9 @@ export type AuditAction =
   | "end-user.updated"
   | "end-user.disabled"
   | "end-user.invited"
-  | "end-user.invitation-cancelled";
+  | "end-user.invitation-cancelled"
+  | "end-user.access-granted"
+  | "end-user.access-revoked";
 
 /**
  * Human-readable description of each action.
@@ -237,6 +239,9 @@ export const AUDIT_ACTION_DESCRIPTIONS: Readonly<Record<AuditAction, string>> =
     "end-user.invited":
       "Invitation link issued for an end user to choose a password",
     "end-user.invitation-cancelled": "End user's invitation link withdrawn",
+    "end-user.access-granted":
+      "End user given access to an endpoint, or their access there changed",
+    "end-user.access-revoked": "End user's access to an endpoint withdrawn",
   };
 
 /** Which broad group each action belongs to. */
@@ -310,6 +315,8 @@ export const AUDIT_ACTION_CATEGORIES: Readonly<
   "end-user.disabled": "configuration",
   "end-user.invited": "configuration",
   "end-user.invitation-cancelled": "configuration",
+  "end-user.access-granted": "configuration",
+  "end-user.access-revoked": "configuration",
 };
 
 /**

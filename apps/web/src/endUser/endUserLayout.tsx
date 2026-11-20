@@ -7,9 +7,10 @@
  * The frame every end-user page sits inside: the branding of the tenant in the URL.
  *
  * One layout route rather than a read in each page, so that every page under an
- * issuer - sign in, picker, consent, manage, the developer portal, the invitation -
- * carries the same mark and the same title without any of them having to remember
- * to ask for it.
+ * issuer - sign in, picker, consent, manage, the developer portal - and the tenant's
+ * own invitation page carry the same mark and the same title without any of them
+ * having to remember to ask for it. It reads only the tenant from the URL, which is
+ * what lets the invitation page, whose link names no endpoint, sit inside it too.
  *
  * Author: John Grimes
  */

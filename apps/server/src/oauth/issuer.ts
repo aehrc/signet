@@ -28,6 +28,17 @@ import type { ServerContext, SignetEnvironment } from "../context.js";
 import type { MiddlewareHandler } from "hono";
 
 /**
+ * Builds a tenant's public URL, under which its endpoints' issuers and its own pages
+ * sit.
+ *
+ * @param publicUrl - The deployment's public origin, without a trailing slash.
+ * @param tenantSlug - The tenant's URL segment.
+ */
+export function tenantUrlFor(publicUrl: string, tenantSlug: string): string {
+  return `${normaliseIssuer(publicUrl)}/t/${tenantSlug}`;
+}
+
+/**
  * Builds an endpoint's issuer identifier.
  *
  * @param publicUrl - The deployment's public origin, without a trailing slash.
@@ -39,7 +50,7 @@ export function issuerFor(
   tenantSlug: string,
   endpointSlug: string,
 ): string {
-  return `${normaliseIssuer(publicUrl)}/t/${tenantSlug}/e/${endpointSlug}`;
+  return `${tenantUrlFor(publicUrl, tenantSlug)}/e/${endpointSlug}`;
 }
 
 /** The path prefix every endpoint-scoped route is mounted under. */

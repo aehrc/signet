@@ -87,7 +87,7 @@ import type {
   AuthorizationSession,
   Client,
   ClientScope,
-  EndUser,
+  EndpointEndUser,
 } from "@signet/db";
 import type { Context } from "hono";
 
@@ -221,7 +221,7 @@ async function scopeDescriptionsFor(
   context: ServerContext,
   issuerContext: ResolvedIssuerContext,
   loaded: LoadedSession,
-  user: EndUser | undefined,
+  user: EndpointEndUser | undefined,
 ): Promise<Readonly<Record<string, string>>> {
   if (issuerContext.endpoint.kind !== "oauth" || user === undefined) {
     return {};
@@ -542,7 +542,7 @@ async function attachUser(
   context: ServerContext,
   issuerContext: ResolvedIssuerContext,
   loaded: LoadedSession,
-  user: EndUser,
+  user: EndpointEndUser,
 ): Promise<void> {
   const attached = await withTenantScope(
     context.db,
@@ -868,7 +868,7 @@ export async function resumeAuthenticatedSession(
   context: ServerContext,
   issuerContext: ResolvedIssuerContext,
   sessionId: string,
-  user: EndUser,
+  user: EndpointEndUser,
   metadata: ReturnType<typeof requestMetadata>,
 ): Promise<string | undefined> {
   const loaded = await loadSession(context, issuerContext, sessionId);

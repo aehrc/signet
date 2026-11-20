@@ -11,6 +11,11 @@
  * the credential, and separating them would allow a persona with a password - an
  * account that is password-free in the console and not in the database.
  *
+ * An account belongs to a tenant. What only means something on one endpoint - the
+ * `fhirUser` reference and a persona's launch context, both of which name resources
+ * on that endpoint's FHIR server - is set on the account's access to the endpoint,
+ * by {@link endpointAccessSchema}, not on the account.
+ *
  * Author: John Grimes
  */
 
@@ -34,13 +39,22 @@ export const personaContextSchema = z.object({
 /** The fields shared by creating and editing an end user. */
 const endUserFieldsSchema = z.object({
   displayName: z.string().min(1).max(200),
-  fhirUserReference: fhirUserReferenceSchema.nullish(),
   /** Released in the ID token and userinfo for the `email` scope. */
   email: z.email().max(320).nullish(),
   /** Released as `email_verified` beside the email. */
   emailVerified: z.boolean().optional(),
   roles: z.array(z.string().max(128)).max(50).optional(),
   attributes: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * Giving an account access to an endpoint, or changing the access it has.
+ *
+ * Both fields exist only on a SMART on FHIR endpoint; the server refuses either on an
+ * OAuth endpoint. A field left out keeps its stored value, and null clears it.
+ */
+export const endpointAccessSchema = z.object({
+  fhirUserReference: fhirUserReferenceSchema.nullish(),
   defaultContext: personaContextSchema.nullish(),
 });
 
@@ -57,14 +71,14 @@ const endUserPasswordField = z
   .max(1024);
 
 /**
- * Creating an end user or persona.
+ * Creating an end user or persona in a tenant, with access to no endpoint yet.
  *
  * A password is refused for a persona. For a local account it is optional: an account
  * created without one cannot sign in until a password is set, either by an
  * administrator or by its holder through an invitation link. A persona can be
- * selected only on a non-production endpoint, which the server enforces at
- * sign-in; creating one on a production endpoint is allowed so that an endpoint can
- * be seeded before it is promoted.
+ * selected only on a non-production endpoint it has access to, which the server
+ * enforces at sign-in; giving one access to a production endpoint is allowed so that
+ * an endpoint can be seeded before it is promoted.
  */
 export const endUserCreateSchema = endUserFieldsSchema
   .extend({
@@ -101,5 +115,6 @@ export const endUserPasswordSchema = z.object({
 
 export type EndUserCreate = z.infer<typeof endUserCreateSchema>;
 export type EndUserPatch = z.infer<typeof endUserPatchSchema>;
+export type EndpointAccessInput = z.infer<typeof endpointAccessSchema>;
 export type EndUserPassword = z.infer<typeof endUserPasswordSchema>;
 export type PersonaContext = z.infer<typeof personaContextSchema>;

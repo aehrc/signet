@@ -55,6 +55,7 @@ const EXPECTED_TABLES = [
   "client_requests",
   "clients",
   "consents",
+  "end_user_endpoints",
   "end_user_invitations",
   "end_user_sessions",
   "end_users",
@@ -354,9 +355,8 @@ describe("deletion behaviour", () => {
     const cascadesToEndpoint = [
       "clients",
       "client_requests",
-      "end_user_invitations",
+      "end_user_endpoints",
       "end_user_sessions",
-      "end_users",
       "endpoint_keys",
       "idp_configs",
       "policies",
@@ -377,6 +377,9 @@ describe("deletion behaviour", () => {
       Object.fromEntries(cascadesToEndpoint.map((name) => [name, "cascade"])),
     );
     expect(onDeleteFor("endpoints", "tenant_id")).toBe("cascade");
+    // End users and their invitations belong to the tenant, not to an endpoint.
+    expect(onDeleteFor("end_users", "tenant_id")).toBe("cascade");
+    expect(onDeleteFor("end_user_invitations", "tenant_id")).toBe("cascade");
   });
 
   it("never lets an admin user deletion take history with it", () => {

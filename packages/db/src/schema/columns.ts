@@ -7,7 +7,7 @@
  * Author: John Grimes
  */
 
-import { text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { adminUsers } from "./tenancy.js";
 
@@ -70,6 +70,8 @@ export function singleUseLifecycle() {
  * `consents` and `end_user_sessions` both hang off the pair, and both cascade from either
  * side: deleting an endpoint or an account takes what belonged to it, because a consent
  * or a session for a deleted account is not something anything should be able to read.
+ * Each table also carries {@link endpointAccessReference}, so that withdrawing the
+ * account's access to the endpoint takes them too.
  *
  * The referenced tables are passed in rather than imported, because `./endpoints.js`
  * imports this module and a cycle between them is exactly the kind of thing that fails
@@ -90,6 +92,33 @@ export function endpointAndEndUser(
       .notNull()
       .references(() => endUsers.id, { onDelete: "cascade" }),
   };
+}
+
+/**
+ * A foreign key from a row's `(end_user_id, endpoint_id)` to the access row that
+ * admits that account at that endpoint.
+ *
+ * The database then refuses a consent, session or authorization for an account on an
+ * endpoint it has no access to, and deleting the access row cascades them away. A
+ * null `end_user_id`, as an authorization session holds before sign-in, is not
+ * checked, which is Postgres' `MATCH SIMPLE` behaviour.
+ *
+ * @param name - The constraint name.
+ * @param columns - The row's own `end_user_id` and `endpoint_id` columns, in that order.
+ * @param access - The `end_user_endpoints` table.
+ * @param access.endUserId - Its `end_user_id` column.
+ * @param access.endpointId - Its `endpoint_id` column.
+ */
+export function endpointAccessReference(
+  name: string,
+  columns: readonly [AnyPgColumn, AnyPgColumn],
+  access: { readonly endUserId: AnyPgColumn; readonly endpointId: AnyPgColumn },
+) {
+  return foreignKey({
+    name,
+    columns: [...columns],
+    foreignColumns: [access.endUserId, access.endpointId],
+  }).onDelete("cascade");
 }
 
 /**

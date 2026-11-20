@@ -14,8 +14,8 @@
  * way out.
  *
  * The email address is used for the `mailto:` link's recipient and nothing else. It
- * starts as the account's own address where one is recorded - only an OAuth endpoint
- * records one - and what is typed here is never sent to Signet and never stored.
+ * starts as the account's own address where one is recorded, and what is typed here
+ * is never sent to Signet and never stored.
  *
  * Author: John Grimes
  */
@@ -40,7 +40,8 @@ type CopyState =
 interface InvitationDialogProps {
   readonly invitation: IssuedInvitationView;
   readonly username: string;
-  readonly endpointName: string;
+  /** The tenant the account belongs to, which the message names. */
+  readonly tenantName: string;
   /** The account's recorded email address, or null where it has none. */
   readonly recipient: string | null;
   readonly onClose: () => void;
@@ -50,7 +51,7 @@ interface InvitationDialogProps {
 export function InvitationDialog({
   invitation,
   username,
-  endpointName,
+  tenantName,
   onClose,
   recipient,
 }: Readonly<InvitationDialogProps>) {
@@ -116,7 +117,7 @@ export function InvitationDialog({
               className="btn btn-primary btn-sm"
               href={invitationMailto({
                 to: email,
-                endpointName,
+                tenantName,
                 username,
                 url: invitation.url,
                 expiresAt: invitation.expiresAt,

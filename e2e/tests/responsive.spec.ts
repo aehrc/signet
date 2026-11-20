@@ -37,6 +37,7 @@ import {
   SEED,
   SIGNET,
 } from "../support/stack.js";
+import { USERS } from "../support/users.js";
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -473,6 +474,7 @@ const CONSOLE_ROUTES: readonly {
     url: `${SIGNET}/console/t/demo/settings`,
     heading: "Tenant settings",
   },
+  { name: "the user list", url: USERS, heading: "Users" },
   { name: "the endpoint overview", url: ENDPOINT, heading: "Integration" },
   { name: "the client list", url: `${ENDPOINT}/clients`, heading: "Clients" },
   {
@@ -480,7 +482,6 @@ const CONSOLE_ROUTES: readonly {
     url: `${ENDPOINT}/clients/stub-app`,
     heading: "Registration",
   },
-  { name: "the user list", url: `${ENDPOINT}/users`, heading: "Users" },
   {
     name: "the signing keys",
     url: `${ENDPOINT}/keys`,
@@ -637,7 +638,7 @@ test.describe("console surfaces", () => {
   test("fits a user's detail page on a phone", async ({ page }) => {
     // Reached by tapping the card rather than by address: an end user's
     // identifier is minted by the seed, so there is no URL to write down here.
-    await page.goto(`${ENDPOINT}/users`);
+    await page.goto(USERS);
     await page.getByRole("link", { name: "Dr Casey Clinician" }).click();
     await expect(page.getByLabel("Display name")).toHaveValue(
       "Dr Casey Clinician",

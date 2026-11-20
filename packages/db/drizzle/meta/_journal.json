@@ -99,6 +99,13 @@
       "when": 1794529212435,
       "tag": "0013_endpoint_login_message",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795148419302,
+      "tag": "0014_tenant_end_users",
+      "breakpoints": true
     }
   ]
 }

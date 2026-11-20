@@ -268,36 +268,104 @@ answered with `active: false` and the token's metadata rather than as an unknown
 token, and a resource server's clock may be behind Signet's. So their cut-off is
 `SIGNET_SWEEP_ACCESS_TOKEN_GRACE` behind the present, defaulting to `24h`.
 
+## End user accounts and endpoint access
+
+End users and personas belong to a tenant. An account has one username, unique within
+the tenant, and one password, which is checked at every endpoint of the tenant in
+`local` auth mode that the account has been given access to. The console manages
+accounts on the tenant's Users page; the admin API's routes are
+`/api/v1/tenants/{tenant}/users`.
+
+Access to an endpoint is explicit. An account signs in only at an endpoint it has
+been given access to, and an account with none is refused there exactly as a wrong
+password is. A persona is offered in an endpoint's picker only when it has access to
+that endpoint. Access is granted and withdrawn with `PUT` and `DELETE` on
+`/api/v1/tenants/{tenant}/endpoints/{endpoint}/users/{userId}`, recorded in the audit
+trail as `end-user.access-granted` and `end-user.access-revoked`.
+
+An account's `fhirUser` reference and a persona's default launch context live on its
+access to an endpoint rather than on the account, because each names a resource on
+that endpoint's FHIR server. One account can be `Practitioner/1` at one endpoint and
+`Practitioner/77` at another, and each endpoint's tokens carry its own. Both are
+refused on an OAuth / OpenID Connect endpoint.
+
+Withdrawing an account's access to an endpoint deletes its consents, management-page
+sessions and in-flight authorizations there, and revokes its refresh tokens there, so a
+refresh is answered with `invalid_grant`. The tokens stay revoked if access is given
+back later: each app has to be authorised again. Access tokens already issued there run
+to their expiry. Its access to the tenant's other endpoints is untouched. Disabling or
+deleting the account acts at every endpoint at once.
+
+A federated sign-in creates the account, named `{issuer}#{sub}`, or refreshes it, and
+gives it access to the endpoint it signed in at. A sign-in at another endpoint of the
+tenant that trusts the same provider reaches the same account and gives it access
+there too.
+
+### Upgrading from per-endpoint accounts
+
+Before this release, an account belonged to one endpoint and its username was unique
+only within that endpoint. Migration `0014_tenant_end_users` moves every account to its
+endpoint's tenant, keeping its identifier, password, consents and sessions, and gives
+it access to the endpoint it came from, carrying its `fhirUser` and default context
+there. Nobody is merged: where two endpoints of one tenant held the same username, the
+oldest account keeps it and each later one is renamed `{username}@{endpoint-slug}`. A
+person whose account was renamed signs in with the new name; tell them before you
+upgrade.
+
+Federated accounts follow the same rule. Where two endpoints of one tenant trusted the
+same identity provider, the person held an `{issuer}#{sub}` account at each; the older
+keeps the name and the other becomes `{issuer}#{sub}@{endpoint-slug}`. Their next
+federated sign-in at either endpoint lands on the older account and gives it access
+there, so at the second endpoint they consent again and apps see a different `sub`. The
+renamed account can no longer be signed in to and can be deleted once nothing refers to
+it.
+
+Invitation links issued before the upgrade point at `{issuer}/invitation`. That path now
+redirects to the tenant's invitation page, carrying the token, so outstanding links keep
+working until they expire.
+
+This is a breaking change to the admin API. The account routes moved from
+`/api/v1/tenants/{tenant}/endpoints/{endpoint}/users` to
+`/api/v1/tenants/{tenant}/users`, the create and edit bodies no longer accept
+`fhirUserReference` or `defaultContext`, which are set with the access `PUT` instead,
+and the invitation routes moved with the accounts. A script that creates users needs
+updating; `scripts/seedStack.mjs` is a worked example.
+
 ## Inviting end users
 
-An administrator can create a local account on an endpoint without a password and
-send its holder a link to choose one. Signet sends no mail: the console shows the link
-once, with a button that opens the administrator's own mail client with the message
-filled in and another that copies the link. The email address typed into that dialog
-is used for the message's recipient and is not sent to Signet. The same link resets a
-password that has been forgotten, and the console's user page offers it for any local
-account.
+An administrator can create a local account without a password and send its holder a
+link to choose one. Signet sends no mail: the console shows the link once, with a
+button that opens the administrator's own mail client with the message filled in and
+another that copies the link. The email address typed into that dialog is used for the
+message's recipient and is not sent to Signet. The same link resets a password that has
+been forgotten, and the console's user page offers it for any local account.
 
-The link is `{iss}/invitation#{token}`. The token is in the fragment, which browsers do
-not send to the server, so it does not appear in access logs; the invitation page
-presents it to `{iss}/invitation/details` and `{iss}/invitation/accept` in a request
-body. Both routes are rate limited as sign-in is. `end_user_invitations` holds a
-SHA-256 digest of the token and at most one row per account, so issuing a new link
-invalidates the previous one.
+An invitation belongs to the tenant, as the account does. The link is
+`{public URL}/t/{tenant}/invitation#{token}`, a page branded with the tenant's logo, and
+the password chosen there works at every endpoint in `local` auth mode the account has
+access to. The token is in the fragment, which browsers do not send to the server, so
+it does not appear in access logs; the invitation page presents it to
+`/t/{tenant}/invitation/details` and `/t/{tenant}/invitation/accept` in a request body.
+Both routes are rate limited as sign-in is. `end_user_invitations` holds a SHA-256
+digest of the token and at most one row per account, so issuing a new link invalidates
+the previous one.
 
-A link works once and for seven days. It is refused, with one message for every case,
-once it has been used, replaced or cancelled, once it has expired, and when the account
-is a persona or disabled or the endpoint federates authentication. Choosing a password
-through a link ends the account's management-page sessions, since the person who held
-the old password may hold one of those too. Issuing, cancelling and accepting are
-recorded in the audit trail as `end-user.invited`, `end-user.invitation-cancelled` and
+A link works once and for seven days. Issuing one is refused for a persona, for a
+disabled account, and for an account none of whose endpoints is in `local` auth mode,
+since the password it chose would never be checked - give it access to such an endpoint
+first. A link is refused, with one message for every case, once it has been used,
+replaced or cancelled, once it has expired, and when any of those conditions has
+become true since it was issued. Choosing a password through a link ends the account's
+management-page sessions, since the person who held the old password may hold one of
+those too. Issuing, cancelling and accepting are recorded in the audit trail against
+the tenant as `end-user.invited`, `end-user.invitation-cancelled` and
 `end-user.invitation-accepted`; the token never is.
 
 ## Branding a tenant's pages
 
 A tenant can upload a logo, which replaces the Signet wordmark on every end-user page
-under its endpoints - sign in, the patient picker, consent, the management page, the
-developer portal and the invitation page - and in the console's sidebar. While a tenant
+under its endpoints - sign in, the patient picker, consent, the management page and the
+developer portal - on its invitation page, and in the console's sidebar. While a tenant
 has a logo, those end-user pages are titled with the tenant's name and the logo's
 alternative text is that name. Without one, they carry the Signet wordmark and title,
 and the tenant's name is not shown. The console's own sign-in page belongs to no tenant

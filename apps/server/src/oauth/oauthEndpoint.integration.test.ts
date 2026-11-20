@@ -656,11 +656,11 @@ describeWithDatabase("an OAuth / OpenID Connect endpoint", () => {
       expect(response.status).toBe(400);
     });
 
-    it("keeps a user's email and refuses a fhirUser reference", async () => {
+    it("keeps a user's email and refuses a fhirUser reference on access", async () => {
       const cookie = await stack.signIn();
       const created = await adminJson<{
-        user: { email: string | null; emailVerified: boolean };
-      }>(stack, "POST", endpointPath(stack, "/users"), {
+        user: { id: string; email: string | null; emailVerified: boolean };
+      }>(stack, "POST", tenantPath(stack, "/users"), {
         credential: { cookie },
         body: {
           username: "with-email",
@@ -676,21 +676,26 @@ describeWithDatabase("an OAuth / OpenID Connect endpoint", () => {
         emailVerified: true,
       });
 
-      const refused = await adminRequest(
-        stack,
-        "POST",
-        endpointPath(stack, "/users"),
-        {
-          credential: { cookie },
-          body: {
-            username: "with-fhir-user",
-            displayName: "With fhirUser",
-            password: TEST_PASSWORD,
-            fhirUserReference: "Practitioner/1",
-          },
-        },
-      );
+      // The FHIR fields live on access to an endpoint, and this one fronts no FHIR
+      // server.
+      const accessPath = endpointPath(stack, `/users/${created.user.id}`);
+      const refused = await adminRequest(stack, "PUT", accessPath, {
+        credential: { cookie },
+        body: { fhirUserReference: "Practitioner/1" },
+      });
       expect(refused.status).toBe(400);
+      const refusedContext = await adminRequest(stack, "PUT", accessPath, {
+        credential: { cookie },
+        body: { defaultContext: { patient: "pat-1" } },
+      });
+      expect(refusedContext.status).toBe(400);
+
+      // Plain access is fine.
+      const granted = await adminRequest(stack, "PUT", accessPath, {
+        credential: { cookie },
+        body: {},
+      });
+      expect(granted.status).toBe(200);
     });
 
     it("withdraws email_verified when the address changes unvouched", async () => {
@@ -698,7 +703,7 @@ describeWithDatabase("an OAuth / OpenID Connect endpoint", () => {
       const created = await adminJson<{ user: { id: string } }>(
         stack,
         "POST",
-        endpointPath(stack, "/users"),
+        tenantPath(stack, "/users"),
         {
           credential: { cookie },
           body: {
@@ -711,7 +716,7 @@ describeWithDatabase("an OAuth / OpenID Connect endpoint", () => {
           expect: 201,
         },
       );
-      const userPath = endpointPath(stack, `/users/${created.user.id}`);
+      const userPath = tenantPath(stack, `/users/${created.user.id}`);
       const patch = async (body: unknown) =>
         await adminJson<{
           user: { email: string | null; emailVerified: boolean };

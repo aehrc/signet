@@ -30,9 +30,14 @@ export type {
   InteractionView as InteractionState,
 } from "@signet/contracts";
 
+/** The path prefix of the tenant the current page belongs to. */
+function tenantBase(tenant: string): string {
+  return `/t/${encodeURIComponent(tenant)}`;
+}
+
 /** The path prefix of the endpoint the current page belongs to. */
 export function issuerBase(tenant: string, endpoint: string): string {
-  return `/t/${encodeURIComponent(tenant)}/e/${encodeURIComponent(endpoint)}`;
+  return `${tenantBase(tenant)}/e/${encodeURIComponent(endpoint)}`;
 }
 
 /**
@@ -90,7 +95,7 @@ export async function readBranding(
 ): Promise<TenantBranding | null> {
   const { branding } = await request<{
     readonly branding: TenantBranding | null;
-  }>(`/t/${encodeURIComponent(tenant)}/branding`);
+  }>(`${tenantBase(tenant)}/branding`);
   return branding;
 }
 
@@ -231,7 +236,8 @@ export interface InvitationDetails {
   readonly username: string;
   readonly displayName: string;
   readonly expiresAt: string;
-  readonly endpointName: string;
+  /** The tenant the account belongs to: an invitation names no endpoint. */
+  readonly tenantName: string;
 }
 
 /**
@@ -242,11 +248,10 @@ export interface InvitationDetails {
  */
 export async function readInvitation(
   tenant: string,
-  endpoint: string,
   token: string,
 ): Promise<InvitationDetails> {
   return await request<InvitationDetails>(
-    `${issuerBase(tenant, endpoint)}/invitation/details`,
+    `${tenantBase(tenant)}/invitation/details`,
     { method: "POST", body: { token } },
   );
 }
@@ -254,12 +259,11 @@ export async function readInvitation(
 /** Spends an invitation link, setting the account's password. */
 export async function acceptInvitation(
   tenant: string,
-  endpoint: string,
   token: string,
   password: string,
 ): Promise<{ readonly username: string }> {
   return await request<{ readonly username: string }>(
-    `${issuerBase(tenant, endpoint)}/invitation/accept`,
+    `${tenantBase(tenant)}/invitation/accept`,
     { method: "POST", body: { token, password } },
   );
 }

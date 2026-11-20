@@ -13,13 +13,14 @@ import {
   auditPath,
   clientPath,
   endpointPath,
-  endUserPath,
+  endpointUserPath,
   passkeyPath,
   PASSKEYS_PATH,
   PASSKEY_OPTIONS_PATH,
   PASSKEY_SIGN_IN_OPTIONS_PATH,
   PASSKEY_SIGN_IN_PATH,
   tenantPath,
+  tenantUserPath,
 } from "./paths.js";
 
 describe("tenantPath", () => {
@@ -84,10 +85,31 @@ describe("clientPath", () => {
   });
 });
 
-describe("endUserPath", () => {
-  it("addresses a user by identifier", () => {
-    expect(endUserPath("demo", "fhir", "abc", "/password")).toBe(
-      "/api/v1/tenants/demo/endpoints/fhir/users/abc/password",
+describe("tenantUserPath", () => {
+  it("addresses a tenant's user by identifier", () => {
+    expect(tenantUserPath("demo", "abc", "/password")).toBe(
+      "/api/v1/tenants/demo/users/abc/password",
+    );
+  });
+
+  it("encodes the tenant and the user", () => {
+    expect(tenantUserPath("a b", "u/1")).toBe(
+      "/api/v1/tenants/a%20b/users/u%2F1",
+    );
+  });
+});
+
+describe("endpointUserPath", () => {
+  it("addresses a user's access to one endpoint", () => {
+    // The account belongs to the tenant; this path is its access to the endpoint.
+    expect(endpointUserPath("demo", "fhir", "abc")).toBe(
+      "/api/v1/tenants/demo/endpoints/fhir/users/abc",
+    );
+  });
+
+  it("encodes every segment", () => {
+    expect(endpointUserPath("a/b", "c d", "u/1")).toBe(
+      "/api/v1/tenants/a%2Fb/endpoints/c%20d/users/u%2F1",
     );
   });
 });

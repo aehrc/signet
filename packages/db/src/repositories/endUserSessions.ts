@@ -23,17 +23,17 @@
  * Author: John Grimes
  */
 
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
 import { firstRow, requireRow } from "./rows.js";
 import { executorFor } from "./scope.js";
 import { nowValue } from "./time.js";
-import { endUsers } from "../schema/endpoints.js";
+import { endpoints, endUserEndpoints, endUsers } from "../schema/endpoints.js";
 import { endUserSessions } from "../schema/runtime.js";
 
 import type { Executor } from "./executor.js";
-import type { BoundEndpointScope } from "./scope.js";
-import type { EndUser } from "../schema/endpoints.js";
+import type { BoundEndpointScope, BoundTenantScope } from "./scope.js";
+import type { EndpointEndUser } from "../schema/endpoints.js";
 import type { EndUserSession, NewEndUserSession } from "../schema/runtime.js";
 
 /** The caller-supplied half of a new end user session. */
@@ -57,7 +57,7 @@ export async function createEndUserSession(
 /** An authenticated end user and the session they hold. */
 export interface AuthenticatedEndUser {
   readonly session: EndUserSession;
-  readonly user: EndUser;
+  readonly user: EndpointEndUser;
 }
 
 /**
@@ -66,7 +66,9 @@ export interface AuthenticatedEndUser {
  * Five conditions, all in SQL: the digest matches, the session belongs to this
  * endpoint, it is neither revoked nor expired, and the account itself is not
  * disabled. The join to `end_users` is what makes disabling an account take effect on
- * the next request rather than at the next sign-in.
+ * the next request rather than at the next sign-in. The join to the account's access
+ * row supplies the endpoint's own fields; a session cannot outlive that row, which
+ * its foreign key cascades from.
  */
 export async function findLiveEndUserSession(
   scope: BoundEndpointScope,
@@ -74,9 +76,23 @@ export async function findLiveEndUserSession(
   now?: Date,
 ): Promise<AuthenticatedEndUser | undefined> {
   const rows = await executorFor(scope)
-    .select({ session: endUserSessions, user: endUsers })
+    .select({
+      session: endUserSessions,
+      user: endUsers,
+      access: {
+        fhirUserReference: endUserEndpoints.fhirUserReference,
+        defaultContext: endUserEndpoints.defaultContext,
+      },
+    })
     .from(endUserSessions)
     .innerJoin(endUsers, eq(endUsers.id, endUserSessions.endUserId))
+    .innerJoin(
+      endUserEndpoints,
+      and(
+        eq(endUserEndpoints.endUserId, endUserSessions.endUserId),
+        eq(endUserEndpoints.endpointId, endUserSessions.endpointId),
+      ),
+    )
     .where(
       and(
         eq(endUserSessions.tokenHash, tokenHash),
@@ -88,7 +104,10 @@ export async function findLiveEndUserSession(
     )
     .limit(1);
 
-  return firstRow(rows);
+  const row = firstRow(rows);
+  return row === undefined
+    ? undefined
+    : { session: row.session, user: { ...row.user, ...row.access } };
 }
 
 /**
@@ -117,16 +136,16 @@ export async function revokeEndUserSession(
 }
 
 /**
- * Revokes every live session belonging to one end user.
+ * Revokes every live session belonging to one end user, at every endpoint of the
+ * tenant.
  *
- * Used when an account is disabled or its password changed under suspicion: the
- * session join already stops a disabled account, and this closes the window for one
- * whose credential is believed compromised.
+ * Used when an account's password is replaced: whoever held the old password may hold
+ * a session at any endpoint the account has access to.
  *
  * @returns How many sessions were revoked.
  */
 export async function revokeEndUserSessionsFor(
-  scope: BoundEndpointScope,
+  scope: BoundTenantScope,
   endUserId: string,
   now?: Date,
 ): Promise<number> {
@@ -135,9 +154,15 @@ export async function revokeEndUserSessionsFor(
     .set({ revokedAt: nowValue(now) })
     .where(
       and(
-        eq(endUserSessions.endpointId, scope.endpointId),
         eq(endUserSessions.endUserId, endUserId),
         isNull(endUserSessions.revokedAt),
+        inArray(
+          endUserSessions.endpointId,
+          executorFor(scope)
+            .select({ id: endpoints.id })
+            .from(endpoints)
+            .where(eq(endpoints.tenantId, scope.tenantId)),
+        ),
       ),
     )
     .returning({ id: endUserSessions.id });

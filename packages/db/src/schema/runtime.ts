@@ -36,12 +36,14 @@ import {
 import { clients } from "./clients.js";
 import {
   createdAt,
+  endpointAccessReference,
   endpointAndEndUser,
   revocableLifecycle,
   sessionLifecycle,
   singleUseLifecycle,
 } from "./columns.js";
-import { endpoints, endUsers } from "./endpoints.js";
+import { endpoints, endUserEndpoints, endUsers } from "./endpoints.js";
+import { tenants } from "./tenancy.js";
 
 import type { LaunchContext } from "@signet/core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
@@ -123,7 +125,8 @@ export const authorizationSessions = pgTable(
     ),
     /**
      * Null until the end user authenticates. Cascades on deletion: an in-flight
-     * authorization for a deleted user must not be completable.
+     * authorization for a deleted user, or for one whose access to this endpoint was
+     * withdrawn, must not be completable.
      */
     endUserId: uuid("end_user_id").references(() => endUsers.id, {
       onDelete: "cascade",
@@ -140,6 +143,11 @@ export const authorizationSessions = pgTable(
       table.launchContextId,
     ),
     index("authorization_sessions_end_user_id_idx").on(table.endUserId),
+    endpointAccessReference(
+      "authorization_sessions_end_user_endpoint_fk",
+      [table.endUserId, table.endpointId],
+      endUserEndpoints,
+    ),
     index("authorization_sessions_expires_at_idx").on(table.expiresAt),
   ],
 );
@@ -291,6 +299,11 @@ export const consents = pgTable(
     index("consents_endpoint_id_idx").on(table.endpointId),
     index("consents_client_id_idx").on(table.clientId),
     index("consents_expires_at_idx").on(table.expiresAt),
+    endpointAccessReference(
+      "consents_end_user_endpoint_fk",
+      [table.endUserId, table.endpointId],
+      endUserEndpoints,
+    ),
   ],
 );
 
@@ -302,9 +315,10 @@ export const consents = pgTable(
  * page. An end user reviewing which apps hold access to their record is not in the
  * middle of an authorization, so there is no authorization session to hang it off.
  *
- * Scoped to the endpoint, not to the tenant. The same person may have accounts on two
- * endpoints of the same tenant, and a session on one must not be a session on the other:
- * the accounts are separate rows with separate passwords.
+ * Scoped to the endpoint, not to the tenant, although the account belongs to the
+ * tenant. A session on one endpoint is not a session on another: the cookie is set on
+ * the endpoint's own path, and withdrawing the account's access to one endpoint ends
+ * its sessions there and nowhere else.
  */
 export const endUserSessions = pgTable(
   "end_user_sessions",
@@ -318,6 +332,11 @@ export const endUserSessions = pgTable(
     index("end_user_sessions_end_user_id_idx").on(table.endUserId),
     index("end_user_sessions_endpoint_id_idx").on(table.endpointId),
     index("end_user_sessions_expires_at_idx").on(table.expiresAt),
+    endpointAccessReference(
+      "end_user_sessions_end_user_endpoint_fk",
+      [table.endUserId, table.endpointId],
+      endUserEndpoints,
+    ),
   ],
 );
 
@@ -332,11 +351,20 @@ export const endUserSessions = pgTable(
  * row in the same statement that finds it, so two concurrent redemptions cannot both
  * succeed, and a row's presence means exactly "this link still works, until
  * `expires_at`".
+ *
+ * Belongs to the tenant, like the account it names: the link opens the tenant's own
+ * invitation page, and the password chosen there is the account's password at every
+ * endpoint it has access to.
  */
 export const endUserInvitations = pgTable(
   "end_user_invitations",
   {
-    ...endpointAndEndUser(endpoints, endUsers),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    endUserId: uuid("end_user_id")
+      .notNull()
+      .references(() => endUsers.id, { onDelete: "cascade" }),
     /** SHA-256 of the token in the link. The token itself is never stored. */
     tokenHash: text("token_hash").notNull(),
     ...createdAt(),
@@ -348,7 +376,7 @@ export const endUserInvitations = pgTable(
       columns: [table.endUserId],
     }),
     uniqueIndex("end_user_invitations_token_hash_unique").on(table.tokenHash),
-    index("end_user_invitations_endpoint_id_idx").on(table.endpointId),
+    index("end_user_invitations_tenant_id_idx").on(table.tenantId),
     index("end_user_invitations_expires_at_idx").on(table.expiresAt),
   ],
 );

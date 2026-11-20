@@ -14,9 +14,9 @@ import { formatInstantWithZone } from "../formatting/values.js";
 
 const INVITATION = {
   to: "casey@example.org",
-  endpointName: "Pathling & friends",
+  tenantName: "Pathling & friends",
   username: "casey",
-  url: "https://signet.example.org/t/demo/e/main/invitation#abc_DEF-123",
+  url: "https://signet.example.org/t/demo/invitation#abc_DEF-123",
   expiresAt: "2026-11-20T03:00:00.000Z",
 };
 
@@ -61,12 +61,14 @@ describe("invitationMailto", () => {
     );
   });
 
-  it("names the endpoint in the subject", () => {
+  it("names the tenant in the subject", () => {
+    // The account belongs to the tenant, and works at every endpoint it is given
+    // access to, so no one endpoint is named.
     const { fields } = parse(invitationMailto(INVITATION));
-    expect(fields.get("subject")).toBe("Your account on Pathling & friends");
+    expect(fields.get("subject")).toBe("Your account with Pathling & friends");
   });
 
-  it("puts the link, the username, the endpoint and the expiry in the body", () => {
+  it("puts the link, the username, the tenant and the expiry in the body", () => {
     const body = parse(invitationMailto(INVITATION)).fields.get("body") ?? "";
     expect(body).toContain(INVITATION.url);
     expect(body).toContain("casey");

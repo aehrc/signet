@@ -17,6 +17,11 @@
  * stops authenticating on the next request and keeps its name attached to its audit
  * trail, while deleting takes the consents and tokens with it.
  *
+ * The account belongs to the tenant, so this page is the tenant's. What belongs to
+ * one endpoint - whether the account may sign in there, and its `fhirUser` reference
+ * and default launch context there - is in the Endpoint access section, one row per
+ * endpoint.
+ *
  * Author: John Grimes
  */
 
@@ -25,9 +30,10 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { EmailFields } from "./emailFields.js";
+import { EndpointAccessPanel } from "./endpointAccessPanel.js";
 import { InvitationPanel } from "./invitationPanel.js";
-import { endpointRoute } from "./routes.js";
-import { roleAllows, useEndpointContext } from "./useConsole.js";
+import { tenantRoute } from "./routes.js";
+import { roleAllows, useConsoleContext } from "./useConsole.js";
 import { describeError, issuesByField } from "../api/errors.js";
 import {
   useDeleteEndUser,
@@ -58,29 +64,23 @@ import { endUserFormValues, endUserPatch } from "../forms/endUserEdit.js";
 
 /** One user's detail page. */
 export function UserDetailPage() {
-  const { tenant, endpointSlug, endpoint, role } = useEndpointContext();
+  const { tenant, role } = useConsoleContext();
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
 
-  const user = useEndUser(tenant, endpointSlug, userId ?? "");
-  const update = useUpdateEndUser(tenant, endpointSlug);
+  const user = useEndUser(tenant, userId ?? "");
+  const update = useUpdateEndUser(tenant);
   // A second instance rather than a shared one, so that disabling reports itself in
   // the state panel instead of announcing "User saved." under the edit form.
-  const toggle = useUpdateEndUser(tenant, endpointSlug);
-  const destroy = useDeleteEndUser(tenant, endpointSlug);
+  const toggle = useUpdateEndUser(tenant);
+  const destroy = useDeleteEndUser(tenant);
 
   // One piece of state per field, undefined until edited, so the rendered value is
   // `edited ?? current` and a save elsewhere on the page shows through immediately.
   const [displayName, setDisplayName] = useState<string | undefined>();
-  const [fhirUser, setFhirUser] = useState<string | undefined>();
   const [email, setEmail] = useState<string | undefined>();
   const [emailVerified, setEmailVerified] = useState<boolean | undefined>();
   const [roles, setRoles] = useState<string | undefined>();
-  const [defaultPatient, setDefaultPatient] = useState<string | undefined>();
-  const [defaultEncounter, setDefaultEncounter] = useState<
-    string | undefined
-  >();
-  const [intent, setIntent] = useState<string | undefined>();
   const [patients, setPatients] = useState<string | undefined>();
   const [encounters, setEncounters] = useState<string | undefined>();
 
@@ -90,7 +90,7 @@ export function UserDetailPage() {
     return <Loading label="Loading the user…" />;
   }
   if (user.isError || user.data === undefined) {
-    // The API's own 404 message - "No such user on this endpoint" - is what this
+    // The API's own 404 message - "No such user in this tenant" - is what this
     // renders for an id that names nobody, rather than an empty form.
     return <ErrorAlert message={describeError(user.error)} />;
   }
@@ -100,13 +100,9 @@ export function UserDetailPage() {
   const issues = issuesByField(update.error);
   const edited = {
     displayName: displayName ?? loaded.displayName,
-    fhirUser: fhirUser ?? loaded.fhirUser,
     email: email ?? loaded.email,
     emailVerified: emailVerified ?? loaded.emailVerified,
     roles: roles ?? loaded.roles,
-    defaultPatient: defaultPatient ?? loaded.defaultPatient,
-    defaultEncounter: defaultEncounter ?? loaded.defaultEncounter,
-    intent: intent ?? loaded.intent,
     patients: patients ?? loaded.patients,
     encounters: encounters ?? loaded.encounters,
   };
@@ -116,9 +112,7 @@ export function UserDetailPage() {
   // nothing changed, which is a write nobody asked for and nobody can undo.
   const patch = endUserPatch(edited, current);
   const hasChanges = Object.keys(patch).length > 0;
-  // The SMART identity and launch context fields exist only on a SMART endpoint;
-  // the email address only on an OAuth one, where the `email` scope releases it.
-  const isSmart = endpoint.kind === "smart";
+  const usersRoute = tenantRoute(tenant, "/users");
 
   return (
     <>
@@ -128,7 +122,7 @@ export function UserDetailPage() {
             this is the console's only back link. */}
         <Link
           className="link link-hover inline-flex items-center gap-1 text-sm max-sm:min-h-11 max-sm:text-base"
-          to={endpointRoute(tenant, endpointSlug, "/users")}
+          to={usersRoute}
         >
           <ArrowLeftIcon size={14} />
           Users
@@ -178,6 +172,15 @@ export function UserDetailPage() {
               )}
             </DetailRow>
           )}
+          <DetailRow label="Endpoints">
+            {current.endpoints.length === 0 ? (
+              <span className="text-warning">
+                None - this account can sign in nowhere yet
+              </span>
+            ) : (
+              current.endpoints.map((endpoint) => endpoint.name).join(", ")
+            )}
+          </DetailRow>
           <DetailRow label="State">
             {current.disabledAt === null
               ? "Enabled"
@@ -203,25 +206,14 @@ export function UserDetailPage() {
           error={issues["displayName"]}
           disabled={!mayWrite}
         />
-        {isSmart ? (
-          <TextField
-            label="fhirUser reference"
-            value={edited.fhirUser}
-            onChange={setFhirUser}
-            error={issues["fhirUserReference"]}
-            hint="A relative FHIR reference such as Practitioner/123. Released to apps granted the fhirUser scope. Clearing this removes it."
-            disabled={!mayWrite}
-          />
-        ) : (
-          <EmailFields
-            email={edited.email}
-            emailVerified={edited.emailVerified}
-            onEmail={setEmail}
-            onEmailVerified={setEmailVerified}
-            issues={issues}
-            disabled={!mayWrite}
-          />
-        )}
+        <EmailFields
+          email={edited.email}
+          emailVerified={edited.emailVerified}
+          onEmail={setEmail}
+          onEmailVerified={setEmailVerified}
+          issues={issues}
+          disabled={!mayWrite}
+        />
         <ListField
           label="Roles"
           value={edited.roles}
@@ -231,53 +223,23 @@ export function UserDetailPage() {
           rows={2}
           disabled={!mayWrite}
         />
-
-        {isSmart ? (
-          <>
-            <TextField
-              label="Default patient"
-              value={edited.defaultPatient}
-              onChange={setDefaultPatient}
-              error={
-                issues["defaultContext.patient"] ?? issues["defaultContext"]
-              }
-              disabled={!mayWrite}
-            />
-            <TextField
-              label="Default encounter"
-              value={edited.defaultEncounter}
-              onChange={setDefaultEncounter}
-              error={issues["defaultContext.encounter"]}
-              disabled={!mayWrite}
-            />
-            <TextField
-              label="Intent"
-              value={edited.intent}
-              onChange={setIntent}
-              error={issues["defaultContext.intent"]}
-              hint="Seeds the launch context when a launch does not supply one. Emptying all three clears it."
-              disabled={!mayWrite}
-            />
-
-            <ListField
-              label="Patients"
-              value={edited.patients}
-              onChange={setPatients}
-              error={issues["attributes"]}
-              hint="One per line. Offered by the patient picker at authorisation time."
-              rows={3}
-              disabled={!mayWrite}
-            />
-            <ListField
-              label="Encounters"
-              value={edited.encounters}
-              onChange={setEncounters}
-              hint="One per line. Offered by the encounter picker at authorisation time."
-              rows={3}
-              disabled={!mayWrite}
-            />
-          </>
-        ) : null}
+        <ListField
+          label="Patients"
+          value={edited.patients}
+          onChange={setPatients}
+          error={issues["attributes"]}
+          hint="One per line. Offered by the patient picker at authorisation time, on a SMART endpoint."
+          rows={3}
+          disabled={!mayWrite}
+        />
+        <ListField
+          label="Encounters"
+          value={edited.encounters}
+          onChange={setEncounters}
+          hint="One per line. Offered by the encounter picker at authorisation time, on a SMART endpoint."
+          rows={3}
+          disabled={!mayWrite}
+        />
 
         <SaveOutcome
           error={update.error}
@@ -294,6 +256,8 @@ export function UserDetailPage() {
           />
         ) : null}
       </PatchForm>
+
+      <EndpointAccessPanel user={current} mayWrite={mayWrite} />
 
       {current.isPersona || !mayWrite ? null : (
         <SetPasswordPanel userId={current.id} />
@@ -338,14 +302,12 @@ export function UserDetailPage() {
                 // stray click the way a modal overlay can.
                 if (
                   globalThis.confirm(
-                    `Delete ${current.username}? Their stored consents and tokens go with them. Disabling keeps the audit trail readable.`,
+                    `Delete ${current.username}? Their stored consents and tokens at every endpoint go with them. Disabling keeps the audit trail readable.`,
                   )
                 ) {
                   destroy.mutate(current.id, {
                     onSuccess: () => {
-                      void navigate(
-                        endpointRoute(tenant, endpointSlug, "/users"),
-                      );
+                      void navigate(usersRoute);
                     },
                   });
                 }
@@ -369,8 +331,8 @@ export function UserDetailPage() {
  * offering the operation would only surface the API's refusal.
  */
 function SetPasswordPanel({ userId }: Readonly<{ readonly userId: string }>) {
-  const { tenant, endpointSlug } = useEndpointContext();
-  const setPassword = useSetEndUserPassword(tenant, endpointSlug, userId);
+  const { tenant } = useConsoleContext();
+  const setPassword = useSetEndUserPassword(tenant, userId);
   const [password, setPasswordValue] = useState("");
 
   const issues = issuesByField(setPassword.error);
@@ -396,7 +358,7 @@ function SetPasswordPanel({ userId }: Readonly<{ readonly userId: string }>) {
           value={password}
           onChange={setPasswordValue}
           error={issues["password"]}
-          hint="At least 8 characters. Replaces the current password immediately."
+          hint="At least 8 characters. Replaces the current password immediately, at every endpoint this account has access to."
           autoComplete="new-password"
           required
         />

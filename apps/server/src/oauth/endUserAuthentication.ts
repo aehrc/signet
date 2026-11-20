@@ -17,7 +17,9 @@
  * the work, so a path that skipped it when the username was unknown would answer
  * measurably faster - turning user enumeration into a timing measurement rather than a
  * guess. The verification therefore runs against an unmatchable hash when no account was
- * found, and only then is the request refused.
+ * found, and only then is the request refused. An account belongs to the tenant, but the
+ * lookups here find it only at an endpoint it has been given access to, so an account
+ * with no access to this endpoint is "no account" too, and is refused the same way.
  *
  * A persona is selectable only on a non-production endpoint. That is checked by the data
  * layer's `isPersonaSelectable`, which reads both the endpoint's flag and the account's,
@@ -37,7 +39,12 @@ import {
 
 import { UNMATCHABLE_PASSWORD_HASH } from "../security/passwordTiming.js";
 
-import type { Database, Endpoint, EndpointScope, EndUser } from "@signet/db";
+import type {
+  Database,
+  Endpoint,
+  EndpointEndUser,
+  EndpointScope,
+} from "@signet/db";
 
 /** What a sign-in body may carry. Every field is unvalidated input. */
 export interface EndUserCredentials {
@@ -76,14 +83,14 @@ export type EndUserAuthenticationRefusal =
 
 /** The outcome of an attempt. */
 export type EndUserAuthentication =
-  | { readonly ok: true; readonly user: EndUser }
+  | { readonly ok: true; readonly user: EndpointEndUser }
   | { readonly ok: false; readonly reason: EndUserAuthenticationRefusal };
 
 /**
  * Authenticates an end user by password or by persona.
  *
  * @param db - The connection to use.
- * @param scope - The endpoint the account must belong to.
+ * @param scope - The endpoint the account must have been given access to.
  * @param endpoint - The endpoint's configuration, for the persona rule.
  * @param credentials - The request body, unvalidated.
  */
@@ -153,7 +160,7 @@ export interface EndUserSignInRefusal {
 
 /** What a sign-in attempt produced. */
 export type EndUserSignIn =
-  { readonly ok: true; readonly user: EndUser } | EndUserSignInRefusal;
+  { readonly ok: true; readonly user: EndpointEndUser } | EndUserSignInRefusal;
 
 /**
  * Authenticates an end user and decides what to answer when it fails.
@@ -170,7 +177,7 @@ export type EndUserSignIn =
  *
  * @param options - The connection, the endpoint, the credentials and the audit callback.
  * @param options.db - The connection to use.
- * @param options.scope - The endpoint the account must belong to.
+ * @param options.scope - The endpoint the account must have been given access to.
  * @param options.endpoint - The endpoint's configuration.
  * @param options.credentials - The request body, unvalidated.
  * @param options.recordFailure - Audits a credential failure.
